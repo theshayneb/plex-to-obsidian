@@ -1,6 +1,15 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver } from './approval-modal'
-import { documentaryLibrary, mergeLibraries, type LibrarySetting, type PlexNotesSettings } from './config'
+import {
+  documentaryLibrary,
+  ensureSteamLibrary,
+  mergeLibraries,
+  plexReady,
+  STEAM_LIBRARY,
+  steamReady,
+  type LibrarySetting,
+  type PlexNotesSettings,
+} from './config'
 import {
   addToIndex,
   classify,
@@ -13,6 +22,7 @@ import {
   ratingKeyFromLink,
   renderFileName,
   sanitizeFileName,
+  steamStoreUrl,
   displayName,
   type ExistingNotes,
   type FileNaming,
@@ -20,7 +30,8 @@ import {
   type PlexItem,
 } from './notes'
 import { PlexClient } from './plex'
-import { buildFrontmatter, linkPropertyNames, playCount } from './properties'
+import { buildFrontmatter, linkPropertyNames, PLAY_SOURCES, sourceValue } from './properties'
+import { SteamClient } from './steam'
 
 export interface SyncResult {
   created: string[]
@@ -48,9 +59,13 @@ export type SyncMode = 'full' | 'playCounts'
 
 type ActiveLibrary = LibrarySetting & { target: MediaKind }
 
-/** Movies, shows and documentaries can match each other's notes (an item may move by genre); music only matches music. */
-type Family = 'video' | 'music'
-const familyOf = (lib: ActiveLibrary): Family => (lib.target === 'music' ? 'music' : 'video')
+/**
+ * Movies, shows and documentaries can match each other's notes (an item may move by genre);
+ * music only matches music, and games only games.
+ */
+type Family = 'video' | 'music' | 'game'
+const FAMILIES: Family[] = ['video', 'music', 'game']
+const familyOf = (lib: ActiveLibrary): Family => (lib.target === 'music' || lib.target === 'game' ? lib.target : 'video')
 
 /** What was approved: the lines unticked, and the new values edited. */
 interface Approval {
@@ -75,9 +90,12 @@ interface FillPlan {
   imageProperty: string | null
 }
 
+/** Whether Plex has a poster to download for this item. Games link their cover instead. */
 function hasImage(item: PlexItem): boolean {
   return Boolean(item.type === 'track' ? item.parentThumb ?? item.thumb : item.thumb)
 }
+
+const POSTER_PREVIEW = 'poster downloaded from Plex'
 
 interface Entry {
   item: PlexItem
@@ -86,6 +104,9 @@ interface Entry {
 
 export class PlexSync {
   private readonly albums = new Map<string, Promise<PlexItem | null>>()
+  private plex: PlexClient | null = null
+  private machineId = ''
+  private steam: SteamClient | null = null
 
   /** "Apply to all the rest" was chosen, per kind of approval, with the lines unticked then. */
   private readonly approvedAll: Record<ApprovalRequest['action'], Set<string> | null> = { create: null, change: null }
@@ -138,31 +159,40 @@ export class PlexSync {
   }
 
   async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
-    const { serverUrl, token } = this.settings
-    if (!serverUrl || !token) throw new Error('Set the Plex server address and token in the plugin settings first')
+    const usePlex = plexReady(this.settings)
+    const useSteam = steamReady(this.settings)
+    if (!usePlex && !useSteam) throw new Error('Set up Plex or Steam in the plugin settings first')
 
-    const plex = new PlexClient(serverUrl, token)
-    progress('Connecting to Plex…')
-    const machineId = await plex.machineIdentifier()
-
-    if (mode === 'full') {
-      mergeLibraries(this.settings, await plex.libraries())
-      await this.saveSettings()
+    if (usePlex) {
+      const { serverUrl, token } = this.settings
+      this.plex = new PlexClient(serverUrl, token)
+      progress('Connecting to Plex…')
+      this.machineId = await this.plex.machineIdentifier()
+      if (mode === 'full') mergeLibraries(this.settings, await this.plex.libraries())
     }
+    if (useSteam) {
+      const { apiKey, account, includeFreeGames } = this.settings.steam
+      this.steam = new SteamClient(apiKey.trim(), account.trim(), includeFreeGames)
+      if (mode === 'full') ensureSteamLibrary(this.settings)
+    }
+    if (mode === 'full') await this.saveSettings()
 
     const active = Object.entries(this.settings.libraries)
       .filter((e): e is [string, ActiveLibrary] => e[1].target !== 'skip')
-    const indexes: Record<Family, ExistingNotes> = {
-      video: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'video')),
-      music: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'music')),
-    }
+      .filter(([key]) => (key === STEAM_LIBRARY ? useSteam : usePlex))
+    const indexes = Object.fromEntries(FAMILIES.map(family =>
+      [family, this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === family))])) as Record<Family, ExistingNotes>
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
       progress(`Reading ${lib.title}…`)
+      if (key === STEAM_LIBRARY) {
+        for (const item of await this.steam!.ownedGames()) entries.push({ item, lib })
+        continue
+      }
       const music = lib.target === 'music'
-      for (const item of await plex.libraryItems(key, music)) {
+      for (const item of await this.plex!.libraryItems(key, music)) {
         const wanted = music ? item.type === 'track' : item.type === 'movie' || item.type === 'show'
         if (wanted) entries.push({ item, lib })
       }
@@ -176,7 +206,7 @@ export class PlexSync {
     const counting = !full || this.settings.updatePlayCounts
     if (renaming || filling || counting) {
       progress('Checking existing notes…')
-      for (const family of ['video', 'music'] as const) {
+      for (const family of FAMILIES) {
         const index = indexes[family]
         const matches = entries
           .filter(e => familyOf(e.lib) === family)
@@ -205,7 +235,7 @@ export class PlexSync {
           let fill: FillPlan | null = null
           if (filling && lib.properties.some(m => m.fill)) {
             try {
-              fill = await this.planFill(plex, machineId, file, item, lib, kind)
+              fill = await this.planFill(file, item, lib, kind)
             } catch (err) {
               result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
             }
@@ -224,10 +254,10 @@ export class PlexSync {
           }
           if (fill?.imageProperty) {
             const name = fill.imageProperty
-            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: 'poster downloaded from Plex' })
+            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: POSTER_PREVIEW })
           }
           for (const name of plays?.names ?? []) {
-            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.count), edit: 'number' })
+            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.to[name]), edit: 'number' })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -258,7 +288,7 @@ export class PlexSync {
           const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
           const playValue = (name: string): unknown => {
             const edited = edits[`update:${name}`]
-            return edited === undefined ? plays!.count : parseEdit(edited, 'number')
+            return edited === undefined ? plays!.to[name] : parseEdit(edited, 'number')
           }
           if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length) {
             result.declined++
@@ -271,7 +301,7 @@ export class PlexSync {
               result.renamed.push({ from: path, to: renameTo })
               addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
             }
-            if (fill && await this.applyFill(plex, file, fill, lib)) result.filled.push(file.path)
+            if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
             if (plays && playNames.length) {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
                 for (const name of playNames) fm[name] = playValue(name)
@@ -301,9 +331,9 @@ export class PlexSync {
       }
       try {
         progress(`Creating ${listed.title}…`)
-        const item = await this.fullItem(plex, listed)
+        const item = await this.fullItem(listed)
         const { lib, kind } = this.libraryFor(item, listedLib)
-        const preview = this.previewNote(machineId, item, lib, kind)
+        const preview = this.previewNote(item, lib, kind)
         const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result, item, lib)
         if (!approval) continue
         const { excluded, edits } = approval
@@ -317,7 +347,7 @@ export class PlexSync {
         const fileName = typeof edits.file === 'string'
           ? sanitizeFileName(edits.file, this.settings.fileNameReplacements) || undefined
           : undefined
-        const path = await this.createNote(plex, machineId, item, lib, kind, left, overrides, fileName)
+        const path = await this.createNote(item, lib, kind, left, overrides, fileName)
         result.created.push(path)
         const baseName = path.split('/').pop()!.replace(/\.md$/, '')
         addToIndex(index, path, renderFileName(this.naming(lib), item), [item.ratingKey])
@@ -343,7 +373,10 @@ export class PlexSync {
    * Movies and shows are fetched again for their full metadata (the listing can leave out genres).
    * Tracks keep their listing, which is complete, plus their album, fetched once per album.
    */
-  private async fullItem(plex: PlexClient, listed: PlexItem): Promise<PlexItem> {
+  private async fullItem(listed: PlexItem): Promise<PlexItem> {
+    if (listed.type === 'game') return this.steam ? this.steam.details(listed) : listed
+    const plex = this.plex
+    if (!plex) return listed
     if (listed.type !== 'track') return (await plex.item(listed.ratingKey).catch(() => null)) ?? listed
     const albumKey = listed.parentRatingKey
     if (!albumKey) return listed
@@ -380,32 +413,34 @@ export class PlexSync {
    * The properties marked "fill in on existing notes" that are missing or empty in this note, with
    * the values Plex has for them. Null when there's nothing to add.
    */
-  private async planFill(plex: PlexClient, machineId: string, file: TFile, listed: PlexItem, lib: ActiveLibrary, kind: MediaKind): Promise<FillPlan | null> {
+  private async planFill(file: TFile, listed: PlexItem, lib: ActiveLibrary, kind: MediaKind): Promise<FillPlan | null> {
     const current = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const wanted = lib.properties.filter(m => m.fill && m.name.trim() && isBlank(current[m.name.trim()]))
     if (!wanted.length) return null
 
     // The link needs nothing more; everything else may need the item's full metadata.
     const needsMore = wanted.some(m => m.source !== 'plexLink' && m.source !== 'text' && m.source !== 'typeTag')
-    const item = needsMore ? await this.fullItem(plex, listed) : listed
-    const values = buildFrontmatter(item, wanted.filter(m => m.source !== 'poster'), {
+    const item = needsMore ? await this.fullItem(listed) : listed
+    // A game's cover is a link, filled in like any value; a Plex poster is downloaded once approved.
+    const game = item.type === 'game'
+    const values = buildFrontmatter(item, wanted.filter(m => game || m.source !== 'poster'), {
       kind,
-      link: plexWebLink(machineId, item.ratingKey),
-      image: null,
+      link: this.linkFor(item),
+      image: game ? item.portrait ?? null : null,
       values: lib.values,
     })
     const additions = Object.entries(values).filter(([, value]) => !isBlank(value))
-    const poster = wanted.find(m => m.source === 'poster')
+    const poster = game ? undefined : wanted.find(m => m.source === 'poster')
     const imageProperty = poster && hasImage(item) ? poster.name.trim() : null
     if (!additions.length && !imageProperty) return null
     return { item, additions, imageProperty }
   }
 
   /** Adds the planned properties, downloading the poster if one is wanted. Never replaces a value. */
-  private async applyFill(plex: PlexClient, file: TFile, plan: FillPlan, lib: ActiveLibrary): Promise<boolean> {
+  private async applyFill(file: TFile, plan: FillPlan, lib: ActiveLibrary): Promise<boolean> {
     const additions = [...plan.additions]
     if (plan.imageProperty) {
-      const image = await this.imageFor(plex, plan.item, normalizePath(lib.folder), renderFileName(this.naming(lib), plan.item))
+      const image = await this.imageFor(plan.item, normalizePath(lib.folder), renderFileName(this.naming(lib), plan.item))
       if (image) additions.push([plan.imageProperty, image])
     }
     if (!additions.length) return false
@@ -418,32 +453,43 @@ export class PlexSync {
   }
 
   /**
-   * The note's "Play count" properties (as named in its library's settings) that differ from
-   * Plex's current count: the one case where a value already in a note is replaced.
+   * The note's "Play count" and game playtime properties (as named in its library's settings) that
+   * differ from the current values: the one case where a value already in a note is replaced.
    */
-  private planPlayCount(file: TFile, item: PlexItem, lib: LibrarySetting): { names: string[], from: Record<string, unknown>, count: number } | null {
-    const names = lib.properties.filter(m => m.source === 'viewCount' && m.name.trim()).map(m => m.name.trim())
-    if (!names.length) return null
-    const count = playCount(item)
+  private planPlayCount(file: TFile, item: PlexItem, lib: ActiveLibrary): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
+    const mappings = lib.properties.filter(m => PLAY_SOURCES.includes(m.source) && m.name.trim())
+    if (!mappings.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    const changed = names.filter(name => from[name] !== count)
-    return changed.length ? { names: changed, from, count } : null
+    const to: Record<string, unknown> = {}
+    const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
+    for (const m of mappings) {
+      const value = sourceValue(m.source, item, ctx)
+      if (value !== undefined && from[m.name.trim()] !== value) to[m.name.trim()] = value
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to } : null
+  }
+
+  /** Where the item's Link points: its Plex page, or a game's Steam store page. */
+  private linkFor(item: PlexItem): string {
+    if (item.type === 'game' && item.steamAppId) return steamStoreUrl(item.steamAppId)
+    return plexWebLink(this.machineId, item.ratingKey)
   }
 
   /** The path and properties a new note would get, for the approval pop-up. */
-  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: ApprovalLine[], values: Record<string, unknown> } {
+  private previewNote(item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: ApprovalLine[], values: Record<string, unknown> } {
     const folder = normalizePath(lib.folder)
     const path = this.freePath(folder, renderFileName(this.naming(lib), item), 'md')
     const fileName = path.split('/').pop()!.replace(/\.md$/, '')
     const frontmatter = buildFrontmatter(item, lib.properties, {
       kind,
-      link: plexWebLink(machineId, item.ratingKey),
-      image: hasImage(item) ? 'poster downloaded from Plex' : null,
+      link: this.linkFor(item),
+      image: item.type === 'game' ? item.portrait ?? null : hasImage(item) ? POSTER_PREVIEW : null,
       values: lib.values,
     })
     const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
     for (const [name, value] of Object.entries(frontmatter)) {
-      const poster = value === 'poster downloaded from Plex'
+      const poster = value === POSTER_PREVIEW
       lines.push(poster
         ? { key: `prop:${name}`, label: name, value: describeValue(value) }
         : { key: `prop:${name}`, label: name, ...editable(value) })
@@ -473,7 +519,7 @@ export class PlexSync {
    * `overrides` replace values (edited when approving), and `fileName` replaces the file name.
    */
   private async createNote(
-    plex: PlexClient, machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind,
+    item: PlexItem, lib: ActiveLibrary, kind: MediaKind,
     leaveEmpty = new Set<string>(), overrides: Record<string, unknown> = {}, fileName?: string,
   ): Promise<string> {
     const folder = normalizePath(lib.folder)
@@ -483,10 +529,10 @@ export class PlexSync {
 
     const { properties, values } = lib
     const posterWanted = properties.some(m => m.source === 'poster' && m.name.trim() && !leaveEmpty.has(m.name.trim()))
-    const image = posterWanted ? await this.imageFor(plex, item, folder, baseName) : null
+    const image = posterWanted ? await this.imageFor(item, folder, baseName) : null
     const frontmatter = buildFrontmatter(item, properties, {
       kind,
-      link: plexWebLink(machineId, item.ratingKey),
+      link: this.linkFor(item),
       image,
       values,
     })
@@ -504,8 +550,14 @@ export class PlexSync {
     return path
   }
 
-  /** The item's poster (for a track, its album's cover, shared by the album's tracks), saved and linked. */
-  private async imageFor(plex: PlexClient, item: PlexItem, folder: string, baseName: string): Promise<string | null> {
+  /**
+   * The item's poster (for a track, its album's cover, shared by the album's tracks), saved and
+   * linked. A game's portrait cover is linked where Steam keeps it.
+   */
+  private async imageFor(item: PlexItem, folder: string, baseName: string): Promise<string | null> {
+    if (item.type === 'game') return item.portrait ?? null
+    const plex = this.plex
+    if (!plex) return null
     const track = item.type === 'track'
     const thumb = track ? item.parentThumb ?? item.thumb : item.thumb
     if (!thumb) return null

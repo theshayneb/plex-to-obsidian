@@ -1,6 +1,6 @@
 // Pure helpers for turning Plex items into notes. No Obsidian imports, so they can be unit tested.
 
-export type MediaKind = 'movie' | 'tv' | 'documentary' | 'music'
+export type MediaKind = 'movie' | 'tv' | 'documentary' | 'music' | 'game'
 export type LibraryTarget = MediaKind | 'skip'
 
 export interface PlexTag {
@@ -55,6 +55,20 @@ export interface PlexItem {
   Mood?: PlexTag[]
   /** The track's album, fetched separately; genres, styles, label and dates come from it. */
   album?: PlexItem
+  // Steam games (type 'game'; ratingKey is "steam-<appid>")
+  steamAppId?: number
+  /** Total playtime, in minutes. */
+  playtimeMinutes?: number
+  /** Playtime in the last two weeks, in minutes. */
+  recentMinutes?: number
+  developers?: string[]
+  publishers?: string[]
+  platforms?: string[]
+  metacritic?: number
+  /** Portrait cover art (600×900) URL. */
+  portrait?: string
+  /** Landscape header art URL. */
+  wideImage?: string
 }
 
 export function isMusic(kind: MediaKind): boolean {
@@ -91,7 +105,7 @@ export function isDocumentaryGenre(genre: string): boolean {
 
 /** The library decides movie vs TV; a "Documentary" genre (when enabled) moves the item to documentaries. */
 export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentaryGenre: boolean): MediaKind {
-  if (libraryTarget === 'music') return 'music'
+  if (libraryTarget === 'music' || libraryTarget === 'game') return libraryTarget
   if (useDocumentaryGenre && genresOf(item).some(isDocumentaryGenre)) {
     return 'documentary'
   }
@@ -103,6 +117,7 @@ export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentar
  * skipped: one note per track can be thousands of notes, so they're switched on by hand.
  */
 export function defaultLibraryTarget(type: string, title: string): LibraryTarget {
+  if (type === 'steam') return 'game'
   if (type !== 'movie' && type !== 'show') return 'skip'
   if (/documentar/i.test(title)) return 'documentary'
   return type === 'movie' ? 'movie' : 'tv'
@@ -110,6 +125,8 @@ export function defaultLibraryTarget(type: string, title: string): LibraryTarget
 
 /** Movies count as watched once played; shows once every episode is played. */
 export function isWatched(item: PlexItem): boolean {
+  // Steam can't tell when a game is finished; that's set by hand.
+  if (item.type === 'game') return false
   if (item.type === 'show') {
     const total = item.leafCount ?? 0
     return total > 0 && (item.viewedLeafCount ?? 0) >= total
@@ -120,6 +137,7 @@ export function isWatched(item: PlexItem): boolean {
 /** Partly watched: a movie stopped part way, or a show with some but not all episodes watched. */
 export function isStarted(item: PlexItem): boolean {
   if (isWatched(item)) return false
+  if (item.type === 'game') return (item.playtimeMinutes ?? 0) > 0
   if (item.type === 'show') return (item.viewedLeafCount ?? 0) > 0
   return (item.viewOffset ?? 0) > 0
 }
@@ -129,9 +147,15 @@ export function plexWebLink(machineIdentifier: string, ratingKey: string): strin
   return `https://app.plex.tv/desktop/#!/server/${machineIdentifier}/details?key=${key}`
 }
 
-/** Reads the Plex rating key back out of a note's Link property. */
+export function steamStoreUrl(appId: number): string {
+  return `https://store.steampowered.com/app/${appId}/`
+}
+
+/** Reads the item's key back out of a note's Link property: a Plex rating key, or "steam-<appid>". */
 export function ratingKeyFromLink(link: unknown): string | null {
   if (typeof link !== 'string') return null
+  const steam = /store\.steampowered\.com\/app\/(\d+)/i.exec(link)
+  if (steam) return `steam-${steam[1]}`
   const match = /library(?:\/|%2F)metadata(?:\/|%2F)(\d+)/i.exec(link)
   return match ? match[1] : null
 }

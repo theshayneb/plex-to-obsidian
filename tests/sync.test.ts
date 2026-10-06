@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Minimal stand-ins for the Obsidian API the sync uses.
 const responses = new Map<string, unknown>()
 const requested: string[] = []
+/** Steam answers, by the start of the request URL. */
+let steamResponses: Record<string, unknown> = {}
+const portraits = new Set<string>()
 
 const { TFile, TFolder } = vi.hoisted(() => {
   class TAbstractFile { constructor(public path: string) {} }
@@ -24,8 +27,13 @@ vi.mock('obsidian', () => {
     PluginSettingTab: Unused,
     Setting: Unused,
     normalizePath: (p: string) => p.replace(/\/+/g, '/').replace(/^\/|\/$/g, ''),
-    requestUrl: vi.fn(({ url }: { url: string }) => {
+    requestUrl: vi.fn(({ url, method }: { url: string, method?: string }) => {
       requested.push(url)
+      if (url.startsWith('https://')) {
+        if (method === 'HEAD') return Promise.resolve({ status: portraits.has(url) ? 200 : 404, headers: {} })
+        const key = Object.keys(steamResponses).find(k => url.startsWith(k))
+        return Promise.resolve(key ? { status: 200, json: steamResponses[key], headers: {} } : { status: 404, json: {}, headers: {} })
+      }
       const path = url.replace('http://plex:32400', '').split('?')[0]
       if (path.startsWith('/photo/')) {
         return Promise.resolve({ status: 200, arrayBuffer: new ArrayBuffer(4), headers: { 'content-type': 'image/jpeg' } })
@@ -40,6 +48,8 @@ import type { ApprovalRequest, Choice, Decision } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
+const { SteamClient } = await import('../src/steam')
+SteamClient.storeGapMs = 0
 const { defaultSettings, loadSettings, newLibrary } = await import('../src/config')
 
 function makeApp(existing: Record<string, Record<string, unknown>>) {
@@ -428,6 +438,64 @@ describe('PlexSync', () => {
     expect(full.renamed).toEqual([])
     expect(full.ignored).toBe(1)
     expect(background.playCounts).toEqual([])
+  })
+
+  it('makes notes for Steam games, alongside Plex or on its own', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/ISteamUser/ResolveVanityURL': { response: { success: 1, steamid: '76561197960287930' } },
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [
+        { appid: 620, name: 'Portal 2', playtime_forever: 754 },
+        { appid: 440, name: 'Team Fortress 2', playtime_forever: 0 },
+      ] } },
+      'https://api.steampowered.com/IStoreBrowseService/GetItems': { response: { store_items: [{}] } },
+      'https://store.steampowered.com/api/appdetails?appids=620': { 620: { success: true, data: {
+        short_description: 'Puzzles.', header_image: 'https://cdn/620/header.jpg',
+        genres: [{ description: 'Action' }, { description: 'Adventure' }], release_date: { date: '18 Apr, 2011' },
+      } } },
+      'https://store.steampowered.com/api/appdetails?appids=440': { 440: { success: false } },
+    }
+    portraits.clear()
+    portraits.add('https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg')
+    const { app, frontmatter } = makeApp({ 'Media/Video Games/Team Fortress 2.md': { Status: 'abandoned' } })
+    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: 'gabelogannewell', includeFreeGames: true } })
+    settings.libraries = {}
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+
+    expect(result.failed).toEqual([])
+    expect(settings.libraries.steam).toMatchObject({ title: 'Steam', target: 'game', folder: 'Media/Video Games' })
+    expect(result.created).toEqual(['Media/Video Games/Portal 2 (2011).md'])
+    expect(frontmatter.get('Media/Video Games/Portal 2 (2011).md')).toEqual({
+      Genre: ['Action', 'Adventure'],
+      'Release Date': '2011-04-18',
+      'Total Playtime': 12.6,
+      Status: 'started',
+      Link: 'https://store.steampowered.com/app/620/',
+      Image: 'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg',
+      WideImage: 'https://cdn/620/header.jpg',
+      tags: ['video_game'],
+    })
+    // The existing note was matched by title: it gets its Link filled in and nothing else.
+    expect(frontmatter.get('Media/Video Games/Team Fortress 2.md')).toEqual({ Status: 'abandoned', Link: 'https://store.steampowered.com/app/440/' })
+    expect(requested.some(u => u.includes('include_played_free_games=1'))).toBe(true)
+    expect(requested.some(u => u.startsWith('http://plex'))).toBe(false)
+  })
+
+  it('keeps game playtime up to date like play counts', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 120 }] } },
+    }
+    const { app, frontmatter } = makeApp({ 'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/', 'Total Playtime': 1 } })
+    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
+
+    expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!['Total Playtime']).toBe(2)
+    expect(requested.some(u => u.includes('appdetails'))).toBe(false)
   })
 
   it('stops when told to', async () => {

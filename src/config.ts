@@ -32,9 +32,23 @@ export interface IgnoredItem {
   since: number
 }
 
+/** The Steam account games are read from. */
+export interface SteamSettings {
+  /** A Steam Web API key, from steamcommunity.com/dev/apikey. */
+  apiKey: string
+  /** A 17-digit Steam ID, a profile address, or a custom URL name. */
+  account: string
+  /** Also list free-to-play games that have been played. */
+  includeFreeGames: boolean
+}
+
+/** The library key Steam games are listed under, next to the Plex libraries. */
+export const STEAM_LIBRARY = 'steam'
+
 export interface PlexNotesSettings {
   serverUrl: string
   token: string
+  steam: SteamSettings
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -52,7 +66,7 @@ export interface PlexNotesSettings {
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
   lastPlayCountUpdate: number
-  /** Keyed by Plex library section key. */
+  /** Keyed by Plex library section key, plus "steam" for Steam games. */
   libraries: Record<string, LibrarySetting>
 }
 
@@ -61,6 +75,7 @@ export const DEFAULT_FOLDERS: Record<MediaKind, string> = {
   tv: 'Media/TV Shows',
   documentary: 'Media/Documentaries',
   music: 'Media/Music',
+  game: 'Media/Video Games',
 }
 
 export const DEFAULT_FILE_NAMES: Record<MediaKind, string> = {
@@ -68,6 +83,7 @@ export const DEFAULT_FILE_NAMES: Record<MediaKind, string> = {
   tv: '{{title}} ({{year}})',
   documentary: '{{title}} ({{year}})',
   music: '{{artist}} - {{title}}',
+  game: '{{title}} ({{year}})',
 }
 
 /** Track titles like "Intro" are too common to match on their own, so music only matches its full file name. */
@@ -76,12 +92,14 @@ export const DEFAULT_MATCH_BY: Record<MediaKind, MatchBy> = {
   tv: 'loose',
   documentary: 'loose',
   music: 'format',
+  game: 'loose',
 }
 
 export function defaultSettings(): PlexNotesSettings {
   return {
     serverUrl: '',
     token: '',
+    steam: { apiKey: '', account: '', includeFreeGames: true },
     imagesSubfolder: 'Images',
     fileNameReplacements: {},
     useDocumentaryGenre: true,
@@ -153,6 +171,21 @@ export function mergeLibraries(settings: PlexNotesSettings, libraries: { key: st
   }
 }
 
+export function steamReady(settings: PlexNotesSettings): boolean {
+  return Boolean(settings.steam.apiKey.trim() && settings.steam.account.trim())
+}
+
+export function plexReady(settings: PlexNotesSettings): boolean {
+  return Boolean(settings.serverUrl.trim() && settings.token.trim())
+}
+
+/** Once a Steam account is set up, its games get a library of their own (on by default). */
+export function ensureSteamLibrary(settings: PlexNotesSettings): void {
+  if (steamReady(settings) && !settings.libraries[STEAM_LIBRARY]) {
+    settings.libraries[STEAM_LIBRARY] = newLibrary('Steam', 'steam', 'game')
+  }
+}
+
 /** The library documentary-genre items from other libraries are handled by, if there is one. */
 export function documentaryLibrary(settings: PlexNotesSettings): LibrarySetting | undefined {
   return Object.values(settings.libraries).find(lib => lib.target === 'documentary')
@@ -181,6 +214,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }
   settings.ignored = { ...saved.ignored }
+  settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {
     movie: saved.moviesFolder,

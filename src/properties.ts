@@ -11,6 +11,7 @@ export type FieldSource =
   | 'addedAt' | 'lastViewedAt' | 'viewCount' | 'seasons' | 'episodes'
   | 'imdbId' | 'tmdbId' | 'tvdbId'
   | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
+  | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
   | 'text'
 
 export interface PropertyMapping {
@@ -36,8 +37,8 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   durationText: 'Duration as text (1h 52m)',
   durationClock: 'Duration as a clock (3:45)',
   status: 'Watched or played status',
-  plexLink: 'Link to the item in Plex',
-  poster: 'Poster image',
+  plexLink: 'Link (to the item in Plex, or the Steam store page)',
+  poster: 'Poster image (portrait cover for games)',
   typeTag: 'Type tag (set under property values)',
   contentRating: 'Content rating (PG-13, TV-MA…)',
   studio: 'Studio, network or record label',
@@ -53,7 +54,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   userRating: 'Your rating (stars, 0–5)',
   userRatingEmoji: 'Your rating (⭐ emoji, 🩷 for 5 stars)',
   addedAt: 'Date added to Plex',
-  lastViewedAt: 'Date last watched',
+  lastViewedAt: 'Date last watched or played',
   viewCount: 'Play count',
   seasons: 'Number of seasons',
   episodes: 'Number of episodes',
@@ -67,6 +68,13 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   discNumber: 'Music: disc number',
   styles: 'Music: styles',
   moods: 'Music: moods',
+  playtime: 'Games: total playtime (hours)',
+  recentPlaytime: 'Games: playtime in the last 2 weeks (hours)',
+  developers: 'Games: developers',
+  publishers: 'Games: publishers',
+  platforms: 'Games: platforms',
+  metacritic: 'Games: Metacritic score',
+  wideImage: 'Games: wide image (landscape header)',
   text: 'Fixed text',
 }
 
@@ -93,9 +101,21 @@ export const DEFAULT_MUSIC_PROPERTIES: PropertyMapping[] = [
   { name: 'tags', source: 'typeTag' },
 ]
 
+export const DEFAULT_GAME_PROPERTIES: PropertyMapping[] = [
+  { name: 'Genre', source: 'genres' },
+  { name: 'Release Date', source: 'releaseDate' },
+  { name: 'Total Playtime', source: 'playtime' },
+  { name: 'Status', source: 'status' },
+  { name: 'Link', source: 'plexLink', fill: true },
+  { name: 'Image', source: 'poster' },
+  { name: 'WideImage', source: 'wideImage' },
+  { name: 'tags', source: 'typeTag' },
+]
+
 /** Fresh copy of the default properties for a kind of library. */
 export function defaultProperties(kind: MediaKind): PropertyMapping[] {
-  return structuredClone(kind === 'music' ? DEFAULT_MUSIC_PROPERTIES : DEFAULT_PROPERTIES)
+  const defaults = kind === 'music' ? DEFAULT_MUSIC_PROPERTIES : kind === 'game' ? DEFAULT_GAME_PROPERTIES : DEFAULT_PROPERTIES
+  return structuredClone(defaults)
 }
 
 export interface PropertyValues {
@@ -111,6 +131,7 @@ export const DEFAULT_TAGS: Record<MediaKind, string> = {
   tv: 'tv_show',
   documentary: 'documentary',
   music: 'music',
+  game: 'video_game',
 }
 
 export function defaultValues(kind: MediaKind): PropertyValues {
@@ -173,6 +194,14 @@ function starEmoji(stars: number | undefined): string | undefined {
 }
 
 /** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
+/** Minutes as hours, to one decimal place. */
+function hours(minutes: number | undefined): number {
+  return Math.round((minutes ?? 0) / 6) / 10
+}
+
+/** Sources kept up to date by "Keep play counts up to date": plays, and a game's playtime. */
+export const PLAY_SOURCES: FieldSource[] = ['viewCount', 'playtime']
+
 export function playCount(item: PlexItem): number {
   return item.viewCount ?? (item.type === 'show' ? item.viewedLeafCount : undefined) ?? 0
 }
@@ -230,13 +259,20 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'discNumber': return item.type === 'track' ? item.parentIndex : undefined
     case 'styles': return orAlbum(item, i => tags(i.Style), noTags) ?? []
     case 'moods': return orAlbum(item, i => tags(i.Mood), noTags) ?? []
+    case 'playtime': return item.type === 'game' ? hours(item.playtimeMinutes) : undefined
+    case 'recentPlaytime': return item.type === 'game' ? hours(item.recentMinutes) : undefined
+    case 'developers': return item.developers ?? []
+    case 'publishers': return item.publishers ?? []
+    case 'platforms': return item.platforms ?? []
+    case 'metacritic': return item.metacritic
+    case 'wideImage': return item.wideImage
     case 'text': return text
   }
 }
 
 const LIST_SOURCES = new Set<FieldSource>([
   'genres', 'typeTag', 'directors', 'writers', 'castTop5', 'castAll', 'countries', 'collections', 'labels',
-  'styles', 'moods',
+  'styles', 'moods', 'developers', 'publishers', 'platforms',
 ])
 
 /**

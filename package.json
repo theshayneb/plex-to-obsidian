@@ -1,7 +1,7 @@
 {
   "name": "plex-media-notes",
-  "version": "0.0.18",
-  "description": "Create Obsidian notes for the movies and TV shows on a Plex server",
+  "version": "0.0.19",
+  "description": "Obsidian plugin: create and sync notes from Plex and Steam",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs development",

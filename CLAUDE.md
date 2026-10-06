@@ -1,6 +1,6 @@
-# Plex Media Notes: notes for Claude Code
+# Media Import and Sync: notes for Claude Code
 
-A personal Obsidian plugin that creates notes for Plex movies, TV shows, documentaries and music tracks. The owner is the only user.
+A personal Obsidian plugin (id `plex-media-notes`, kept so the installed folder and settings survive; don't change it) that creates and syncs notes for Plex movies, TV shows, documentaries and music tracks, and Steam games. The owner is the only user.
 
 ## Workflow
 
@@ -22,11 +22,11 @@ npm run build
 
 ## Things to know
 
-- `src/config.ts` (settings shape, per-library defaults, migration from older saved settings), `src/notes.ts` (matching, file names, classification) and `src/properties.ts` (the Plex field → property catalogue, `FIELD_SOURCES`) are pure (no Obsidian imports) and unit tested; `src/sync.ts` does the vault work, `src/plex.ts` the HTTP calls (via `requestUrl`, which avoids CORS).
+- `src/config.ts` (settings shape, per-library defaults, migration from older saved settings), `src/notes.ts` (matching, file names, classification) and `src/properties.ts` (the Plex field → property catalogue, `FIELD_SOURCES`) are pure (no Obsidian imports) and unit tested; `src/sync.ts` does the vault work, `src/plex.ts` and `src/steam.ts` the HTTP calls (via `requestUrl`, which avoids CORS); `src/steam-data.ts` (pure, tested) maps Steam's responses. Steam games are items of type `game` with rating key `steam-<appid>`, in the library keyed `steam` (`STEAM_LIBRARY`); their Link is the Steam Store page and their images are linked, not downloaded. The Steam Store's appdetails is rate limited (about 200 per 5 minutes), hence `SteamClient.storeGapMs`.
 - Folder, file name, matching, properties and property values are per library (`LibrarySetting`); character replacements, images subfolder, renaming and documentary detection are plugin-wide. Changing settings shape needs a migration in `loadSettings`. Music libraries make one note per track and start as skipped.
 - Properties are user-configurable. The video defaults in `DEFAULT_PROPERTIES` (Genre, Summary, Date, Duration, Status, Link, Image, tags) are the owner's choice; don't rename them. To offer a new Plex field, add it to `FieldSource`, `FIELD_SOURCES` and `sourceValue`.
 - Documentaries never list "Documentary" as a genre.
-- Existing notes: the only changes allowed are renaming them to their library's file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place) and adding properties marked `fill` when they're missing or empty (never overwriting), and, with `updatePlayCounts` on, overwriting `viewCount` ("Play count") properties, both only when `planRenames` says the match is unambiguous. Matching uses the Plex rating key inside the Plex link property (plus `Link`), then file names as the library's `matchBy` allows.
+- Existing notes: the only changes allowed are renaming them to their library's file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place) and adding properties marked `fill` when they're missing or empty (never overwriting), and, with `updatePlayCounts` on, overwriting `PLAY_SOURCES` properties (Play count, game playtime), both only when `planRenames` says the match is unambiguous. Matching uses the Plex rating key inside the Plex link property (plus `Link`), then file names as the library's `matchBy` allows.
 - With `askBeforeChanges` on, every creation and every change to an existing note goes through `PlexSync.ask` (the approval pop-up) first, with nothing written (not even a poster or folder) before approval. New writes must be planned, shown (one `ApprovalLine` per part, which can be unticked), then applied without the unticked parts and with the pop-up's edits (`Decision.edits`, turned back into values by `parseEdit`).
 - Items in `settings.ignored` ("Skip every time", keyed by rating key) are never created or changed by any sync, but still take part in matching (`planRenames`) so their notes aren't claimed by other items.
 - The background schedule (`playCountHours`) runs `PlexSync.run(…, 'playCounts')`, which must only ever touch play counts.

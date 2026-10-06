@@ -13,13 +13,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings()
 
-    this.addRibbonIcon('clapperboard', 'Create notes from Plex', () => {
+    this.addRibbonIcon('clapperboard', 'Import and sync media', () => {
       void this.syncFromPlex()
     })
 
     this.addCommand({
       id: 'create-notes-from-plex',
-      name: 'Create notes for new Plex items',
+      name: 'Import and sync media',
       callback: () => {
         void this.syncFromPlex()
       },
@@ -43,12 +43,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request)).run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
-      if (result.playCounts.length) console.log('Plex media notes: updated play counts', result.playCounts)
-      if (result.failed.length) console.error('Plex media notes: failed items', result.failed)
+      if (result.playCounts.length) console.log('Media import and sync: updated play counts', result.playCounts)
+      if (result.failed.length) console.error('Media import and sync: failed items', result.failed)
     } catch (err) {
-      // Plex may be out of reach (say, a phone away from home); quietly try again in an hour.
+      // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
-      console.warn('Plex media notes: background play count update failed', err)
+      console.warn('Media import and sync: background play count update failed', err)
     } finally {
       this.plexSyncRunning = false
     }
@@ -64,11 +64,11 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async syncFromPlex(): Promise<void> {
     if (this.plexSyncRunning) {
-      new Notice('Plex sync is already running')
+      new Notice('Media sync is already running')
       return
     }
     this.plexSyncRunning = true
-    const notice = new Notice('Connecting to Plex…', 0)
+    const notice = new Notice('Starting…', 0)
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request))
         .run(message => notice.setMessage(message))
@@ -77,12 +77,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]
       if (result.renamed.length) {
         parts.push(`renamed ${result.renamed.length}`)
-        console.log('Plex media notes: renamed', result.renamed)
+        console.log('Media import and sync: renamed', result.renamed)
       }
       if (result.playCounts.length) parts.push(`updated ${result.playCounts.length} play count${result.playCounts.length === 1 ? '' : 's'}`)
       if (result.filled.length) {
         parts.push(`filled in ${result.filled.length}`)
-        console.log('Plex media notes: filled in', result.filled)
+        console.log('Media import and sync: filled in', result.filled)
       }
       parts.push(`${result.skipped} already had one`)
       if (result.declined) parts.push(`${result.declined} skipped by you`)
@@ -90,12 +90,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed`)
-        console.error('Plex media notes: failed items', result.failed)
+        console.error('Media import and sync: failed items', result.failed)
       }
       new Notice(parts.join(', '), 8000)
     } catch (err) {
       notice.hide()
-      new Notice(`Plex sync failed: ${errorMessage(err)}`, 10000)
+      new Notice(`Media sync failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
     }

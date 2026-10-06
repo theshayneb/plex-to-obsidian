@@ -1,13 +1,14 @@
-# Plex Media Notes
+# Media Import and Sync
 
-An Obsidian plugin that creates a note for every movie, TV show, documentary and music track on your Plex server that doesn't already have one in your vault.
+An Obsidian plugin that creates (and keeps in sync) a note for every movie, TV show, documentary and music track on your Plex server, and every game in your Steam library, that doesn't already have one in your vault.
 
 ## Setup
 
 1. Settings → Plex Media Notes: enter the server address (e.g. `http://192.168.1.10:32400`) and your Plex token.
    To find the token, open any item in Plex Web, choose **Get info → View XML**, and copy the value after `X-Plex-Token=` in the address bar.
 2. Press **Load libraries**. Each Plex library gets its own section: open it and choose its **Type** (Movies, TV shows, Documentaries, Music or Skip). Music libraries start as Skip, since they make one note per track.
-3. Run **Create notes for new Plex items** from the command palette, or click the clapperboard in the ribbon.
+3. For games, fill in the **Steam** section: a Steam Web API key (from steamcommunity.com/dev/apikey) and your Steam account (Steam ID, profile address or custom profile name), and press **Check**. Your profile's "Game details" privacy setting must be Public. A **Steam** library appears with the others.
+4. Run **Import and sync media** from the command palette, or click the clapperboard in the ribbon.
 
 ## Per library
 
@@ -44,6 +45,12 @@ tags:
 - With "Detect documentaries by genre" on, a movie or show with the Documentary genre gets its note from your Documentaries library's settings, whatever library it's in.
 
 The default music (track) note has Artist, Album, Track, Genre (from the album), Date (the album's release date), Duration (`4:24`), Link, Image (the album cover, shared by its tracks) and tags (`music`).
+
+## Games (Steam)
+
+Every game in your Steam library (plus free-to-play games you've played, unless switched off) gets a note in `Media/Video Games`, by default with Genre, Release Date, Total Playtime (hours), Status (`started` once played, otherwise `pending`; finished, abandoned and so on are yours to set), Link (the Steam Store page), Image (the portrait cover, linked), WideImage (the landscape header, linked) and tags (`video_game`). Other sources include playtime in the last two weeks, last played, developers, publishers, platforms, Metacritic score and description. With **Keep play counts up to date** on, Total Playtime is kept up to date too, also by the background schedule.
+
+Store details come from the Steam Store, which allows about 200 requests every 5 minutes, so new games are read a little over one a second.
 
 ## File names
 

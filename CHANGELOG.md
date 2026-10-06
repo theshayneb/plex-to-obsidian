@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.19] - 2026-10-06
+
+### Added
+- Steam: set a Steam Web API key and your Steam account in the new Steam section (and press Check) to get a **Steam** library, type Video games, folder `Media/Video Games`. Every game you own, plus free-to-play games you've played (switchable), gets a note with Genre, Release Date, Total Playtime (hours), Status (`started` once played, otherwise `pending`), Link (Steam Store page), Image (portrait cover, linked), WideImage (landscape header, linked) and tags (`video_game`). Also available: playtime in the last 2 weeks, last played, developers, publishers, platforms, Metacritic score and description. Everything else works as for Plex: matching existing notes, renaming, fill-ins, the approval pop-up (cover links can be edited there), Skip every time, and play counts, where "Keep play counts up to date" and the background schedule also update Total Playtime.
+- Plex and Steam each work on their own: the sync uses whichever is set up.
+
+### Changed
+- The plugin is now called **Media Import and Sync**, and its command "Import and sync media". (Its folder in `.obsidian/plugins` stays `plex-media-notes`, so your settings are kept.)
+
 ## [0.0.18] - 2026-10-06
 
 ### Added

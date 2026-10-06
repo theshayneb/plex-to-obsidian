@@ -4,12 +4,15 @@ import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
   DEFAULT_MATCH_BY,
+  ensureSteamLibrary,
   mergeLibraries,
   retarget,
+  STEAM_LIBRARY,
   type LibrarySetting,
 } from './config'
 import { OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
 import { PlexClient } from './plex'
+import { SteamClient } from './steam'
 import { PropertyNameSuggest } from './property-suggest'
 import { defaultProperties, defaultValues, FIELD_SOURCES, type FieldSource } from './properties'
 
@@ -20,9 +23,9 @@ const PREVIEW_ITEMS: PlexItem[] = [
 ]
 
 const MATCH_LABELS: Record<MatchBy, string> = {
-  loose: 'Plex link, title, title and year, or file name',
-  format: 'Plex link or file name',
-  link: 'Plex link only',
+  loose: 'Link, title, title and year, or file name',
+  format: 'Link or file name',
+  link: 'Link only',
 }
 
 const PLAY_COUNT_SCHEDULE: Record<string, string> = {
@@ -38,7 +41,14 @@ const TARGET_LABELS: Record<LibraryTarget, string> = {
   tv: 'TV shows',
   documentary: 'Documentaries',
   music: 'Music (one note per track)',
+  game: 'Video games',
   skip: 'Skip',
+}
+
+/** Which types each kind of library can be: Steam only holds games, Plex never does. */
+function targetChoices(key: string): [string, string][] {
+  return Object.entries(TARGET_LABELS).filter(([target]) =>
+    key === STEAM_LIBRARY ? target === 'game' || target === 'skip' : target !== 'game')
 }
 
 export class PlexNotesSettingTab extends PluginSettingTab {
@@ -84,10 +94,12 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           })
       })
 
+    this.displaySteam()
+
     new Setting(containerEl).setName('Libraries').setHeading()
 
     new Setting(containerEl)
-      .setDesc('Load your Plex libraries, then open each one to choose its type, folder, file names and properties.')
+      .setDesc('Load your Plex libraries, then open each one (and Steam, once it is set up) to choose its type, folder, file names and properties.')
       .addButton(button => button
         .setButtonText('Load libraries')
         .onClick(async () => {
@@ -122,7 +134,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       .setName('Type')
       .setDesc('What this library holds. Skipped libraries get no notes.')
       .addDropdown(dropdown => {
-        for (const [value, label] of Object.entries(TARGET_LABELS)) dropdown.addOption(value, label)
+        for (const [value, label] of targetChoices(key)) dropdown.addOption(value, label)
         dropdown
           .setValue(lib.target)
           .onChange(async value => {
@@ -134,6 +146,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     if (lib.target === 'skip') return
     const kind = lib.target
     const music = kind === 'music'
+    const game = kind === 'game'
 
     new Setting(el)
       .setName('Folder')
@@ -161,7 +174,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(el)
       .setName('Match existing notes by')
-      .setDesc('How a note already in the folder is recognised as this Plex item, so no second note is made. Case, accents and punctuation are ignored in names. A note linking to a different Plex item never matches by name.')
+      .setDesc('How a note already in the folder is recognised as this item, so no second note is made. The link is the Plex address or Steam Store page in the note. Case, accents and punctuation are ignored in names. A note linking to a different item never matches by name.')
       .addDropdown(dropdown => {
         for (const [value, label] of Object.entries(MATCH_LABELS)) dropdown.addOption(value, label)
         dropdown
@@ -176,7 +189,12 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(el).setName('Property values').setHeading()
     const defaults = defaultValues(kind)
-    if (!music) {
+    if (game) {
+      this.addValueSetting(el, 'Played', 'For "Watched or played status": a game with any playtime. Steam can\'t tell when a game is finished, so set that by hand.',
+        () => lib.values.started, v => { lib.values.started = v || defaults.started })
+      this.addValueSetting(el, 'Not played', 'For "Watched or played status": a game never played.',
+        () => lib.values.unwatched, v => { lib.values.unwatched = v || defaults.unwatched })
+    } else if (!music) {
       this.addValueSetting(el, 'Watched', 'For "Watched or played status": a movie that has been played, or a show with every episode watched.',
         () => lib.values.watched, v => { lib.values.watched = v || defaults.watched })
       this.addValueSetting(el, 'Started', 'For "Watched or played status": a movie stopped part way, or a show with some episodes watched.',
@@ -376,6 +394,65 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .onChange(async value => {
           settings.useDocumentaryGenre = value
           await this.save()
+        }))
+  }
+
+  private displaySteam(): void {
+    const { containerEl } = this
+    const steam = this.plugin.settings.steam
+    new Setting(containerEl).setName('Steam').setHeading()
+
+    const changed = async () => {
+      ensureSteamLibrary(this.plugin.settings)
+      await this.save()
+    }
+    new Setting(containerEl)
+      .setName('Steam Web API key')
+      .setDesc('Get one at steamcommunity.com/dev/apikey (any domain name will do). Your profile\'s "Game details" privacy setting needs to be Public for Steam to list your games.')
+      .addText(text => {
+        text.inputEl.type = 'password'
+        text.setValue(steam.apiKey).onChange(async value => {
+          steam.apiKey = value.trim()
+          await changed()
+        })
+      })
+    new Setting(containerEl)
+      .setName('Steam account')
+      .setDesc('Your 17-digit Steam ID, your profile address, or your custom profile name.')
+      .addText(text => text
+        .setPlaceholder('steamcommunity.com/id/yourname')
+        .setValue(steam.account)
+        .onChange(async value => {
+          steam.account = value.trim()
+          await changed()
+        }))
+    new Setting(containerEl)
+      .setName('Include free-to-play games')
+      .setDesc('Also list free games you have played.')
+      .addToggle(toggle => toggle
+        .setValue(steam.includeFreeGames)
+        .onChange(async value => {
+          steam.includeFreeGames = value
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setName('Check Steam')
+      .setDesc('Reads your games list once, to check the key and account, and adds the Steam library below.')
+      .addButton(button => button
+        .setButtonText('Check')
+        .onClick(async () => {
+          button.setDisabled(true)
+          try {
+            const games = await new SteamClient(steam.apiKey, steam.account, steam.includeFreeGames).ownedGames()
+            ensureSteamLibrary(this.plugin.settings)
+            await this.save()
+            new Notice(`Steam: found ${games.length} games`)
+          } catch (err) {
+            new Notice(`Steam: ${errorMessage(err)}`, 10000)
+          } finally {
+            button.setDisabled(false)
+            this.refresh()
+          }
         }))
   }
 

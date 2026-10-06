@@ -1,0 +1,72 @@
+/* Approval pop-up: wide enough to compare what's in a note with what will change. */
+.modal.pmn-approval {
+  width: min(1000px, 95vw);
+  max-width: 95vw;
+  height: min(85vh, 900px);
+  max-height: 95vh;
+}
+
+.pmn-approval .modal-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.pmn-approval-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.pmn-approval-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pmn-approval-table th {
+  position: sticky;
+  top: 0;
+  background: var(--background-secondary);
+  text-align: left;
+}
+
+.pmn-approval-table th,
+.pmn-approval-table td {
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pmn-approval-name {
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+}
+
+.pmn-approval-now {
+  color: var(--text-muted);
+  width: 40%;
+}
+
+.pmn-approval-new {
+  width: 40%;
+}
+
+.pmn-approval-empty {
+  color: var(--text-faint);
+}
+
+.pmn-approval-off .pmn-approval-new,
+.pmn-approval-off .pmn-approval-name {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.pmn-approval-table th:first-child,
+.pmn-approval-table td:first-child {
+  width: 1%;
+}

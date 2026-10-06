@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.15] - 2026-10-06
+
+### Changed
+- The approval pop-up is much bigger (up to 1000 px wide and most of the window's height, scrolling when needed) and shows a table: for an existing note each line has what's in the note **now** next to what it will be, with *Empty* in italics when there's nothing; new notes list each property and its value. Unticked lines are crossed out. Long values such as summaries are shown in full.
+- Releases now include a `styles.css`; install it next to `main.js` and `manifest.json`.
+
 ## [0.0.14] - 2026-10-06
 
 ### Added

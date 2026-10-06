@@ -182,13 +182,19 @@ export class PlexSync {
           if (!renameTo && !fill && !plays) continue
 
           const lines: ApprovalLine[] = []
-          if (renameTo) lines.push({ key: 'rename', label: 'Rename to', value: renameTo.split('/').pop()!.replace(/\.md$/, '') })
-          for (const [name, value] of fill?.additions ?? []) lines.push({ key: `add:${name}`, label: `Add ${name}`, value: describeValue(value) })
+          const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+          if (renameTo) {
+            lines.push({ key: 'rename', label: 'File name', current: file.basename, value: renameTo.split('/').pop()!.replace(/\.md$/, '') })
+          }
+          for (const [name, value] of fill?.additions ?? []) {
+            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: describeValue(value) })
+          }
           if (fill?.imageProperty) {
-            lines.push({ key: `add:${fill.imageProperty}`, label: `Add ${fill.imageProperty}`, value: 'poster downloaded from Plex' })
+            const name = fill.imageProperty
+            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: 'poster downloaded from Plex' })
           }
           for (const name of plays?.names ?? []) {
-            lines.push({ key: `update:${name}`, label: `Update ${name}`, value: `${describeValue(plays!.from[name])} → ${plays!.count}` })
+            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.count) })
           }
           const excluded = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)
           if (!excluded) continue

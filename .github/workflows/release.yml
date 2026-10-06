@@ -82,9 +82,12 @@ jobs:
           gh release upload "$TAG" \
             main.js \
             manifest.json \
+            styles.css \
             --clobber
 
       - name: Attest release assets
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: main.js
+          subject-path: |
+            main.js
+            styles.css

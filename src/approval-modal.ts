@@ -11,8 +11,12 @@ export interface Decision {
 /** One part of a creation or change, which can be unticked on its own. */
 export interface ApprovalLine {
   key: string
+  /** The property name, or "File name" for a rename. */
   label: string
-  value: string
+  /** What's in the note now (null: empty or missing). Left out for new notes. */
+  current?: string | null
+  /** What it will be (null: empty). */
+  value: string | null
 }
 
 export interface ApprovalRequest {
@@ -41,26 +45,36 @@ export class ApprovalModal extends Modal {
     const { action, path, lines, position, total } = this.pmnRequest
     const create = action === 'create'
     this.titleEl.setText(create ? 'Create this note?' : 'Change this note?')
+    this.modalEl.addClass('pmn-approval')
     const { contentEl } = this
     contentEl.createEl('p', { cls: 'setting-item-description', text: `${position} of ${total}` })
     contentEl.createEl('p').createEl('code', { text: path })
     contentEl.createEl('p', {
       cls: 'setting-item-description',
       text: create
-        ? 'Untick a property to leave it empty in the new note.'
+        ? 'A new note. Untick a property to leave it empty.'
         : 'Untick anything you don\'t want changed.',
     })
-    for (const { key, label, value } of lines) {
-      const row = contentEl.createEl('label', { cls: 'mod-checkbox' }).createDiv()
-      const box = row.createEl('input', { type: 'checkbox' })
+
+    const table = contentEl.createDiv('pmn-approval-scroll').createEl('table', { cls: 'pmn-approval-table' })
+    const head = table.createEl('thead').createEl('tr')
+    head.createEl('th')
+    head.createEl('th', { text: 'Property' })
+    if (!create) head.createEl('th', { text: 'Now' })
+    head.createEl('th', { text: create ? 'Value' : 'New' })
+    const body = table.createEl('tbody')
+    for (const { key, label, current, value } of lines) {
+      const row = body.createEl('tr')
+      const box = row.createEl('td').createEl('input', { type: 'checkbox' })
       box.checked = true
       box.addEventListener('change', () => {
+        row.toggleClass('pmn-approval-off', !box.checked)
         if (box.checked) this.pmnExcluded.delete(key)
         else this.pmnExcluded.add(key)
       })
-      row.appendText(' ')
-      row.createEl('strong', { text: `${label}: ` })
-      row.appendText(value)
+      row.createEl('td', { cls: 'pmn-approval-name', text: label })
+      if (!create) cell(row, current ?? null, 'pmn-approval-now')
+      cell(row, value, 'pmn-approval-new')
     }
 
     new Setting(contentEl)
@@ -88,11 +102,17 @@ export function askApproval(app: App, request: ApprovalRequest): Promise<Decisio
   return new Promise(resolve => new ApprovalModal(app, request, resolve).open())
 }
 
-/** A property value as shown in the approval pop-up. */
-export function describeValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '(empty)'
-  const text = Array.isArray(value)
-    ? (value.length ? value.map(String).join(', ') : '(empty list)')
-    : typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean)
-  return text.length > 300 ? `${text.slice(0, 300)}…` : text
+/** A table cell showing a value, or "empty" in italics. */
+function cell(row: HTMLElement, value: string | null, cls: string): void {
+  const td = row.createEl('td', { cls })
+  if (value === null) td.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
+  else td.setText(value)
+}
+
+/** A property value as shown in the approval pop-up; null when it's empty. */
+export function describeValue(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (Array.isArray(value)) return value.length ? value.map(String).join(', ') : null
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean)
+  return text.length > 2000 ? `${text.slice(0, 2000)}…` : text
 }

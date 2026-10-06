@@ -269,6 +269,17 @@ describe('PlexSync', () => {
     expect((await sync.run(() => {})).playCounts).toEqual([])
   })
 
+  it('shows the play count now and after', async () => {
+    const { app } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1 } })
+    const settings = settingsWith({ updatePlayCounts: true })
+    settings.libraries['1'] = newLibrary('Movies', 'movie', 'movie')
+    settings.libraries['1'].properties = [{ name: 'Plays', source: 'viewCount' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 3 }] } })
+    const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'stop' as const, excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(approve.mock.calls[0][0].lines).toEqual([{ key: 'update:Plays', label: 'Plays', current: '1', value: '3' }])
+  })
+
   it('only updates play counts in the background mode', async () => {
     const { app, files, frontmatter } = makeApp({ 'Media/Movies/Heat.md': { Plays: 0 } })
     const settings = settingsWith()
@@ -303,8 +314,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(approve.mock.calls[0][0].lines).toEqual([
-      { key: 'rename', label: 'Rename to', value: 'Heat (1995)' },
-      { key: 'add:Link', label: 'Add Link', value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2' },
+      { key: 'rename', label: 'File name', current: 'Heat', value: 'Heat (1995)' },
+      { key: 'add:Link', label: 'Link', current: null, value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2' },
     ])
     const arrival = approve.mock.calls.find(c => c[0].path === 'Media/Movies/Arrival (2016).md')![0]
     expect(arrival.lines).toContainEqual({ key: 'prop:Image', label: 'Image', value: 'poster downloaded from Plex' })

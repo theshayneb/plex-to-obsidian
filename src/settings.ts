@@ -110,7 +110,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             new Notice(`Could not reach Plex: ${errorMessage(err)}`)
           } finally {
             button.setDisabled(false)
-            this.display()
+            this.refresh()
           }
         }))
 
@@ -160,6 +160,17 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     this.displayProperties()
   }
 
+  /** Redraws the page without losing the scroll position. */
+  private refresh(): void {
+    const scrollers: HTMLElement[] = []
+    for (let el: HTMLElement | null = this.containerEl; el; el = el.parentElement) {
+      if (el.scrollTop > 0) scrollers.push(el)
+    }
+    const positions = scrollers.map(el => el.scrollTop)
+    this.display()
+    scrollers.forEach((el, i) => { el.scrollTop = positions[i] })
+  }
+
   private displayProperties(): void {
     const { containerEl } = this
     const settings = this.plugin.settings
@@ -185,9 +196,11 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           dropdown
             .setValue(mapping.source)
             .onChange(async value => {
+              const textChanged = (mapping.source === 'text') !== (value === 'text')
               mapping.source = value as FieldSource
               await save()
-              this.display()
+              // Only the "Fixed text" choice changes the row's layout.
+              if (textChanged) this.refresh()
             })
         })
       if (mapping.source === 'text') {
@@ -216,7 +229,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           .onClick(async () => {
             settings.properties.splice(index, 1)
             await save()
-            this.display()
+            this.refresh()
           }))
     })
 
@@ -227,14 +240,14 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .onClick(async () => {
           settings.properties.push({ name: '', source: 'summary' })
           await save()
-          this.display()
+          this.refresh()
         }))
       .addButton(button => button
         .setButtonText('Reset to defaults')
         .onClick(async () => {
           settings.properties = structuredClone(DEFAULT_PROPERTIES)
           await save()
-          this.display()
+          this.refresh()
         }))
 
     new Setting(containerEl).setName('Property values').setHeading()
@@ -258,7 +271,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const [moved] = list.splice(index, 1)
     list.splice(index + by, 0, moved)
     await this.plugin.saveSettings()
-    this.display()
+    this.refresh()
   }
 
   private addValueSetting(name: string, desc: string, get: () => string, set: (value: string) => void): void {

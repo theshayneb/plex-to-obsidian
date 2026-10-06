@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.6] - 2026-10-06
+
+### Fixed
+- Settings no longer jump back to the top when you press a button (add, remove, move or reset a property, or load libraries). Changing a property's Plex source no longer redraws the page at all, except when switching to or from "Fixed text".
+
 ## [0.0.5] - 2026-10-06
 
 ### Changed

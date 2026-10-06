@@ -250,6 +250,39 @@ describe('PlexSync', () => {
     expect(result.created).toContain('Media/Movies/Heat (1995).md')
   })
 
+  it('updates play counts on every sync only when switched on', async () => {
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1, Status: 'revisit' } })
+    const settings = settingsWith()
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    await sync.run(() => {})
+    settings.libraries['1'].properties.push({ name: 'Plays', source: 'viewCount' })
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 4 }] } })
+
+    expect((await sync.run(() => {})).playCounts).toEqual([])
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Plays).toBe(1)
+
+    settings.updatePlayCounts = true
+    expect((await sync.run(() => {})).playCounts).toEqual(['Media/Movies/Heat (1995).md'])
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Plays: 4, Status: 'revisit' })
+    expect((await sync.run(() => {})).playCounts).toEqual([])
+  })
+
+  it('only updates play counts in the background mode', async () => {
+    const { app, files, frontmatter } = makeApp({ 'Media/Movies/Heat.md': { Plays: 0 } })
+    const settings = settingsWith()
+    settings.libraries['1'] = newLibrary('Movies', 'movie', 'movie')
+    settings.libraries['1'].properties.push({ name: 'Plays', source: 'viewCount' })
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 2 }, movies[0]] } })
+    const save = vi.fn(() => Promise.resolve())
+
+    const result = await new PlexSync(app as never, settings, save).run(() => {}, 'playCounts')
+
+    expect(result).toMatchObject({ created: [], renamed: [], filled: [], playCounts: ['Media/Movies/Heat.md'] })
+    expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({ Plays: 2 })
+    expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('leaves names alone when renaming is off', async () => {
     const { app, files } = makeApp({ 'Media/Movies/Heat.md': {} })
     const result = await new PlexSync(app as never, settingsWith({ renameExistingNotes: false }), () => Promise.resolve()).run(() => {})

@@ -18,18 +18,23 @@ import {
   type PlexItem,
 } from './notes'
 import { PlexClient } from './plex'
-import { buildFrontmatter, linkPropertyNames, usesSource } from './properties'
+import { buildFrontmatter, linkPropertyNames, playCount, usesSource } from './properties'
 
 export interface SyncResult {
   created: string[]
   renamed: { from: string, to: string }[]
-  /** Existing notes that got their empty link or summary filled in. */
+  /** Existing notes that got empty properties filled in. */
   filled: string[]
+  /** Existing notes whose play count changed. */
+  playCounts: string[]
   skipped: number
   failed: { title: string, error: string }[]
 }
 
 export type ProgressFn = (message: string) => void
+
+/** 'full' creates, renames and fills in notes; 'playCounts' only refreshes play counts in existing notes. */
+export type SyncMode = 'full' | 'playCounts'
 
 type ActiveLibrary = LibrarySetting & { target: MediaKind }
 
@@ -65,7 +70,7 @@ export class PlexSync {
     return { lib, kind }
   }
 
-  async run(progress: ProgressFn): Promise<SyncResult> {
+  async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
     const { serverUrl, token } = this.settings
     if (!serverUrl || !token) throw new Error('Set the Plex server address and token in the plugin settings first')
 
@@ -73,8 +78,10 @@ export class PlexSync {
     progress('Connecting to Plex…')
     const machineId = await plex.machineIdentifier()
 
-    mergeLibraries(this.settings, await plex.libraries())
-    await this.saveSettings()
+    if (mode === 'full') {
+      mergeLibraries(this.settings, await plex.libraries())
+      await this.saveSettings()
+    }
 
     const active = Object.entries(this.settings.libraries)
       .filter((e): e is [string, ActiveLibrary] => e[1].target !== 'skip')
@@ -82,7 +89,7 @@ export class PlexSync {
       video: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'video')),
       music: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'music')),
     }
-    const result: SyncResult = { created: [], renamed: [], filled: [], skipped: 0, failed: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [] }
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
@@ -94,9 +101,11 @@ export class PlexSync {
       }
     }
 
-    const { renameExistingNotes } = this.settings
-    const fillsAny = active.some(([, lib]) => lib.properties.some(m => m.fill))
-    if (renameExistingNotes || fillsAny) {
+    const full = mode === 'full'
+    const renaming = full && this.settings.renameExistingNotes
+    const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
+    const counting = !full || this.settings.updatePlayCounts
+    if (renaming || filling || counting) {
       progress('Checking existing notes…')
       for (const family of ['video', 'music'] as const) {
         const index = indexes[family]
@@ -107,7 +116,7 @@ export class PlexSync {
         for (const { item, path } of planRenames(matches)) {
           const { lib, kind } = this.libraryFor(item, libOf.get(item)!)
           let current = path
-          if (renameExistingNotes) {
+          if (renaming) {
             try {
               const to = await this.renameNote(path, item, lib)
               if (to) {
@@ -119,16 +128,24 @@ export class PlexSync {
               result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
             }
           }
-          if (lib.properties.some(m => m.fill)) {
+          if (filling && lib.properties.some(m => m.fill)) {
             try {
               if (await this.fillNote(plex, machineId, current, item, lib, kind)) result.filled.push(current)
             } catch (err) {
               result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
             }
           }
+          if (counting) {
+            try {
+              if (await this.updatePlayCount(current, item, lib)) result.playCounts.push(current)
+            } catch (err) {
+              result.failed.push({ title: item.title, error: `updating the play count failed: ${errorText(err)}` })
+            }
+          }
         }
       }
     }
+    if (!full) return result
 
     for (const { item: listed, lib: listedLib } of entries) {
       const index = indexes[familyOf(listedLib)]
@@ -217,6 +234,24 @@ export class PlexSync {
       for (const [name, value] of additions) {
         if (isBlank(fm[name])) fm[name] = value
       }
+    })
+    return true
+  }
+
+  /**
+   * Sets the note's "Play count" properties (as named in its library's settings) to Plex's current
+   * count. The one case where a value already in a note is replaced. Returns whether it changed.
+   */
+  private async updatePlayCount(path: string, item: PlexItem, lib: LibrarySetting): Promise<boolean> {
+    const names = lib.properties.filter(m => m.source === 'viewCount' && m.name.trim()).map(m => m.name.trim())
+    if (!names.length) return false
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (!(file instanceof TFile)) return false
+    const count = playCount(item)
+    const current = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    if (names.every(name => current[name] === count)) return false
+    await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+      for (const name of names) fm[name] = count
     })
     return true
   }

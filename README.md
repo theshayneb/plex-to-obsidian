@@ -58,6 +58,10 @@ When a note matches exactly one Plex item (and no other item could be it):
 - With **Fix names of existing notes** on (the default), it's renamed to its library's file name format, e.g. `Heat` → `Heat (1995)`. Only the file name changes, the note stays in its folder, and links to it are updated if Obsidian's "Automatically update internal links" is on.
 - Properties with their fill-in switch on (Link and Summary by default) are added when missing or empty in the note. Values already there are never replaced, and nothing else in the note changes.
 
+## Play counts
+
+With **Keep play counts up to date** on (it's off by default), every sync also updates properties set to "Play count" in existing notes, in all libraries; it's the only value in an existing note the plugin ever replaces. **Update play counts automatically** then does just that in the background, every hour, 6 hours, 12 hours or day, while Obsidian is open.
+
 ## Mobile
 
 The plugin works on mobile as long as the device can reach the Plex server. Otherwise, run it on a desktop and let Obsidian Sync carry the notes over.

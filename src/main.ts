@@ -6,6 +6,8 @@ import { PlexSync } from './sync'
 export default class PlexMediaNotesPlugin extends Plugin {
   settings: PlexNotesSettings = defaultSettings()
   private plexSyncRunning = false
+  /** Earliest time to try a background play count update again after one failed (ms). */
+  private playCountRetryAt = 0
 
   async onload(): Promise<void> {
     await this.loadSettings()
@@ -23,6 +25,32 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addSettingTab(new PlexNotesSettingTab(this.app, this))
+
+    // Background play count updates: check at startup and every 10 minutes whether one is due.
+    // The last run time is saved, so the schedule survives restarts and is shared by synced devices.
+    this.app.workspace.onLayoutReady(() => void this.updatePlayCountsIfDue())
+    this.registerInterval(window.setInterval(() => void this.updatePlayCountsIfDue(), 10 * 60 * 1000))
+  }
+
+  async updatePlayCountsIfDue(): Promise<void> {
+    const { updatePlayCounts, playCountHours, lastPlayCountUpdate } = this.settings
+    if (!updatePlayCounts || !playCountHours || this.plexSyncRunning) return
+    const now = Date.now()
+    if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
+    this.plexSyncRunning = true
+    try {
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings()).run(() => {}, 'playCounts')
+      this.settings.lastPlayCountUpdate = now
+      await this.saveSettings()
+      if (result.playCounts.length) console.log('Plex media notes: updated play counts', result.playCounts)
+      if (result.failed.length) console.error('Plex media notes: failed items', result.failed)
+    } catch (err) {
+      // Plex may be out of reach (say, a phone away from home); quietly try again in an hour.
+      this.playCountRetryAt = now + 3600 * 1000
+      console.warn('Plex media notes: background play count update failed', err)
+    } finally {
+      this.plexSyncRunning = false
+    }
   }
 
   async loadSettings(): Promise<void> {
@@ -50,6 +78,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`renamed ${result.renamed.length}`)
         console.log('Plex media notes: renamed', result.renamed)
       }
+      if (result.playCounts.length) parts.push(`updated ${result.playCounts.length} play count${result.playCounts.length === 1 ? '' : 's'}`)
       if (result.filled.length) {
         parts.push(`filled in ${result.filled.length}`)
         console.log('Plex media notes: filled in', result.filled)

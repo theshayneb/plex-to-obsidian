@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.11] - 2026-10-06
+
+### Added
+- Keep play counts up to date (off by default): every sync also updates properties set to "Play count" in existing notes, in all libraries. It's the only property whose existing value is ever replaced.
+- Update play counts automatically (Off by default, shown once the above is on): every hour, 6 hours, 12 hours or once a day, play counts are updated in the background while Obsidian is open. Only play counts: no notes are created, renamed or filled in. The schedule survives restarts, and if Plex can't be reached it quietly tries again an hour later.
+
+### Changed
+- "Play count" for a TV show falls back to the number of episodes watched when Plex has no total.
+
 ## [0.0.10] - 2026-10-06
 
 ### Added

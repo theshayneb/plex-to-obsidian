@@ -172,6 +172,11 @@ function starEmoji(stars: number | undefined): string | undefined {
   return stars >= 5 ? '🩷' : '⭐'.repeat(stars)
 }
 
+/** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
+export function playCount(item: PlexItem): number {
+  return item.viewCount ?? (item.type === 'show' ? item.viewedLeafCount : undefined) ?? 0
+}
+
 function externalId(item: PlexItem, scheme: string): string | undefined {
   const guid = (item.Guid ?? []).find(g => g.id.startsWith(`${scheme}://`))
   return guid?.id.slice(scheme.length + 3)
@@ -212,7 +217,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'userRatingEmoji': return starEmoji(userStars(item))
     case 'addedAt': return localDate(item.addedAt)
     case 'lastViewedAt': return localDate(item.lastViewedAt)
-    case 'viewCount': return item.viewCount ?? 0
+    case 'viewCount': return playCount(item)
     case 'seasons': return item.type === 'show' ? item.childCount : undefined
     case 'episodes': return item.type === 'show' ? item.leafCount : undefined
     case 'imdbId': return externalId(item, 'imdb')

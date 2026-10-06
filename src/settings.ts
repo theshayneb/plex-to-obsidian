@@ -24,6 +24,14 @@ const MATCH_LABELS: Record<MatchBy, string> = {
   link: 'Plex link only',
 }
 
+const PLAY_COUNT_SCHEDULE: Record<string, string> = {
+  0: 'Off',
+  1: 'Every hour',
+  6: 'Every 6 hours',
+  12: 'Every 12 hours',
+  24: 'Once a day',
+}
+
 const TARGET_LABELS: Record<LibraryTarget, string> = {
   movie: 'Movies',
   tv: 'TV shows',
@@ -316,6 +324,33 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           settings.renameExistingNotes = value
           await this.save()
         }))
+
+    new Setting(containerEl)
+      .setName('Keep play counts up to date')
+      .setDesc('Every sync also updates properties set to "Play count" in existing notes, in all libraries. This is the only property whose value in an existing note is ever replaced.')
+      .addToggle(toggle => toggle
+        .setValue(settings.updatePlayCounts)
+        .onChange(async value => {
+          settings.updatePlayCounts = value
+          await this.save()
+          this.refresh()
+        }))
+
+    if (settings.updatePlayCounts) {
+      new Setting(containerEl)
+        .setName('Update play counts automatically')
+        .setDesc('Also update play counts in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.')
+        .addDropdown(dropdown => {
+          for (const [value, label] of Object.entries(PLAY_COUNT_SCHEDULE)) dropdown.addOption(value, label)
+          dropdown
+            .setValue(String(settings.playCountHours))
+            .onChange(async value => {
+              settings.playCountHours = Number(value)
+              await this.save()
+              void this.plugin.updatePlayCountsIfDue()
+            })
+        })
+    }
 
     new Setting(containerEl)
       .setName('Detect documentaries by genre')

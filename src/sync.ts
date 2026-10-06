@@ -1,5 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
-import { describeValue, type ApprovalRequest, type Approver } from './approval-modal'
+import { describeValue, type ApprovalLine, type ApprovalRequest, type Approver } from './approval-modal'
 import { documentaryLibrary, mergeLibraries, type LibrarySetting, type PlexNotesSettings } from './config'
 import {
   addToIndex,
@@ -19,7 +19,7 @@ import {
   type PlexItem,
 } from './notes'
 import { PlexClient } from './plex'
-import { buildFrontmatter, linkPropertyNames, playCount, usesSource } from './properties'
+import { buildFrontmatter, linkPropertyNames, playCount } from './properties'
 
 export interface SyncResult {
   created: string[]
@@ -66,8 +66,8 @@ interface Entry {
 export class PlexSync {
   private readonly albums = new Map<string, Promise<PlexItem | null>>()
 
-  /** "Apply to all the rest" was chosen, per kind of approval. */
-  private readonly approvedAll = { create: false, change: false }
+  /** "Apply to all the rest" was chosen, per kind of approval, with the lines unticked then. */
+  private readonly approvedAll: Record<ApprovalRequest['action'], Set<string> | null> = { create: null, change: null }
 
   constructor(
     private readonly app: App,
@@ -77,16 +77,22 @@ export class PlexSync {
     private readonly approve?: Approver,
   ) {}
 
-  /** Whether to go ahead with one creation or change. */
-  private async ask(request: ApprovalRequest, result: SyncResult): Promise<boolean> {
-    if (result.stopped) return false
-    if (!this.settings.askBeforeChanges || !this.approve || this.approvedAll[request.action]) return true
-    const decision = await this.approve(request)
-    if (decision === 'all') this.approvedAll[request.action] = true
-    if (decision === 'stop') result.stopped = true
-    const yes = decision === 'apply' || decision === 'all'
-    if (!yes) result.declined++
-    return yes
+  /**
+   * Whether to go ahead with one creation or change, and which of its lines were unticked
+   * (those parts are left out). Null means no.
+   */
+  private async ask(request: ApprovalRequest, result: SyncResult): Promise<Set<string> | null> {
+    if (result.stopped) return null
+    if (!this.settings.askBeforeChanges || !this.approve) return new Set()
+    const remembered = this.approvedAll[request.action]
+    if (remembered) return remembered
+    const { choice, excluded } = await this.approve(request)
+    const skipped = new Set(excluded)
+    if (choice === 'all') this.approvedAll[request.action] = skipped
+    if (choice === 'stop') result.stopped = true
+    if (choice === 'apply' || choice === 'all') return skipped
+    result.declined++
+    return null
   }
 
   private naming(lib: LibrarySetting): FileNaming {
@@ -175,14 +181,31 @@ export class PlexSync {
           const plays = counting ? this.planPlayCount(file, item, lib) : null
           if (!renameTo && !fill && !plays) continue
 
-          const lines: [string, string][] = []
-          if (renameTo) lines.push(['Rename to', renameTo.split('/').pop()!.replace(/\.md$/, '')])
-          for (const [name, value] of fill?.additions ?? []) lines.push([`Add ${name}`, describeValue(value)])
-          if (fill?.imageProperty) lines.push([`Add ${fill.imageProperty}`, 'poster downloaded from Plex'])
-          if (plays) {
-            for (const name of plays.names) lines.push([`Update ${name}`, `${describeValue(plays.from[name])} → ${plays.count}`])
+          const lines: ApprovalLine[] = []
+          if (renameTo) lines.push({ key: 'rename', label: 'Rename to', value: renameTo.split('/').pop()!.replace(/\.md$/, '') })
+          for (const [name, value] of fill?.additions ?? []) lines.push({ key: `add:${name}`, label: `Add ${name}`, value: describeValue(value) })
+          if (fill?.imageProperty) {
+            lines.push({ key: `add:${fill.imageProperty}`, label: `Add ${fill.imageProperty}`, value: 'poster downloaded from Plex' })
           }
-          if (!await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)) continue
+          for (const name of plays?.names ?? []) {
+            lines.push({ key: `update:${name}`, label: `Update ${name}`, value: `${describeValue(plays!.from[name])} → ${plays!.count}` })
+          }
+          const excluded = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)
+          if (!excluded) continue
+          // Leave out whatever was unticked.
+          if (excluded.has('rename')) renameTo = null
+          if (fill) {
+            fill = {
+              ...fill,
+              additions: fill.additions.filter(([name]) => !excluded.has(`add:${name}`)),
+              imageProperty: fill.imageProperty && !excluded.has(`add:${fill.imageProperty}`) ? fill.imageProperty : null,
+            }
+          }
+          const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
+          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length) {
+            result.declined++
+            continue
+          }
 
           try {
             if (renameTo) {
@@ -191,9 +214,9 @@ export class PlexSync {
               addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
             }
             if (fill && await this.applyFill(plex, file, fill, lib)) result.filled.push(file.path)
-            if (plays) {
+            if (plays && playNames.length) {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of plays.names) fm[name] = plays.count
+                for (const name of playNames) fm[name] = plays.count
               })
               result.playCounts.push(file.path)
             }
@@ -222,8 +245,10 @@ export class PlexSync {
         const item = await this.fullItem(plex, listed)
         const { lib, kind } = this.libraryFor(item, listedLib)
         const preview = this.previewNote(machineId, item, lib, kind)
-        if (!await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)) continue
-        const path = await this.createNote(plex, machineId, item, lib, kind)
+        const excluded = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)
+        if (!excluded) continue
+        const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
+        const path = await this.createNote(plex, machineId, item, lib, kind, left)
         result.created.push(path)
         addToIndex(index, path, renderFileName(this.naming(lib), item), [item.ratingKey])
       } catch (err) {
@@ -319,7 +344,7 @@ export class PlexSync {
   }
 
   /** The path and properties a new note would get, for the approval pop-up. */
-  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: [string, string][] } {
+  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: ApprovalLine[] } {
     const folder = normalizePath(lib.folder)
     const path = this.freePath(folder, renderFileName(this.naming(lib), item), 'md')
     const frontmatter = buildFrontmatter(item, lib.properties, {
@@ -328,7 +353,7 @@ export class PlexSync {
       image: hasImage(item) ? 'poster downloaded from Plex' : null,
       values: lib.values,
     })
-    return { path, lines: Object.entries(frontmatter).map(([name, value]) => [name, describeValue(value)]) }
+    return { path, lines: Object.entries(frontmatter).map(([name, value]) => ({ key: `prop:${name}`, label: name, value: describeValue(value) })) }
   }
 
   /** Rating keys (from the Plex link property) and file names of every note in these libraries' folders. */
@@ -348,20 +373,25 @@ export class PlexSync {
     return index
   }
 
-  private async createNote(plex: PlexClient, machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): Promise<string> {
+  /** Creates the note; properties named in `leaveEmpty` (unticked when approving) are added empty. */
+  private async createNote(plex: PlexClient, machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, leaveEmpty = new Set<string>()): Promise<string> {
     const folder = normalizePath(lib.folder)
     await this.ensureFolder(folder)
     const baseName = renderFileName(this.naming(lib), item)
     const path = this.freePath(folder, baseName, 'md')
 
     const { properties, values } = lib
-    const image = usesSource(properties, 'poster') ? await this.imageFor(plex, item, folder, baseName) : null
+    const posterWanted = properties.some(m => m.source === 'poster' && m.name.trim() && !leaveEmpty.has(m.name.trim()))
+    const image = posterWanted ? await this.imageFor(plex, item, folder, baseName) : null
     const frontmatter = buildFrontmatter(item, properties, {
       kind,
       link: plexWebLink(machineId, item.ratingKey),
       image,
       values,
     })
+    for (const name of leaveEmpty) {
+      if (name in frontmatter) frontmatter[name] = Array.isArray(frontmatter[name]) ? [] : null
+    }
 
     const file = await this.app.vault.create(path, '')
     await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {

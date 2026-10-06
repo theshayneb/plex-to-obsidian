@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.14] - 2026-10-06
+
+### Added
+- The approval pop-up has a tick box on every line: the rename, each property to fill in, each play count update, and each property of a new note. Untick what you don't want; Apply does only what's ticked (if nothing is, the note is skipped). In a new note an unticked property is added empty (and an unticked image isn't downloaded). "Apply to all the rest" / "Create all the rest" keep the same lines unticked for the rest of the sync.
+
 ## [0.0.13] - 2026-10-06
 
 ### Added

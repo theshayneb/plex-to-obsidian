@@ -1,0 +1,28 @@
+{
+  "name": "plex-media-notes",
+  "version": "0.0.1",
+  "description": "Create Obsidian notes for the movies and TV shows on a Plex server",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs development",
+    "build": "node esbuild.config.mjs production",
+    "lint": "eslint \"src/**/*.ts\" && tsc --noEmit --pretty",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "theshayneb",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^24.12.2",
+    "esbuild": "^0.28.0",
+    "eslint": "^9.24.0",
+    "eslint-plugin-obsidianmd": "^0.1.9",
+    "globals": "^16.0.0",
+    "obsidian": "latest",
+    "tslib": "^2.8.1",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.29.0",
+    "vitest": "^4.1.2"
+  }
+}

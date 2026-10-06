@@ -51,7 +51,7 @@ Characters that can't be in file names are dropped, unless you choose a replacem
 
 ## Asking first
 
-With **Ask before every change** on (the default), nothing is created or changed without a pop-up first: for an existing note it lists the new name, each property to fill in and each play count update; for a new note its file name and all its properties. Choose **Apply**/**Create**, **Skip**, **Apply to all the rest**/**Create all the rest** (only for that kind, changes or new notes, in this sync), or **Stop**. Each line has a tick box: untick what you don't want and only the ticked parts happen (an unticked property in a new note is added empty). "All the rest" keeps the same lines unticked for the rest of the sync. Closing the pop-up skips that note. Background play count updates ask too.
+With **Ask before every change** on (the default), nothing is created or changed without a pop-up first: for an existing note it lists the new name, each property to fill in and each play count update; for a new note its file name and all its properties. Choose **Apply**/**Create**, **Skip**, **Apply to all the rest**/**Create all the rest** (only for that kind, changes or new notes, in this sync), or **Stop**. Every new value can be edited first (lists as chips: × removes an item, the box adds one; text and numbers as edit boxes; the file name too). Each line has a tick box: untick what you don't want and only the ticked parts happen (an unticked property in a new note is added empty). "All the rest" keeps the same lines unticked for the rest of the sync. Closing the pop-up skips that note. Background play count updates ask too.
 
 ## Existing notes
 

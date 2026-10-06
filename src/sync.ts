@@ -1,5 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
-import { describeValue, type ApprovalLine, type ApprovalRequest, type Approver } from './approval-modal'
+import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver } from './approval-modal'
 import { documentaryLibrary, mergeLibraries, type LibrarySetting, type PlexNotesSettings } from './config'
 import {
   addToIndex,
@@ -47,6 +47,22 @@ type ActiveLibrary = LibrarySetting & { target: MediaKind }
 type Family = 'video' | 'music'
 const familyOf = (lib: ActiveLibrary): Family => (lib.target === 'music' ? 'music' : 'video')
 
+/** What was approved: the lines unticked, and the new values edited. */
+interface Approval {
+  excluded: Set<string>
+  edits: Record<string, string | string[]>
+}
+
+/** A value for the approval pop-up, editable as text, a number or a list. */
+function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'> {
+  const edit = editKind(value)
+  return {
+    value: describeValue(value),
+    edit,
+    items: edit === 'list' ? (value as unknown[]).map(String) : undefined,
+  }
+}
+
 interface FillPlan {
   item: PlexItem
   additions: [string, unknown][]
@@ -81,16 +97,17 @@ export class PlexSync {
    * Whether to go ahead with one creation or change, and which of its lines were unticked
    * (those parts are left out). Null means no.
    */
-  private async ask(request: ApprovalRequest, result: SyncResult): Promise<Set<string> | null> {
+  private async ask(request: ApprovalRequest, result: SyncResult): Promise<Approval | null> {
     if (result.stopped) return null
-    if (!this.settings.askBeforeChanges || !this.approve) return new Set()
+    if (!this.settings.askBeforeChanges || !this.approve) return { excluded: new Set(), edits: {} }
     const remembered = this.approvedAll[request.action]
-    if (remembered) return remembered
-    const { choice, excluded } = await this.approve(request)
+    if (remembered) return { excluded: remembered, edits: {} }
+    const { choice, excluded, edits } = await this.approve(request)
     const skipped = new Set(excluded)
+    // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
     if (choice === 'stop') result.stopped = true
-    if (choice === 'apply' || choice === 'all') return skipped
+    if (choice === 'apply' || choice === 'all') return { excluded: skipped, edits: edits ?? {} }
     result.declined++
     return null
   }
@@ -184,30 +201,50 @@ export class PlexSync {
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
           if (renameTo) {
-            lines.push({ key: 'rename', label: 'File name', current: file.basename, value: renameTo.split('/').pop()!.replace(/\.md$/, '') })
+            const newName = renameTo.split('/').pop()!.replace(/\.md$/, '')
+            lines.push({ key: 'rename', label: 'File name', current: file.basename, value: newName, edit: 'text' })
           }
           for (const [name, value] of fill?.additions ?? []) {
-            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: describeValue(value) })
+            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), ...editable(value) })
           }
           if (fill?.imageProperty) {
             const name = fill.imageProperty
             lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: 'poster downloaded from Plex' })
           }
           for (const name of plays?.names ?? []) {
-            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.count) })
+            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.count), edit: 'number' })
           }
-          const excluded = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)
-          if (!excluded) continue
-          // Leave out whatever was unticked.
+          const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)
+          if (!approval) continue
+          const { excluded, edits } = approval
+          // Leave out whatever was unticked, and use whatever was edited.
           if (excluded.has('rename')) renameTo = null
+          else if (renameTo && typeof edits.rename === 'string') {
+            try {
+              renameTo = this.renameTargetFor(file, sanitizeFileName(edits.rename, this.settings.fileNameReplacements))
+            } catch (err) {
+              renameTo = null
+              result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
+            }
+          }
           if (fill) {
             fill = {
               ...fill,
-              additions: fill.additions.filter(([name]) => !excluded.has(`add:${name}`)),
+              additions: fill.additions
+                .filter(([name]) => !excluded.has(`add:${name}`))
+                .map(([name, value]): [string, unknown] => {
+                  const edited = edits[`add:${name}`]
+                  return [name, edited === undefined ? value : parseEdit(edited, editKind(value))]
+                })
+                .filter(([, value]) => !isBlank(value)),
               imageProperty: fill.imageProperty && !excluded.has(`add:${fill.imageProperty}`) ? fill.imageProperty : null,
             }
           }
           const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
+          const playValue = (name: string): unknown => {
+            const edited = edits[`update:${name}`]
+            return edited === undefined ? plays!.count : parseEdit(edited, 'number')
+          }
           if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length) {
             result.declined++
             continue
@@ -222,7 +259,7 @@ export class PlexSync {
             if (fill && await this.applyFill(plex, file, fill, lib)) result.filled.push(file.path)
             if (plays && playNames.length) {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of playNames) fm[name] = plays.count
+                for (const name of playNames) fm[name] = playValue(name)
               })
               result.playCounts.push(file.path)
             }
@@ -251,12 +288,24 @@ export class PlexSync {
         const item = await this.fullItem(plex, listed)
         const { lib, kind } = this.libraryFor(item, listedLib)
         const preview = this.previewNote(machineId, item, lib, kind)
-        const excluded = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)
-        if (!excluded) continue
+        const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)
+        if (!approval) continue
+        const { excluded, edits } = approval
         const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
-        const path = await this.createNote(plex, machineId, item, lib, kind, left)
+        const overrides: Record<string, unknown> = {}
+        for (const [key, edited] of Object.entries(edits)) {
+          if (!key.startsWith('prop:')) continue
+          const name = key.slice(5)
+          overrides[name] = parseEdit(edited, editKind(preview.values[name]))
+        }
+        const fileName = typeof edits.file === 'string'
+          ? sanitizeFileName(edits.file, this.settings.fileNameReplacements) || undefined
+          : undefined
+        const path = await this.createNote(plex, machineId, item, lib, kind, left, overrides, fileName)
         result.created.push(path)
+        const baseName = path.split('/').pop()!.replace(/\.md$/, '')
         addToIndex(index, path, renderFileName(this.naming(lib), item), [item.ratingKey])
+        addToIndex(index, path, baseName)
       } catch (err) {
         result.failed.push({ title: listed.title, error: errorText(err) })
       }
@@ -287,6 +336,12 @@ export class PlexSync {
   private renameTarget(file: TFile, item: PlexItem, lib: LibrarySetting): string | null {
     const baseName = renderFileName(this.naming(lib), item)
     if (isNamedAs(file.basename, baseName)) return null
+    return this.renameTargetFor(file, baseName)
+  }
+
+  /** The path for renaming a note to this name in its folder. Throws when the name is taken. */
+  private renameTargetFor(file: TFile, baseName: string): string | null {
+    if (!baseName || baseName === file.basename) return null
     const parent = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''
     const to = normalizePath(parent ? `${parent}/${baseName}.${file.extension}` : `${baseName}.${file.extension}`)
     const taken = this.app.vault.getAbstractFileByPath(to)
@@ -350,16 +405,24 @@ export class PlexSync {
   }
 
   /** The path and properties a new note would get, for the approval pop-up. */
-  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: ApprovalLine[] } {
+  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: ApprovalLine[], values: Record<string, unknown> } {
     const folder = normalizePath(lib.folder)
     const path = this.freePath(folder, renderFileName(this.naming(lib), item), 'md')
+    const fileName = path.split('/').pop()!.replace(/\.md$/, '')
     const frontmatter = buildFrontmatter(item, lib.properties, {
       kind,
       link: plexWebLink(machineId, item.ratingKey),
       image: hasImage(item) ? 'poster downloaded from Plex' : null,
       values: lib.values,
     })
-    return { path, lines: Object.entries(frontmatter).map(([name, value]) => ({ key: `prop:${name}`, label: name, value: describeValue(value) })) }
+    const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
+    for (const [name, value] of Object.entries(frontmatter)) {
+      const poster = value === 'poster downloaded from Plex'
+      lines.push(poster
+        ? { key: `prop:${name}`, label: name, value: describeValue(value) }
+        : { key: `prop:${name}`, label: name, ...editable(value) })
+    }
+    return { path, lines, values: frontmatter }
   }
 
   /** Rating keys (from the Plex link property) and file names of every note in these libraries' folders. */
@@ -379,11 +442,17 @@ export class PlexSync {
     return index
   }
 
-  /** Creates the note; properties named in `leaveEmpty` (unticked when approving) are added empty. */
-  private async createNote(plex: PlexClient, machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, leaveEmpty = new Set<string>()): Promise<string> {
+  /**
+   * Creates the note. Properties named in `leaveEmpty` (unticked when approving) are added empty,
+   * `overrides` replace values (edited when approving), and `fileName` replaces the file name.
+   */
+  private async createNote(
+    plex: PlexClient, machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind,
+    leaveEmpty = new Set<string>(), overrides: Record<string, unknown> = {}, fileName?: string,
+  ): Promise<string> {
     const folder = normalizePath(lib.folder)
     await this.ensureFolder(folder)
-    const baseName = renderFileName(this.naming(lib), item)
+    const baseName = fileName ?? renderFileName(this.naming(lib), item)
     const path = this.freePath(folder, baseName, 'md')
 
     const { properties, values } = lib
@@ -395,6 +464,9 @@ export class PlexSync {
       image,
       values,
     })
+    for (const [name, value] of Object.entries(overrides)) {
+      if (name in frontmatter) frontmatter[name] = value
+    }
     for (const name of leaveEmpty) {
       if (name in frontmatter) frontmatter[name] = Array.isArray(frontmatter[name]) ? [] : null
     }

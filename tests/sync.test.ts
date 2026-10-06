@@ -36,7 +36,7 @@ vi.mock('obsidian', () => {
   }
 })
 
-import type { ApprovalRequest, Choice } from '../src/approval-modal'
+import type { ApprovalRequest, Choice, Decision } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
@@ -277,7 +277,7 @@ describe('PlexSync', () => {
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 3 }] } })
     const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'stop' as const, excluded: [] }))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
-    expect(approve.mock.calls[0][0].lines).toEqual([{ key: 'update:Plays', label: 'Plays', current: '1', value: '3' }])
+    expect(approve.mock.calls[0][0].lines).toEqual([{ key: 'update:Plays', label: 'Plays', current: '1', value: '3', edit: 'number' }])
   })
 
   it('only updates play counts in the background mode', async () => {
@@ -314,12 +314,13 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(approve.mock.calls[0][0].lines).toEqual([
-      { key: 'rename', label: 'File name', current: 'Heat', value: 'Heat (1995)' },
-      { key: 'add:Link', label: 'Link', current: null, value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2' },
+      { key: 'rename', label: 'File name', current: 'Heat', value: 'Heat (1995)', edit: 'text' },
+      { key: 'add:Link', label: 'Link', current: null, value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2', edit: 'text', items: undefined },
     ])
     const arrival = approve.mock.calls.find(c => c[0].path === 'Media/Movies/Arrival (2016).md')![0]
     expect(arrival.lines).toContainEqual({ key: 'prop:Image', label: 'Image', value: 'poster downloaded from Plex' })
-    expect(arrival.lines).toContainEqual({ key: 'prop:Genre', label: 'Genre', value: 'Sci-Fi, Drama' })
+    expect(arrival.lines).toContainEqual({ key: 'prop:Genre', label: 'Genre', value: 'Sci-Fi, Drama', edit: 'list', items: ['Sci-Fi', 'Drama'] })
+    expect(arrival.lines[0]).toEqual({ key: 'file', label: 'File name', value: 'Arrival (2016)', edit: 'text', required: true })
     expect(files.has('Media/Movies/Heat.md')).toBe(true)
     expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({})
     expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
@@ -353,6 +354,30 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toMatchObject({ Genre: [], Image: null, Summary: 'Linguist meets aliens.' })
     expect(frontmatter.get('Media/TV Shows/Severance (2022).md')).toMatchObject({ Genre: [] })
     expect(binaries).toEqual([])
+  })
+
+  it('saves what was edited in the pop-up', async () => {
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{
+      ...movies[1], summary: 'Cops and robbers.', Genre: [{ tag: 'Crime' }, { tag: 'Drama' }],
+    }] } })
+    const { app, files, frontmatter } = makeApp({ 'Media/Movies/Heat.md': { Plays: 0 } })
+    const settings = settingsWith({ updatePlayCounts: true })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    const movieLib = settings.libraries['1']
+    movieLib.properties.find(m => m.name === 'Genre')!.fill = true
+    movieLib.properties.push({ name: 'Plays', source: 'viewCount' })
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 2 }, movies[0]] } })
+    const change: Decision = { choice: 'apply', excluded: [], edits: {
+      rename: 'Heat: Director\'s Cut', 'add:Genre': ['Crime'], 'add:Summary': '  My summary  ', 'update:Plays': '5',
+    } }
+    const create: Decision = { choice: 'apply', excluded: [], edits: { file: 'Arrival', 'prop:Genre': ['Drama'], 'prop:Duration': '120' } }
+    const approve = vi.fn((r: ApprovalRequest) => Promise.resolve(r.action === 'change' ? change : create))
+
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+
+    expect(files.has('Media/Movies/Heat Director\'s Cut.md')).toBe(true)
+    expect(frontmatter.get('Media/Movies/Heat Director\'s Cut.md')).toMatchObject({ Genre: ['Crime'], Summary: 'My summary', Plays: 5 })
+    expect(frontmatter.get('Media/Movies/Arrival.md')).toMatchObject({ Genre: ['Drama'], Duration: 120, Summary: 'Linguist meets aliens.' })
   })
 
   it('stops when told to', async () => {

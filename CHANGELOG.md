@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.16] - 2026-10-06
+
+### Added
+- Edit before saving: in the approval pop-up every new value can be edited. Lists such as Genre show each item as a chip with × to remove it and a box to add more (Enter or comma); text and numbers are edit boxes; the file name can be edited too, for renames and new notes (characters that can't be in file names are replaced as set in settings). Clearing a value that would be filled in leaves it out. Edits apply to that note only; "all the rest" still only repeats the unticked lines. The downloaded image can be unticked but not edited.
+
 ## [0.0.15] - 2026-10-06
 
 ### Changed

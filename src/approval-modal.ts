@@ -6,7 +6,12 @@ export interface Decision {
   choice: Choice
   /** Keys of the lines that were unticked: those parts are left out. */
   excluded: string[]
+  /** Lines whose new value was edited, by key: the text as typed, or a list's remaining items. */
+  edits?: Record<string, string | string[]>
 }
+
+/** How an editable value is typed: plain text, a comma-separated list, or a number. */
+export type EditKind = 'text' | 'list' | 'number'
 
 /** One part of a creation or change, which can be unticked on its own. */
 export interface ApprovalLine {
@@ -17,6 +22,12 @@ export interface ApprovalLine {
   current?: string | null
   /** What it will be (null: empty). */
   value: string | null
+  /** Set when the new value can be edited in the pop-up. */
+  edit?: EditKind
+  /** A list's items, for editing it item by item. */
+  items?: string[]
+  /** Can't be unticked (a new note's file name). */
+  required?: boolean
 }
 
 export interface ApprovalRequest {
@@ -36,6 +47,7 @@ export class ApprovalModal extends Modal {
   // "pmn" prefix: avoid clashing with undocumented members of Obsidian's own class.
   private pmnDecided = false
   private readonly pmnExcluded = new Set<string>()
+  private readonly pmnEdits: Record<string, string | string[]> = {}
 
   constructor(app: App, private readonly pmnRequest: ApprovalRequest, private readonly pmnResolve: (d: Decision) => void) {
     super(app)
@@ -52,8 +64,8 @@ export class ApprovalModal extends Modal {
     contentEl.createEl('p', {
       cls: 'setting-item-description',
       text: create
-        ? 'A new note. Untick a property to leave it empty.'
-        : 'Untick anything you don\'t want changed.',
+        ? 'A new note. Edit any value (× removes an item from a list), or untick a property to leave it empty.'
+        : 'Edit any new value (× removes an item from a list), or untick anything you don\'t want changed.',
     })
 
     const table = contentEl.createDiv('pmn-approval-scroll').createEl('table', { cls: 'pmn-approval-table' })
@@ -63,18 +75,36 @@ export class ApprovalModal extends Modal {
     if (!create) head.createEl('th', { text: 'Now' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
-    for (const { key, label, current, value } of lines) {
+    for (const { key, label, current, value, edit, items, required } of lines) {
       const row = body.createEl('tr')
       const box = row.createEl('td').createEl('input', { type: 'checkbox' })
       box.checked = true
+      box.disabled = Boolean(required)
+      row.createEl('td', { cls: 'pmn-approval-name', text: label })
+      if (!create) cell(row, current ?? null, 'pmn-approval-now')
+      let input: HTMLTextAreaElement | HTMLInputElement | null = null
+      if (edit === 'list') {
+        input = this.pmnListEditor(row.createEl('td', { cls: 'pmn-approval-new' }), key, items ?? [])
+      } else if (edit) {
+        const original = value ?? ''
+        input = row.createEl('td', { cls: 'pmn-approval-new' }).createEl('textarea', { cls: 'pmn-approval-input' })
+        input.value = original
+        input.placeholder = 'Empty'
+        input.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
+        const field = input
+        field.addEventListener('input', () => {
+          if (field.value === original) delete this.pmnEdits[key]
+          else this.pmnEdits[key] = field.value
+        })
+      } else {
+        cell(row, value, 'pmn-approval-new')
+      }
       box.addEventListener('change', () => {
         row.toggleClass('pmn-approval-off', !box.checked)
+        if (input) input.disabled = !box.checked
         if (box.checked) this.pmnExcluded.delete(key)
         else this.pmnExcluded.add(key)
       })
-      row.createEl('td', { cls: 'pmn-approval-name', text: label })
-      if (!create) cell(row, current ?? null, 'pmn-approval-now')
-      cell(row, value, 'pmn-approval-new')
     }
 
     new Setting(contentEl)
@@ -91,9 +121,53 @@ export class ApprovalModal extends Modal {
     if (!this.pmnDecided) this.pmnResolve({ choice: 'skip', excluded: [] })
   }
 
+  /** A list as removable chips, plus a box to add items (Enter or comma). Returns the add box. */
+  private pmnListEditor(td: HTMLElement, key: string, original: string[]): HTMLInputElement {
+    let list = [...original]
+    const chips = td.createDiv('pmn-approval-chips')
+    const add = td.createEl('input', { type: 'text', cls: 'pmn-approval-add', placeholder: 'Add…' })
+    const changed = () => {
+      if (list.length === original.length && list.every((v, i) => v === original[i])) delete this.pmnEdits[key]
+      else this.pmnEdits[key] = [...list]
+    }
+    const render = () => {
+      chips.empty()
+      if (!list.length) chips.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
+      list.forEach((item, i) => {
+        const chip = chips.createSpan({ cls: 'pmn-approval-chip', text: item })
+        const remove = chip.createEl('button', { cls: 'pmn-approval-chip-remove', text: '×' })
+        remove.setAttr('aria-label', `Remove ${item}`)
+        remove.addEventListener('click', evt => {
+          evt.preventDefault()
+          if (add.disabled) return
+          list = list.filter((_, j) => j !== i)
+          changed()
+          render()
+        })
+      })
+    }
+    const commit = () => {
+      const parts = add.value.split(',').map(p => p.trim()).filter(p => p && !list.includes(p))
+      if (!parts.length) return
+      list = [...list, ...parts]
+      add.value = ''
+      changed()
+      render()
+    }
+    add.addEventListener('keydown', evt => {
+      if (evt.key === 'Enter' || evt.key === ',') {
+        evt.preventDefault()
+        commit()
+      }
+    })
+    add.addEventListener('blur', commit)
+    render()
+    return add
+  }
+
   private pmnDecide(choice: Choice): void {
     this.pmnDecided = true
-    this.pmnResolve({ choice, excluded: [...this.pmnExcluded] })
+    this.pmnResolve({ choice, excluded: [...this.pmnExcluded], edits: { ...this.pmnEdits } })
     this.close()
   }
 }
@@ -109,10 +183,27 @@ function cell(row: HTMLElement, value: string | null, cls: string): void {
   else td.setText(value)
 }
 
+/** How a property value is edited in the pop-up. */
+export function editKind(value: unknown): EditKind {
+  if (Array.isArray(value)) return 'list'
+  if (typeof value === 'number') return 'number'
+  return 'text'
+}
+
+/** Turns an edited value back into a property value: a list, a number, text, or null when cleared. */
+export function parseEdit(text: string | string[], kind: EditKind): string | number | string[] | null {
+  if (Array.isArray(text)) return text
+  const trimmed = text.trim()
+  if (kind === 'list') return trimmed.split(',').map(part => part.trim()).filter(Boolean)
+  if (!trimmed) return null
+  if (kind === 'number' && Number.isFinite(Number(trimmed))) return Number(trimmed)
+  return trimmed
+}
+
 /** A property value as shown in the approval pop-up; null when it's empty. */
 export function describeValue(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null
   if (Array.isArray(value)) return value.length ? value.map(String).join(', ') : null
   const text = typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean)
-  return text.length > 2000 ? `${text.slice(0, 2000)}…` : text
+  return text
 }

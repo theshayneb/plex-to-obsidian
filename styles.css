@@ -70,3 +70,46 @@
 .pmn-approval-table td:first-child {
   width: 1%;
 }
+
+.pmn-approval-input {
+  width: 100%;
+  min-height: 2em;
+  resize: vertical;
+  field-sizing: content;
+  max-height: 16em;
+  font: inherit;
+}
+
+.pmn-approval-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1);
+  margin-bottom: var(--size-4-1);
+}
+
+.pmn-approval-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  padding: 0 var(--size-4-1) 0 var(--size-4-2);
+  border-radius: var(--radius-l);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+}
+
+.pmn-approval-chip-remove {
+  padding: 0 var(--size-4-1);
+  height: auto;
+  background: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.pmn-approval-chip-remove:hover {
+  color: var(--text-error);
+}
+
+.pmn-approval-add {
+  width: 100%;
+}

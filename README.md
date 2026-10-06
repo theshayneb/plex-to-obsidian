@@ -49,6 +49,10 @@ The default music (track) note has Artist, Album, Track, Genre (from the album),
 
 Characters that can't be in file names are dropped, unless you choose a replacement for them under **Characters in file names** (for all libraries); e.g. `:` → `-` gives `Mission- Impossible (1996)`.
 
+## Asking first
+
+With **Ask before every change** on (the default), nothing is created or changed without a pop-up first: for an existing note it lists the new name, each property to fill in and each play count update; for a new note its file name and all its properties. Choose **Apply**/**Create**, **Skip**, **Apply to all the rest**/**Create all the rest** (only for that kind, changes or new notes, in this sync), or **Stop**. Closing the pop-up skips that note. Background play count updates ask too.
+
 ## Existing notes
 
 An item is skipped when a note in its library's folder (including subfolders) matches it, as set by **Match existing notes by**. Movies, shows and documentaries also look in each other's folders. A note whose Link points at a different Plex item never matches by name.

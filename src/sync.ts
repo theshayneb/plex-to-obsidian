@@ -1,4 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
+import { describeValue, type ApprovalRequest, type Approver } from './approval-modal'
 import { documentaryLibrary, mergeLibraries, type LibrarySetting, type PlexNotesSettings } from './config'
 import {
   addToIndex,
@@ -27,6 +28,10 @@ export interface SyncResult {
   filled: string[]
   /** Existing notes whose play count changed. */
   playCounts: string[]
+  /** Creations and changes you said no to. */
+  declined: number
+  /** You pressed Stop. */
+  stopped: boolean
   skipped: number
   failed: { title: string, error: string }[]
 }
@@ -42,6 +47,17 @@ type ActiveLibrary = LibrarySetting & { target: MediaKind }
 type Family = 'video' | 'music'
 const familyOf = (lib: ActiveLibrary): Family => (lib.target === 'music' ? 'music' : 'video')
 
+interface FillPlan {
+  item: PlexItem
+  additions: [string, unknown][]
+  /** The property the poster goes in, if it's wanted and Plex has one; downloaded only once approved. */
+  imageProperty: string | null
+}
+
+function hasImage(item: PlexItem): boolean {
+  return Boolean(item.type === 'track' ? item.parentThumb ?? item.thumb : item.thumb)
+}
+
 interface Entry {
   item: PlexItem
   lib: ActiveLibrary
@@ -50,11 +66,28 @@ interface Entry {
 export class PlexSync {
   private readonly albums = new Map<string, Promise<PlexItem | null>>()
 
+  /** "Apply to all the rest" was chosen, per kind of approval. */
+  private readonly approvedAll = { create: false, change: false }
+
   constructor(
     private readonly app: App,
     private readonly settings: PlexNotesSettings,
     private readonly saveSettings: () => Promise<void>,
+    /** Asks before each creation or change when "Ask before every change" is on. */
+    private readonly approve?: Approver,
   ) {}
+
+  /** Whether to go ahead with one creation or change. */
+  private async ask(request: ApprovalRequest, result: SyncResult): Promise<boolean> {
+    if (result.stopped) return false
+    if (!this.settings.askBeforeChanges || !this.approve || this.approvedAll[request.action]) return true
+    const decision = await this.approve(request)
+    if (decision === 'all') this.approvedAll[request.action] = true
+    if (decision === 'stop') result.stopped = true
+    const yes = decision === 'apply' || decision === 'all'
+    if (!yes) result.declined++
+    return yes
+  }
 
   private naming(lib: LibrarySetting): FileNaming {
     return { format: lib.fileNameFormat, replacements: this.settings.fileNameReplacements }
@@ -89,7 +122,7 @@ export class PlexSync {
       video: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'video')),
       music: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'music')),
     }
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false }
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
@@ -113,42 +146,73 @@ export class PlexSync {
           .filter(e => familyOf(e.lib) === family)
           .map(({ item, lib }) => ({ item, lib, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
         const libOf = new Map(matches.map(m => [m.item, m.lib]))
-        for (const { item, path } of planRenames(matches)) {
+        const plans = planRenames(matches)
+        let position = 0
+        for (const { item, path } of plans) {
+          position++
+          if (result.stopped) break
           const { lib, kind } = this.libraryFor(item, libOf.get(item)!)
-          let current = path
+          const file = this.app.vault.getAbstractFileByPath(path)
+          if (!(file instanceof TFile)) continue
+
+          // Work out every change first, so it can be shown before anything happens.
+          let renameTo: string | null = null
           if (renaming) {
             try {
-              const to = await this.renameNote(path, item, lib)
-              if (to) {
-                result.renamed.push({ from: path, to })
-                addToIndex(index, to, renderFileName(this.naming(lib), item))
-                current = to
-              }
+              renameTo = this.renameTarget(file, item, lib)
             } catch (err) {
               result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
             }
           }
+          let fill: FillPlan | null = null
           if (filling && lib.properties.some(m => m.fill)) {
             try {
-              if (await this.fillNote(plex, machineId, current, item, lib, kind)) result.filled.push(current)
+              fill = await this.planFill(plex, machineId, file, item, lib, kind)
             } catch (err) {
               result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
             }
           }
-          if (counting) {
-            try {
-              if (await this.updatePlayCount(current, item, lib)) result.playCounts.push(current)
-            } catch (err) {
-              result.failed.push({ title: item.title, error: `updating the play count failed: ${errorText(err)}` })
+          const plays = counting ? this.planPlayCount(file, item, lib) : null
+          if (!renameTo && !fill && !plays) continue
+
+          const lines: [string, string][] = []
+          if (renameTo) lines.push(['Rename to', renameTo.split('/').pop()!.replace(/\.md$/, '')])
+          for (const [name, value] of fill?.additions ?? []) lines.push([`Add ${name}`, describeValue(value)])
+          if (fill?.imageProperty) lines.push([`Add ${fill.imageProperty}`, 'poster downloaded from Plex'])
+          if (plays) {
+            for (const name of plays.names) lines.push([`Update ${name}`, `${describeValue(plays.from[name])} → ${plays.count}`])
+          }
+          if (!await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)) continue
+
+          try {
+            if (renameTo) {
+              await this.app.fileManager.renameFile(file, renameTo)
+              result.renamed.push({ from: path, to: renameTo })
+              addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
             }
+            if (fill && await this.applyFill(plex, file, fill, lib)) result.filled.push(file.path)
+            if (plays) {
+              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                for (const name of plays.names) fm[name] = plays.count
+              })
+              result.playCounts.push(file.path)
+            }
+          } catch (err) {
+            result.failed.push({ title: item.title, error: errorText(err) })
           }
         }
       }
     }
     if (!full) return result
 
-    for (const { item: listed, lib: listedLib } of entries) {
+    const toCreate = entries.filter(({ item, lib }) => !hasNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy))
+    result.skipped = entries.length - toCreate.length
+    let position = 0
+    for (const { item: listed, lib: listedLib } of toCreate) {
+      position++
+      if (result.stopped) break
       const index = indexes[familyOf(listedLib)]
+      // An item listed twice (in two libraries) gets one note.
       if (hasNote(index, listed, this.naming(listedLib), listedLib.matchBy)) {
         result.skipped++
         continue
@@ -157,6 +221,8 @@ export class PlexSync {
         progress(`Creating ${listed.title}…`)
         const item = await this.fullItem(plex, listed)
         const { lib, kind } = this.libraryFor(item, listedLib)
+        const preview = this.previewNote(machineId, item, lib, kind)
+        if (!await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)) continue
         const path = await this.createNote(plex, machineId, item, lib, kind)
         result.created.push(path)
         addToIndex(index, path, renderFileName(this.naming(lib), item), [item.ratingKey])
@@ -184,51 +250,52 @@ export class PlexSync {
   }
 
   /**
-   * Renames an existing note to its library's file name format, in its current folder. Only the
-   * file name changes; links to it are updated according to Obsidian's own setting. Returns the
-   * new path, or null when the name is already right.
+   * Where an existing note would be renamed to (its library's file name format, in its current
+   * folder), or null when its name is already right. Throws when the new name is taken.
    */
-  private async renameNote(path: string, item: PlexItem, lib: LibrarySetting): Promise<string | null> {
-    const file = this.app.vault.getAbstractFileByPath(path)
-    if (!(file instanceof TFile)) return null
+  private renameTarget(file: TFile, item: PlexItem, lib: LibrarySetting): string | null {
     const baseName = renderFileName(this.naming(lib), item)
     if (isNamedAs(file.basename, baseName)) return null
-    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+    const parent = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''
     const to = normalizePath(parent ? `${parent}/${baseName}.${file.extension}` : `${baseName}.${file.extension}`)
     const taken = this.app.vault.getAbstractFileByPath(to)
     // A case-only change finds the note itself, which is fine to rename.
-    if (taken && taken !== file) {
-      throw new Error(`${to} already exists`)
-    }
-    await this.app.fileManager.renameFile(file, to)
+    if (taken && taken !== file) throw new Error(`${to} already exists`)
     return to
   }
 
   /**
-   * Fills in the properties marked "fill in on existing notes" (in the note's library settings)
-   * that are missing or empty in an existing note. Nothing else in the note changes, and values
-   * already there are never replaced. Returns whether anything was added.
+   * The properties marked "fill in on existing notes" that are missing or empty in this note, with
+   * the values Plex has for them. Null when there's nothing to add.
    */
-  private async fillNote(plex: PlexClient, machineId: string, path: string, listed: PlexItem, lib: ActiveLibrary, kind: MediaKind): Promise<boolean> {
-    const file = this.app.vault.getAbstractFileByPath(path)
-    if (!(file instanceof TFile)) return false
+  private async planFill(plex: PlexClient, machineId: string, file: TFile, listed: PlexItem, lib: ActiveLibrary, kind: MediaKind): Promise<FillPlan | null> {
     const current = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const wanted = lib.properties.filter(m => m.fill && m.name.trim() && isBlank(current[m.name.trim()]))
-    if (!wanted.length) return false
+    if (!wanted.length) return null
 
     // The link needs nothing more; everything else may need the item's full metadata.
     const needsMore = wanted.some(m => m.source !== 'plexLink' && m.source !== 'text' && m.source !== 'typeTag')
     const item = needsMore ? await this.fullItem(plex, listed) : listed
-    const image = usesSource(wanted, 'poster')
-      ? await this.imageFor(plex, item, normalizePath(lib.folder), renderFileName(this.naming(lib), item))
-      : null
-    const values = buildFrontmatter(item, wanted, {
+    const values = buildFrontmatter(item, wanted.filter(m => m.source !== 'poster'), {
       kind,
       link: plexWebLink(machineId, item.ratingKey),
-      image,
+      image: null,
       values: lib.values,
     })
     const additions = Object.entries(values).filter(([, value]) => !isBlank(value))
+    const poster = wanted.find(m => m.source === 'poster')
+    const imageProperty = poster && hasImage(item) ? poster.name.trim() : null
+    if (!additions.length && !imageProperty) return null
+    return { item, additions, imageProperty }
+  }
+
+  /** Adds the planned properties, downloading the poster if one is wanted. Never replaces a value. */
+  private async applyFill(plex: PlexClient, file: TFile, plan: FillPlan, lib: ActiveLibrary): Promise<boolean> {
+    const additions = [...plan.additions]
+    if (plan.imageProperty) {
+      const image = await this.imageFor(plex, plan.item, normalizePath(lib.folder), renderFileName(this.naming(lib), plan.item))
+      if (image) additions.push([plan.imageProperty, image])
+    }
     if (!additions.length) return false
     await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
       for (const [name, value] of additions) {
@@ -239,21 +306,29 @@ export class PlexSync {
   }
 
   /**
-   * Sets the note's "Play count" properties (as named in its library's settings) to Plex's current
-   * count. The one case where a value already in a note is replaced. Returns whether it changed.
+   * The note's "Play count" properties (as named in its library's settings) that differ from
+   * Plex's current count: the one case where a value already in a note is replaced.
    */
-  private async updatePlayCount(path: string, item: PlexItem, lib: LibrarySetting): Promise<boolean> {
+  private planPlayCount(file: TFile, item: PlexItem, lib: LibrarySetting): { names: string[], from: Record<string, unknown>, count: number } | null {
     const names = lib.properties.filter(m => m.source === 'viewCount' && m.name.trim()).map(m => m.name.trim())
-    if (!names.length) return false
-    const file = this.app.vault.getAbstractFileByPath(path)
-    if (!(file instanceof TFile)) return false
+    if (!names.length) return null
     const count = playCount(item)
-    const current = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    if (names.every(name => current[name] === count)) return false
-    await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-      for (const name of names) fm[name] = count
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const changed = names.filter(name => from[name] !== count)
+    return changed.length ? { names: changed, from, count } : null
+  }
+
+  /** The path and properties a new note would get, for the approval pop-up. */
+  private previewNote(machineId: string, item: PlexItem, lib: ActiveLibrary, kind: MediaKind): { path: string, lines: [string, string][] } {
+    const folder = normalizePath(lib.folder)
+    const path = this.freePath(folder, renderFileName(this.naming(lib), item), 'md')
+    const frontmatter = buildFrontmatter(item, lib.properties, {
+      kind,
+      link: plexWebLink(machineId, item.ratingKey),
+      image: hasImage(item) ? 'poster downloaded from Plex' : null,
+      values: lib.values,
     })
-    return true
+    return { path, lines: Object.entries(frontmatter).map(([name, value]) => [name, describeValue(value)]) }
   }
 
   /** Rating keys (from the Plex link property) and file names of every note in these libraries' folders. */

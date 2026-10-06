@@ -320,6 +320,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
+      .setName('Ask before every change')
+      .setDesc('Before creating a note, or changing an existing one in any way (renaming it, filling in properties, updating play counts), show what will happen and ask. This includes background play count updates.')
+      .addToggle(toggle => toggle
+        .setValue(settings.askBeforeChanges)
+        .onChange(async value => {
+          settings.askBeforeChanges = value
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Fix names of existing notes')
       .setDesc('Rename notes that already exist for a Plex item to their library\'s file name format, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
       .addToggle(toggle => toggle

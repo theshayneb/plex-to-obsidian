@@ -1,4 +1,5 @@
 import { Notice, Plugin } from 'obsidian'
+import { askApproval } from './approval-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
 import { PlexSync } from './sync'
@@ -39,7 +40,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
     this.plexSyncRunning = true
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings()).run(() => {}, 'playCounts')
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request)).run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
       if (result.playCounts.length) console.log('Plex media notes: updated play counts', result.playCounts)
@@ -69,7 +70,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.plexSyncRunning = true
     const notice = new Notice('Connecting to Plex…', 0)
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings())
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request))
         .run(message => notice.setMessage(message))
       notice.hide()
 
@@ -84,6 +85,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.log('Plex media notes: filled in', result.filled)
       }
       parts.push(`${result.skipped} already had one`)
+      if (result.declined) parts.push(`${result.declined} skipped by you`)
+      if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed`)
         console.error('Plex media notes: failed items', result.failed)

@@ -33,6 +33,8 @@ export interface PlexNotesSettings {
   useDocumentaryGenre: boolean
   /** Rename matching existing notes to their library's file name format. */
   renameExistingNotes: boolean
+  /** Show what will happen and ask before creating or changing each note. */
+  askBeforeChanges: boolean
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also refresh play counts in the background every this many hours; 0 is off. */
@@ -73,6 +75,7 @@ export function defaultSettings(): PlexNotesSettings {
     fileNameReplacements: {},
     useDocumentaryGenre: true,
     renameExistingNotes: true,
+    askBeforeChanges: true,
     updatePlayCounts: false,
     playCountHours: 0,
     lastPlayCountUpdate: 0,
@@ -160,7 +163,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'useDocumentaryGenre', 'renameExistingNotes',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'useDocumentaryGenre', 'renameExistingNotes', 'askBeforeChanges',
     'updatePlayCounts', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

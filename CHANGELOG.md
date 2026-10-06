@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.13] - 2026-10-06
+
+### Added
+- Ask before every change (on by default): before creating a note, or changing an existing one in any way (renaming, filling in properties, updating a play count), a pop-up shows the note and exactly what will happen: the new name, each property and value to add, each play count's old and new value, or for a new note its file name and every property. Choose Apply (or Create), Skip, Apply to all the rest (or Create all the rest, which covers only that kind: changes or new notes), or Stop. Closing the pop-up skips the note. Nothing is written, and no poster downloaded, until you approve. Background play count updates ask too.
+
 ## [0.0.12] - 2026-10-06
 
 ### Added

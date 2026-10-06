@@ -27,6 +27,7 @@ npm run build
 - Properties are user-configurable. The video defaults in `DEFAULT_PROPERTIES` (Genre, Summary, Date, Duration, Status, Link, Image, tags) are the owner's choice; don't rename them. To offer a new Plex field, add it to `FieldSource`, `FIELD_SOURCES` and `sourceValue`.
 - Documentaries never list "Documentary" as a genre.
 - Existing notes: the only changes allowed are renaming them to their library's file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place) and adding properties marked `fill` when they're missing or empty (never overwriting), and, with `updatePlayCounts` on, overwriting `viewCount` ("Play count") properties, both only when `planRenames` says the match is unambiguous. Matching uses the Plex rating key inside the Plex link property (plus `Link`), then file names as the library's `matchBy` allows.
+- With `askBeforeChanges` on, every creation and every change to an existing note goes through `PlexSync.ask` (the approval pop-up) first, with nothing written (not even a poster or folder) before approval. New writes must be planned, shown, then applied.
 - The background schedule (`playCountHours`) runs `PlexSync.run(…, 'playCounts')`, which must only ever touch play counts.
 - Never put the Plex token in note content (Plex image URLs need it, which is why posters are downloaded, into `<media folder>/Images`).
 - UI text must be sentence case (Obsidian lint rule); brand words are allowed in `eslint.config.mjs`.

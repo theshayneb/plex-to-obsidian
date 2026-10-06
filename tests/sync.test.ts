@@ -20,6 +20,7 @@ vi.mock('obsidian', () => {
     TFile,
     TFolder,
     Notice: Unused,
+    Modal: Unused,
     PluginSettingTab: Unused,
     Setting: Unused,
     normalizePath: (p: string) => p.replace(/\/+/g, '/').replace(/^\/|\/$/g, ''),
@@ -281,6 +282,63 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({ Plays: 2 })
     expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
     expect(save).not.toHaveBeenCalled()
+  })
+
+  it('asks before every change and creation, and does nothing it was not allowed to', async () => {
+    const { app, files, frontmatter, binaries } = makeApp({ 'Media/Movies/Heat.md': {} })
+    const settings = settingsWith()
+    settings.libraries = {}
+    const asked: string[] = []
+    // Skip the change to Heat; skip Arrival; create the rest of the movies; stop at the first TV show.
+    const answers: Record<string, string> = {
+      'change Media/Movies/Heat.md': 'skip',
+      'create Media/Movies/Arrival (2016).md': 'skip',
+      'create Media/Documentaries/Free Solo (2018).md': 'all',
+    }
+    const approve = vi.fn((r: { action: string, path: string, lines: [string, string][] }) => {
+      asked.push(`${r.action} ${r.path}`)
+      return Promise.resolve((answers[`${r.action} ${r.path}`] ?? 'stop') as never)
+    })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+
+    expect(approve.mock.calls[0][0].lines).toEqual([
+      ['Rename to', 'Heat (1995)'],
+      ['Add Link', 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2'],
+    ])
+    const arrival = approve.mock.calls.find(c => c[0].path === 'Media/Movies/Arrival (2016).md')![0]
+    expect(arrival.lines).toContainEqual(['Image', 'poster downloaded from Plex'])
+    expect(arrival.lines).toContainEqual(['Genre', 'Sci-Fi, Drama'])
+    expect(files.has('Media/Movies/Heat.md')).toBe(true)
+    expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({})
+    expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
+    expect(binaries).toEqual([])
+    expect(result.created).toEqual(['Media/Documentaries/Free Solo (2018).md', 'Media/TV Shows/Severance (2022).md'])
+    expect(result.declined).toBe(2)
+    expect(result.stopped).toBe(false)
+    // "Create all the rest" covered the TV show too: no more questions after Free Solo.
+    expect(asked).toEqual([
+      'change Media/Movies/Heat.md',
+      'create Media/Movies/Arrival (2016).md',
+      'create Media/Documentaries/Free Solo (2018).md',
+    ])
+  })
+
+  it('stops when told to', async () => {
+    const { app, files } = makeApp({})
+    const approve = vi.fn(() => Promise.resolve('stop' as const))
+    const result = await new PlexSync(app as never, settingsWith(), () => Promise.resolve(), approve).run(() => {})
+    expect(approve).toHaveBeenCalledTimes(1)
+    expect(result.stopped).toBe(true)
+    expect(result.created).toEqual([])
+    expect([...files.keys()].filter(p => p.endsWith('.md'))).toEqual([])
+  })
+
+  it('does not ask when asking is switched off', async () => {
+    const { app } = makeApp({})
+    const approve = vi.fn(() => Promise.resolve('skip' as const))
+    const result = await new PlexSync(app as never, settingsWith({ askBeforeChanges: false }), () => Promise.resolve(), approve).run(() => {})
+    expect(approve).not.toHaveBeenCalled()
+    expect(result.created.length).toBeGreaterThan(0)
   })
 
   it('leaves names alone when renaming is off', async () => {

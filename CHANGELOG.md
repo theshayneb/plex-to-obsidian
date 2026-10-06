@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.5] - 2026-10-06
+
+### Changed
+- New notes get every property in Settings → Properties, even when Plex has no value for it. Those are left empty (an empty list for list properties such as Genre or Cast) so you can fill them in by hand.
+
 ## [0.0.4] - 2026-10-06
 
 ### Added

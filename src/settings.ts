@@ -168,7 +168,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Properties').setHeading()
     containerEl.createEl('p', {
       cls: 'setting-item-description',
-      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are left out.',
+      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in.',
     })
 
     settings.properties.forEach((mapping, index) => {

@@ -61,9 +61,17 @@ describe('buildFrontmatter', () => {
     expect(fm).toEqual({ Runtime: '1h 56m', Genre: ['Denis Villeneuve'], Watched: 'seen', Kind: ['film'], Source: 'Plex' })
   })
 
-  it('leaves out properties Plex has no value for', () => {
-    const fm = buildFrontmatter({ ratingKey: '1', type: 'movie', title: 'X' }, DEFAULT_PROPERTIES, { ...ctx, image: null })
-    expect(fm).toEqual({ Status: 'pending', Link: 'LINK', tags: ['movie'] })
+  it('writes properties Plex has no value for as empty', () => {
+    const fm = buildFrontmatter({ ratingKey: '1', type: 'movie', title: 'X' }, [
+      ...DEFAULT_PROPERTIES,
+      { name: 'Tagline', source: 'tagline' },
+      { name: 'Cast', source: 'castAll' },
+      { name: 'Note', source: 'text' },
+    ], { ...ctx, image: null })
+    expect(fm).toEqual({
+      Genre: [], Summary: null, Date: null, Duration: null, Status: 'pending', Link: 'LINK', Image: null, tags: ['movie'],
+      Tagline: null, Cast: [], Note: null,
+    })
   })
 })
 

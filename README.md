@@ -27,7 +27,7 @@ tags:
 ---
 ```
 
-All of this can be changed in Settings → Properties: rename properties, reorder or remove them, change which Plex information fills each one (genres, summary, tagline, release date, duration in minutes or as "1h 52m", directors, writers, cast, studio, content rating, ratings, collections, labels, dates added and last watched, play count, seasons and episodes, IMDb/TMDB/TVDB IDs, or a fixed text), and change the status words and type tags under Property values. The defaults are:
+All of this can be changed in Settings → Properties: rename properties, reorder or remove them, change which Plex information fills each one (genres, summary, tagline, release date, duration in minutes or as "1h 52m", directors, writers, cast, studio, content rating, ratings, collections, labels, dates added and last watched, play count, seasons and episodes, IMDb/TMDB/TVDB IDs, or a fixed text), and change the status words and type tags under Property values. Properties Plex has no value for are still added, empty, so you can fill them in by hand. The defaults are:
 
 - **Duration** is in minutes. For TV shows it's Plex's typical episode length.
 - **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; `started` for a movie stopped part way or a show with some episodes watched; otherwise `pending`. Other statuses (such as revisit or abandoned) are yours to set by hand; the plugin never changes existing notes.

@@ -157,18 +157,22 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
   }
 }
 
-function isEmpty(value: Value): boolean {
-  return value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
-}
+const LIST_SOURCES = new Set<FieldSource>([
+  'genres', 'typeTag', 'directors', 'writers', 'castTop5', 'castAll', 'countries', 'collections', 'labels',
+])
 
-/** Frontmatter for a new note, in the configured order. Properties without a value are left out. */
+/**
+ * Frontmatter for a new note, in the configured order. Properties Plex has no value for are still
+ * written, empty (an empty list for list properties), so they can be filled in by hand.
+ */
 export function buildFrontmatter(item: PlexItem, mappings: PropertyMapping[], ctx: NoteContext): Record<string, unknown> {
   const fm: Record<string, unknown> = {}
   for (const { name, source, text } of mappings) {
     const key = name.trim()
     if (!key) continue
     const value = sourceValue(source, item, ctx, text)
-    if (!isEmpty(value)) fm[key] = value
+    if (value === undefined || value === '') fm[key] = LIST_SOURCES.has(source) ? [] : null
+    else fm[key] = value
   }
   return fm
 }

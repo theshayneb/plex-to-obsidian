@@ -35,7 +35,7 @@ vi.mock('obsidian', () => {
 })
 
 const { PlexSync } = await import('../src/sync')
-const { DEFAULT_SETTINGS } = await import('../src/settings')
+const { defaultSettings } = await import('../src/settings')
 
 function makeApp(existing: Record<string, Record<string, unknown>>) {
   const files = new Map<string, { path: string }>()
@@ -89,7 +89,7 @@ beforeEach(() => {
     ...movies[0], summary: 'Linguist meets aliens.', originallyAvailableAt: '2016-11-11',
     duration: 6960000, viewCount: 2, thumb: '/library/metadata/1/thumb/9', Genre: [{ tag: 'Sci-Fi' }, { tag: 'Drama' }],
   }] } })
-  responses.set('/library/metadata/3', { MediaContainer: { Metadata: [{ ...movies[2], Genre: [{ tag: 'Documentary' }] }] } })
+  responses.set('/library/metadata/3', { MediaContainer: { Metadata: [{ ...movies[2], Genre: [{ tag: 'Documentary' }, { tag: 'Sport' }] }] } })
   responses.set('/library/metadata/10', { MediaContainer: { Metadata: [{
     ratingKey: '10', type: 'show', title: 'Severance', year: 2022, leafCount: 19, viewedLeafCount: 19,
     originallyAvailableAt: '2022-02-18', duration: 3000000, Genre: [{ tag: 'Thriller' }],
@@ -99,7 +99,7 @@ beforeEach(() => {
 describe('PlexSync', () => {
   it('creates notes only for items without one, in the right folders', async () => {
     const { app, frontmatter, binaries } = makeApp({ 'Media/Movies/Heat.md': {} })
-    const settings = { ...DEFAULT_SETTINGS, serverUrl: 'plex:32400', token: 't', libraries: {} }
+    const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't' }
     const save = vi.fn(() => Promise.resolve())
 
     const result = await new PlexSync(app as never, settings, save).run(() => {})
@@ -122,7 +122,7 @@ describe('PlexSync', () => {
       tags: ['movie'],
     })
     expect(frontmatter.get('Media/TV Shows/Severance (2022).md')).toMatchObject({ Status: 'completed', tags: ['tv_show'] })
-    expect(frontmatter.get('Media/Documentaries/Free Solo (2018).md')).toMatchObject({ Status: 'pending', tags: ['documentary'] })
+    expect(frontmatter.get('Media/Documentaries/Free Solo (2018).md')).toMatchObject({ Genre: ['Sport'], Status: 'pending', tags: ['documentary'] })
     expect(binaries).toEqual(['Media/Movies/Images/Arrival (2016).jpg'])
     expect(settings.libraries).toEqual({
       1: { title: 'Movies', type: 'movie', target: 'movie' },
@@ -134,7 +134,7 @@ describe('PlexSync', () => {
 
   it('does nothing on a second run', async () => {
     const { app } = makeApp({})
-    const settings = { ...DEFAULT_SETTINGS, serverUrl: 'http://plex:32400/', token: 't', libraries: {} }
+    const settings = { ...defaultSettings(), serverUrl: 'http://plex:32400/', token: 't' }
     const sync = new PlexSync(app as never, settings, () => Promise.resolve())
     expect((await sync.run(() => {})).created).toHaveLength(4)
     const again = await sync.run(() => {})

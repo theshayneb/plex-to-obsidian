@@ -1,9 +1,9 @@
 import { Notice, Plugin } from 'obsidian'
-import { DEFAULT_SETTINGS, errorMessage, PlexNotesSettingTab, type PlexNotesSettings } from './settings'
+import { defaultSettings, errorMessage, PlexNotesSettingTab, type PlexNotesSettings } from './settings'
 import { PlexSync } from './sync'
 
 export default class PlexMediaNotesPlugin extends Plugin {
-  settings: PlexNotesSettings = { ...DEFAULT_SETTINGS, libraries: {} }
+  settings: PlexNotesSettings = defaultSettings()
   private plexSyncRunning = false
 
   async onload(): Promise<void> {
@@ -26,7 +26,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     const data = (await this.loadData()) as Partial<PlexNotesSettings> | null
-    this.settings = { ...DEFAULT_SETTINGS, ...data, libraries: { ...data?.libraries } }
+    const defaults = defaultSettings()
+    this.settings = {
+      ...defaults,
+      ...data,
+      libraries: { ...data?.libraries },
+      properties: Array.isArray(data?.properties) ? data.properties : defaults.properties,
+      values: { ...defaults.values, ...data?.values, tags: { ...defaults.values.tags, ...data?.values?.tags } },
+    }
     delete (this.settings as Partial<PlexNotesSettings> & { postersFolder?: string }).postersFolder
   }
 

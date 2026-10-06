@@ -27,14 +27,17 @@ tags:
 ---
 ```
 
+All of this can be changed in Settings → Properties: rename properties, reorder or remove them, change which Plex information fills each one (genres, summary, tagline, release date, duration in minutes or as "1h 52m", directors, writers, cast, studio, content rating, ratings, collections, labels, dates added and last watched, play count, seasons and episodes, IMDb/TMDB/TVDB IDs, or a fixed text), and change the status words and type tags under Property values. The defaults are:
+
 - **Duration** is in minutes. For TV shows it's Plex's typical episode length.
 - **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; otherwise `pending`.
 - **Image** is the poster, downloaded into an `Images` subfolder of the note's folder (e.g. `Media/Movies/Images`). The subfolder name can be changed in settings. The Plex image URL itself would expose your token.
+- **Genre** leaves out "Documentary" for documentaries.
 - **tags** is `movie`, `tv_show` or `documentary`. With "Detect documentaries by genre" on, anything with the Documentary genre counts as a documentary and goes to the documentaries folder, whatever library it's in.
 
 ## Existing notes
 
-Existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.
+Existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link (or whatever the Plex link property is called) to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.
 
 ## Mobile
 

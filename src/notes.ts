@@ -19,22 +19,37 @@ export interface PlexItem {
   leafCount?: number
   viewedLeafCount?: number
   thumb?: string
+  tagline?: string
+  originalTitle?: string
+  contentRating?: string
+  studio?: string
+  rating?: number
+  audienceRating?: number
+  userRating?: number
+  addedAt?: number
+  lastViewedAt?: number
+  childCount?: number
   Genre?: PlexTag[]
-}
-
-export const KIND_TAGS: Record<MediaKind, string> = {
-  movie: 'movie',
-  tv: 'tv_show',
-  documentary: 'documentary',
+  Director?: PlexTag[]
+  Writer?: PlexTag[]
+  Role?: PlexTag[]
+  Country?: PlexTag[]
+  Collection?: PlexTag[]
+  Label?: PlexTag[]
+  Guid?: { id: string }[]
 }
 
 export function genresOf(item: PlexItem): string[] {
   return (item.Genre ?? []).map(g => g.tag).filter(Boolean)
 }
 
+export function isDocumentaryGenre(genre: string): boolean {
+  return genre.trim().toLowerCase() === 'documentary'
+}
+
 /** The library decides movie vs TV; a "Documentary" genre (when enabled) moves the item to documentaries. */
 export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentaryGenre: boolean): MediaKind {
-  if (useDocumentaryGenre && genresOf(item).some(g => g.toLowerCase() === 'documentary')) {
+  if (useDocumentaryGenre && genresOf(item).some(isDocumentaryGenre)) {
     return 'documentary'
   }
   return libraryTarget
@@ -109,24 +124,4 @@ export interface ExistingNotes {
 export function hasNote(existing: ExistingNotes, item: PlexItem, fileNameFormat: string): boolean {
   if (existing.ratingKeys.has(item.ratingKey)) return true
   return candidateNames(item, fileNameFormat).some(n => existing.names.has(n))
-}
-
-/** Frontmatter for a new note, in the order the properties should appear. Missing values are left out. */
-export function buildFrontmatter(
-  item: PlexItem,
-  kind: MediaKind,
-  link: string,
-  image: string | null,
-): Record<string, unknown> {
-  const fm: Record<string, unknown> = {}
-  const genres = genresOf(item)
-  if (genres.length) fm.Genre = genres
-  if (item.summary) fm.Summary = item.summary
-  if (item.originallyAvailableAt) fm.Date = item.originallyAvailableAt
-  if (item.duration) fm.Duration = Math.round(item.duration / 60000)
-  fm.Status = isWatched(item) ? 'completed' : 'pending'
-  fm.Link = link
-  if (image) fm.Image = image
-  fm.tags = [KIND_TAGS[kind]]
-  return fm
 }

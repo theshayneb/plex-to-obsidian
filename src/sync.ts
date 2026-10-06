@@ -1,6 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import {
-  buildFrontmatter,
   classify,
   hasNote,
   normalizeTitle,
@@ -12,6 +11,7 @@ import {
   type PlexItem,
 } from './notes'
 import { PlexClient } from './plex'
+import { buildFrontmatter, linkPropertyNames, usesSource } from './properties'
 import { mergeLibraries, type PlexNotesSettings } from './settings'
 
 export interface SyncResult {
@@ -76,15 +76,19 @@ export class PlexSync {
     return result
   }
 
-  /** Rating keys (from Link) and file names of every note in the three media folders. */
+  /** Rating keys (from the Plex link property) and file names of every note in the three media folders. */
   private indexExistingNotes(): ExistingNotes {
     const index: ExistingNotes = { ratingKeys: new Set(), names: new Set() }
     const folders = (['movie', 'tv', 'documentary'] as const).map(kind => this.folderFor(kind))
+    const linkProps = linkPropertyNames(this.settings.properties)
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(folder => file.path.startsWith(`${folder}/`))) continue
       index.names.add(normalizeTitle(file.basename))
-      const ratingKey = ratingKeyFromLink(this.app.metadataCache.getFileCache(file)?.frontmatter?.Link)
-      if (ratingKey) index.ratingKeys.add(ratingKey)
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter
+      for (const prop of linkProps) {
+        const ratingKey = ratingKeyFromLink(frontmatter?.[prop])
+        if (ratingKey) index.ratingKeys.add(ratingKey)
+      }
     }
     return index
   }
@@ -95,8 +99,16 @@ export class PlexSync {
     const baseName = renderFileName(this.settings.fileNameFormat, item)
     const path = this.freePath(folder, baseName, 'md')
 
-    const image = item.thumb ? await this.savePoster(plex, item.thumb, folder, baseName) : null
-    const frontmatter = buildFrontmatter(item, kind, plexWebLink(machineId, item.ratingKey), image)
+    const { properties, values } = this.settings
+    const image = item.thumb && usesSource(properties, 'poster')
+      ? await this.savePoster(plex, item.thumb, folder, baseName)
+      : null
+    const frontmatter = buildFrontmatter(item, properties, {
+      kind,
+      link: plexWebLink(machineId, item.ratingKey),
+      image,
+      values,
+    })
 
     const file = await this.app.vault.create(path, '')
     await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
@@ -105,7 +117,7 @@ export class PlexSync {
     return path
   }
 
-  /** Saves the poster in the media folder's images subfolder and returns a link to it for the Image property. */
+  /** Saves the poster in the media folder's images subfolder and returns a link to it. */
   private async savePoster(plex: PlexClient, thumb: string, mediaFolder: string, baseName: string): Promise<string | null> {
     const folder = normalizePath(`${mediaFolder}/${this.settings.imagesSubfolder}`)
     for (const ext of ['jpg', 'png', 'webp']) {

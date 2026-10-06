@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildFrontmatter,
   classify,
   defaultLibraryTarget,
   hasNote,
@@ -95,31 +94,5 @@ describe('hasNote', () => {
     expect(hasNote(names('Spider-Man - Into the Spider-Verse'), movie, format)).toBe(true)
     expect(hasNote(names('spider-man into the spider-verse (2018)'), movie, format)).toBe(true)
     expect(hasNote(names('Spider-Man'), movie, format)).toBe(false)
-  })
-})
-
-describe('buildFrontmatter', () => {
-  it('maps Plex fields to the note properties in order', () => {
-    const fm = buildFrontmatter(movie, 'movie', 'LINK', '[[Media/Movies/Images/x.jpg]]')
-    expect(fm).toEqual({
-      Genre: ['Animation', 'Action'],
-      Summary: 'Miles Morales becomes Spider-Man.',
-      Date: '2018-12-14',
-      Duration: 117,
-      Status: 'completed',
-      Link: 'LINK',
-      Image: '[[Media/Movies/Images/x.jpg]]',
-      tags: ['movie'],
-    })
-    expect(Object.keys(fm)).toEqual(['Genre', 'Summary', 'Date', 'Duration', 'Status', 'Link', 'Image', 'tags'])
-  })
-  it('leaves out missing values and tags by kind', () => {
-    expect(buildFrontmatter(show, 'documentary', 'LINK', null)).toEqual({
-      Genre: ['Documentary'],
-      Status: 'pending',
-      Link: 'LINK',
-      tags: ['documentary'],
-    })
-    expect(buildFrontmatter(show, 'tv', 'LINK', null).tags).toEqual(['tv_show'])
   })
 })

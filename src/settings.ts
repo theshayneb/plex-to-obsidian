@@ -2,6 +2,14 @@ import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import { defaultLibraryTarget, type LibraryTarget } from './notes'
 import { PlexClient } from './plex'
+import {
+  DEFAULT_PROPERTIES,
+  DEFAULT_VALUES,
+  FIELD_SOURCES,
+  type FieldSource,
+  type PropertyMapping,
+  type PropertyValues,
+} from './properties'
 
 export interface LibrarySetting {
   title: string
@@ -21,6 +29,9 @@ export interface PlexNotesSettings {
   useDocumentaryGenre: boolean
   /** Keyed by Plex library section key. */
   libraries: Record<string, LibrarySetting>
+  /** Frontmatter properties written to new notes, in order. */
+  properties: PropertyMapping[]
+  values: PropertyValues
 }
 
 export const DEFAULT_SETTINGS: PlexNotesSettings = {
@@ -33,6 +44,13 @@ export const DEFAULT_SETTINGS: PlexNotesSettings = {
   fileNameFormat: '{{title}} ({{year}})',
   useDocumentaryGenre: true,
   libraries: {},
+  properties: DEFAULT_PROPERTIES,
+  values: DEFAULT_VALUES,
+}
+
+/** Fresh copy of the defaults, so editing settings never changes them. */
+export function defaultSettings(): PlexNotesSettings {
+  return structuredClone(DEFAULT_SETTINGS)
 }
 
 const TARGET_LABELS: Record<LibraryTarget, string> = {
@@ -116,7 +134,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     this.addFolderSetting('Movies folder', 'moviesFolder')
     this.addFolderSetting('TV shows folder', 'tvFolder')
     this.addFolderSetting('Documentaries folder', 'documentariesFolder')
-    this.addFolderSetting('Images subfolder', 'imagesSubfolder', 'Posters are saved in this subfolder of the movies, TV shows or documentaries folder and linked from the Image property.')
+    this.addFolderSetting('Images subfolder', 'imagesSubfolder', 'Posters are saved in this subfolder of the movies, TV shows or documentaries folder, for properties set to "Poster image".')
 
     new Setting(containerEl)
       .setName('File name')
@@ -136,6 +154,119 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .setValue(settings.useDocumentaryGenre)
         .onChange(async value => {
           settings.useDocumentaryGenre = value
+          await this.plugin.saveSettings()
+        }))
+
+    this.displayProperties()
+  }
+
+  private displayProperties(): void {
+    const { containerEl } = this
+    const settings = this.plugin.settings
+    const save = () => this.plugin.saveSettings()
+
+    new Setting(containerEl).setName('Properties').setHeading()
+    containerEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are left out.',
+    })
+
+    settings.properties.forEach((mapping, index) => {
+      const row = new Setting(containerEl)
+        .addText(text => text
+          .setPlaceholder('Property name')
+          .setValue(mapping.name)
+          .onChange(async value => {
+            mapping.name = value
+            await save()
+          }))
+        .addDropdown(dropdown => {
+          for (const [value, label] of Object.entries(FIELD_SOURCES)) dropdown.addOption(value, label)
+          dropdown
+            .setValue(mapping.source)
+            .onChange(async value => {
+              mapping.source = value as FieldSource
+              await save()
+              this.display()
+            })
+        })
+      if (mapping.source === 'text') {
+        row.addText(text => text
+          .setPlaceholder('Value')
+          .setValue(mapping.text ?? '')
+          .onChange(async value => {
+            mapping.text = value
+            await save()
+          }))
+      }
+      row
+        .addExtraButton(button => button
+          .setIcon('arrow-up')
+          .setTooltip('Move up')
+          .setDisabled(index === 0)
+          .onClick(() => this.moveProperty(index, -1)))
+        .addExtraButton(button => button
+          .setIcon('arrow-down')
+          .setTooltip('Move down')
+          .setDisabled(index === settings.properties.length - 1)
+          .onClick(() => this.moveProperty(index, 1)))
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Remove')
+          .onClick(async () => {
+            settings.properties.splice(index, 1)
+            await save()
+            this.display()
+          }))
+    })
+
+    new Setting(containerEl)
+      .addButton(button => button
+        .setButtonText('Add property')
+        .setCta()
+        .onClick(async () => {
+          settings.properties.push({ name: '', source: 'summary' })
+          await save()
+          this.display()
+        }))
+      .addButton(button => button
+        .setButtonText('Reset to defaults')
+        .onClick(async () => {
+          settings.properties = structuredClone(DEFAULT_PROPERTIES)
+          await save()
+          this.display()
+        }))
+
+    new Setting(containerEl).setName('Property values').setHeading()
+
+    this.addValueSetting('Watched', 'For "Watched status": a movie that has been played, or a show with every episode watched.',
+      () => settings.values.watched, v => { settings.values.watched = v || DEFAULT_VALUES.watched })
+    this.addValueSetting('Not watched', 'For "Watched status": everything else.',
+      () => settings.values.unwatched, v => { settings.values.unwatched = v || DEFAULT_VALUES.unwatched })
+    this.addValueSetting('Movie tag', 'For "Type tag".',
+      () => settings.values.tags.movie, v => { settings.values.tags.movie = v || DEFAULT_VALUES.tags.movie })
+    this.addValueSetting('TV show tag', 'For "Type tag".',
+      () => settings.values.tags.tv, v => { settings.values.tags.tv = v || DEFAULT_VALUES.tags.tv })
+    this.addValueSetting('Documentary tag', 'For "Type tag".',
+      () => settings.values.tags.documentary, v => { settings.values.tags.documentary = v || DEFAULT_VALUES.tags.documentary })
+  }
+
+  private async moveProperty(index: number, by: number): Promise<void> {
+    const list = this.plugin.settings.properties
+    const [moved] = list.splice(index, 1)
+    list.splice(index + by, 0, moved)
+    await this.plugin.saveSettings()
+    this.display()
+  }
+
+  private addValueSetting(name: string, desc: string, get: () => string, set: (value: string) => void): void {
+    new Setting(this.containerEl)
+      .setName(name)
+      .setDesc(desc)
+      .addText(text => text
+        .setValue(get())
+        .onChange(async value => {
+          set(value.trim())
           await this.plugin.saveSettings()
         }))
   }

@@ -63,7 +63,7 @@ export class PlexClient {
 
   /** Full metadata; the library listing can leave out some genres. */
   async item(ratingKey: string): Promise<PlexItem | null> {
-    return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}`)).Metadata?.[0] ?? null
+    return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}?includeGuids=1`)).Metadata?.[0] ?? null
   }
 
   /** Downloads a poster, resized by Plex's transcoder, falling back to the original image. */

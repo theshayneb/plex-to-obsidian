@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.3] - 2026-10-06
+
+### Added
+- Settings → Properties: choose which properties new notes get, what each is called, which Plex information fills it, and their order. Besides the original fields you can pick tagline, original title, year, duration as text (1h 52m), content rating, studio or network, directors, writers, cast, countries, Plex collections and labels, critic, audience and your own ratings, date added, date last watched, play count, number of seasons and episodes, IMDb, TMDB and TVDB IDs, or a fixed text. "Reset to defaults" brings back the original eight properties.
+- Settings → Property values: the words used for watched and not-watched status, and the tag for movies, TV shows and documentaries.
+
+### Changed
+- Documentaries no longer list "Documentary" among their genres.
+
 ## [0.0.2] - 2026-10-06
 
 ### Changed

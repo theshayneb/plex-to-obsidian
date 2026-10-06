@@ -1,5 +1,5 @@
 // Which Plex field fills which frontmatter property. No Obsidian imports, so it can be unit tested.
-import { genresOf, isDocumentaryGenre, isStarted, isWatched, type MediaKind, type PlexItem, type PlexTag } from './notes'
+import { genresOf, isDocumentaryGenre, isStarted, isWatched, trackArtist, yearOf, type MediaKind, type PlexItem, type PlexTag } from './notes'
 
 export type FieldSource =
   | 'genres' | 'summary' | 'tagline' | 'title' | 'originalTitle'
@@ -9,7 +9,9 @@ export type FieldSource =
   | 'countries' | 'collections' | 'labels'
   | 'criticRating' | 'audienceRating' | 'userRating' | 'userRatingEmoji'
   | 'addedAt' | 'lastViewedAt' | 'viewCount' | 'seasons' | 'episodes'
-  | 'imdbId' | 'tmdbId' | 'tvdbId' | 'text'
+  | 'imdbId' | 'tmdbId' | 'tvdbId'
+  | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
+  | 'text'
 
 export interface PropertyMapping {
   /** Frontmatter property name. */
@@ -17,6 +19,8 @@ export interface PropertyMapping {
   source: FieldSource
   /** Only for the 'text' source: the fixed value written to every note. */
   text?: string
+  /** Also fill this property in on existing notes that match a Plex item, when it's empty there. */
+  fill?: boolean
 }
 
 /** Dropdown labels, in the order they're listed. */
@@ -30,12 +34,13 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   year: 'Year',
   durationMinutes: 'Duration in minutes',
   durationText: 'Duration as text (1h 52m)',
-  status: 'Watched status',
+  durationClock: 'Duration as a clock (3:45)',
+  status: 'Watched or played status',
   plexLink: 'Link to the item in Plex',
   poster: 'Poster image',
-  typeTag: 'Type tag (movie, TV show or documentary)',
+  typeTag: 'Type tag (set under property values)',
   contentRating: 'Content rating (PG-13, TV-MA…)',
-  studio: 'Studio or network',
+  studio: 'Studio, network or record label',
   directors: 'Directors',
   writers: 'Writers',
   castTop5: 'Cast (top 5)',
@@ -55,32 +60,61 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   imdbId: 'IMDb ID',
   tmdbId: 'TMDB ID',
   tvdbId: 'TVDB ID',
+  artist: 'Music: artist',
+  albumArtist: 'Music: album artist',
+  album: 'Music: album',
+  trackNumber: 'Music: track number',
+  discNumber: 'Music: disc number',
+  styles: 'Music: styles',
+  moods: 'Music: moods',
   text: 'Fixed text',
 }
 
 export const DEFAULT_PROPERTIES: PropertyMapping[] = [
   { name: 'Genre', source: 'genres' },
-  { name: 'Summary', source: 'summary' },
+  { name: 'Summary', source: 'summary', fill: true },
   { name: 'Date', source: 'releaseDate' },
   { name: 'Duration', source: 'durationMinutes' },
   { name: 'Status', source: 'status' },
-  { name: 'Link', source: 'plexLink' },
+  { name: 'Link', source: 'plexLink', fill: true },
   { name: 'Image', source: 'poster' },
   { name: 'tags', source: 'typeTag' },
 ]
+
+export const DEFAULT_MUSIC_PROPERTIES: PropertyMapping[] = [
+  { name: 'Artist', source: 'artist' },
+  { name: 'Album', source: 'album' },
+  { name: 'Track', source: 'trackNumber' },
+  { name: 'Genre', source: 'genres' },
+  { name: 'Date', source: 'releaseDate' },
+  { name: 'Duration', source: 'durationClock' },
+  { name: 'Link', source: 'plexLink', fill: true },
+  { name: 'Image', source: 'poster' },
+  { name: 'tags', source: 'typeTag' },
+]
+
+/** Fresh copy of the default properties for a kind of library. */
+export function defaultProperties(kind: MediaKind): PropertyMapping[] {
+  return structuredClone(kind === 'music' ? DEFAULT_MUSIC_PROPERTIES : DEFAULT_PROPERTIES)
+}
 
 export interface PropertyValues {
   watched: string
   started: string
   unwatched: string
-  tags: Record<MediaKind, string>
+  /** For the "Type tag" source. */
+  tag: string
 }
 
-export const DEFAULT_VALUES: PropertyValues = {
-  watched: 'completed',
-  started: 'started',
-  unwatched: 'pending',
-  tags: { movie: 'movie', tv: 'tv_show', documentary: 'documentary' },
+export const DEFAULT_TAGS: Record<MediaKind, string> = {
+  movie: 'movie',
+  tv: 'tv_show',
+  documentary: 'documentary',
+  music: 'music',
+}
+
+export function defaultValues(kind: MediaKind): PropertyValues {
+  return { watched: 'completed', started: 'started', unwatched: 'pending', tag: DEFAULT_TAGS[kind] }
 }
 
 /** Per-note values that come from outside the Plex item itself. */
@@ -101,6 +135,24 @@ function localDate(epochSeconds: number | undefined): string | undefined {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
+
+function durationClock(ms: number | undefined): string | undefined {
+  if (!ms) return undefined
+  const total = Math.round(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = String(total % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
+/** Tracks carry little themselves; genres, styles, moods, label and dates come from their album. */
+function orAlbum<T>(item: PlexItem, pick: (i: PlexItem) => T | undefined, empty: (v: T) => boolean = v => !v): T | undefined {
+  const own = pick(item)
+  if (own !== undefined && !empty(own)) return own
+  return item.album ? pick(item.album) : own
+}
+
+const noTags = (v: string[]) => v.length === 0
 
 function durationText(ms: number | undefined): string | undefined {
   if (!ms) return undefined
@@ -128,24 +180,25 @@ function externalId(item: PlexItem, scheme: string): string | undefined {
 export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContext, text?: string): Value {
   switch (source) {
     case 'genres': {
-      const genres = genresOf(item)
+      const genres = orAlbum(item, genresOf, noTags) ?? []
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres
     }
     case 'summary': return item.summary
     case 'tagline': return item.tagline
     case 'title': return item.title
-    case 'originalTitle': return item.originalTitle
-    case 'releaseDate': return item.originallyAvailableAt
-    case 'year': return item.year
+    case 'originalTitle': return item.type === 'track' ? undefined : item.originalTitle
+    case 'releaseDate': return orAlbum(item, i => i.originallyAvailableAt)
+    case 'year': return yearOf(item)
     case 'durationMinutes': return item.duration ? Math.round(item.duration / 60000) : undefined
     case 'durationText': return durationText(item.duration)
+    case 'durationClock': return durationClock(item.duration)
     case 'status': return isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched
     case 'plexLink': return ctx.link
     case 'poster': return ctx.image ?? undefined
-    case 'typeTag': return [ctx.values.tags[ctx.kind]]
+    case 'typeTag': return ctx.values.tag ? [ctx.values.tag] : undefined
     case 'contentRating': return item.contentRating
-    case 'studio': return item.studio
+    case 'studio': return orAlbum(item, i => i.studio)
     case 'directors': return tags(item.Director)
     case 'writers': return tags(item.Writer)
     case 'castTop5': return tags(item.Role).slice(0, 5)
@@ -165,12 +218,20 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'imdbId': return externalId(item, 'imdb')
     case 'tmdbId': return externalId(item, 'tmdb')
     case 'tvdbId': return externalId(item, 'tvdb')
+    case 'artist': return trackArtist(item)
+    case 'albumArtist': return item.type === 'track' ? item.grandparentTitle : undefined
+    case 'album': return item.type === 'track' ? item.parentTitle : undefined
+    case 'trackNumber': return item.type === 'track' ? item.index : undefined
+    case 'discNumber': return item.type === 'track' ? item.parentIndex : undefined
+    case 'styles': return orAlbum(item, i => tags(i.Style), noTags) ?? []
+    case 'moods': return orAlbum(item, i => tags(i.Mood), noTags) ?? []
     case 'text': return text
   }
 }
 
 const LIST_SOURCES = new Set<FieldSource>([
   'genres', 'typeTag', 'directors', 'writers', 'castTop5', 'castAll', 'countries', 'collections', 'labels',
+  'styles', 'moods',
 ])
 
 /**
@@ -183,7 +244,8 @@ export function buildFrontmatter(item: PlexItem, mappings: PropertyMapping[], ct
     const key = name.trim()
     if (!key) continue
     const value = sourceValue(source, item, ctx, text)
-    if (value === undefined || value === '') fm[key] = LIST_SOURCES.has(source) ? [] : null
+    const empty = value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
+    if (empty) fm[key] = LIST_SOURCES.has(source) ? [] : null
     else fm[key] = value
   }
   return fm

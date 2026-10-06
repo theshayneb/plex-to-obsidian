@@ -1,5 +1,6 @@
 import { Notice, Plugin } from 'obsidian'
-import { defaultSettings, errorMessage, PlexNotesSettingTab, type PlexNotesSettings } from './settings'
+import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
+import { errorMessage, PlexNotesSettingTab } from './settings'
 import { PlexSync } from './sync'
 
 export default class PlexMediaNotesPlugin extends Plugin {
@@ -15,7 +16,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'create-notes-from-plex',
-      name: 'Create notes for new Plex movies and shows',
+      name: 'Create notes for new Plex items',
       callback: () => {
         void this.syncFromPlex()
       },
@@ -25,17 +26,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = (await this.loadData()) as Partial<PlexNotesSettings> | null
-    const defaults = defaultSettings()
-    this.settings = {
-      ...defaults,
-      ...data,
-      libraries: { ...data?.libraries },
-      fileNameReplacements: { ...data?.fileNameReplacements },
-      properties: Array.isArray(data?.properties) ? data.properties : defaults.properties,
-      values: { ...defaults.values, ...data?.values, tags: { ...defaults.values.tags, ...data?.values?.tags } },
-    }
-    delete (this.settings as Partial<PlexNotesSettings> & { postersFolder?: string }).postersFolder
+    this.settings = loadSettings(await this.loadData())
   }
 
   async saveSettings(): Promise<void> {
@@ -58,6 +49,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.renamed.length) {
         parts.push(`renamed ${result.renamed.length}`)
         console.log('Plex media notes: renamed', result.renamed)
+      }
+      if (result.filled.length) {
+        parts.push(`filled in ${result.filled.length}`)
+        console.log('Plex media notes: filled in', result.filled)
       }
       parts.push(`${result.skipped} already had one`)
       if (result.failed.length) {

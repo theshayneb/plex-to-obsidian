@@ -16,6 +16,7 @@ interface MediaContainer {
   machineIdentifier?: string
   Directory?: PlexLibrary[]
   Metadata?: PlexItem[]
+  totalSize?: number
 }
 
 export function normalizeServerUrl(url: string): string {
@@ -57,8 +58,18 @@ export class PlexClient {
     return (await this.get('/library/sections')).Directory ?? []
   }
 
-  async libraryItems(libraryKey: string): Promise<PlexItem[]> {
-    return (await this.get(`/library/sections/${encodeURIComponent(libraryKey)}/all`)).Metadata ?? []
+  /** Every item in a library: movies or shows, or for music libraries every track. Read in pages. */
+  async libraryItems(libraryKey: string, tracks = false): Promise<PlexItem[]> {
+    const pageSize = 500
+    const items: PlexItem[] = []
+    for (let start = 0; ; start += pageSize) {
+      const query = `${tracks ? 'type=10&' : ''}X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`
+      const page = await this.get(`/library/sections/${encodeURIComponent(libraryKey)}/all?${query}`)
+      const batch = page.Metadata ?? []
+      items.push(...batch)
+      const total = page.totalSize ?? 0
+      if (batch.length < pageSize || (total && items.length >= total)) return items
+    }
   }
 
   /** Full metadata; the library listing can leave out some genres. */

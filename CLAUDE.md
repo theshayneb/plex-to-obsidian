@@ -1,6 +1,6 @@
 # Plex Media Notes: notes for Claude Code
 
-A personal Obsidian plugin that creates notes for Plex movies, TV shows and documentaries. The owner is the only user.
+A personal Obsidian plugin that creates notes for Plex movies, TV shows, documentaries and music tracks. The owner is the only user.
 
 ## Workflow
 
@@ -22,9 +22,10 @@ npm run build
 
 ## Things to know
 
-- `src/notes.ts` (matching, file names, classification) and `src/properties.ts` (the Plex field → property catalogue, `FIELD_SOURCES`) are pure (no Obsidian imports) and unit tested; `src/sync.ts` does the vault work, `src/plex.ts` the HTTP calls (via `requestUrl`, which avoids CORS).
-- Properties are user-configurable (Settings → Properties). The defaults in `DEFAULT_PROPERTIES` (Genre, Summary, Date, Duration, Status, Link, Image, tags) are the owner's choice; don't rename them. To offer a new Plex field, add it to `FieldSource`, `FIELD_SOURCES` and `sourceValue`.
+- `src/config.ts` (settings shape, per-library defaults, migration from older saved settings), `src/notes.ts` (matching, file names, classification) and `src/properties.ts` (the Plex field → property catalogue, `FIELD_SOURCES`) are pure (no Obsidian imports) and unit tested; `src/sync.ts` does the vault work, `src/plex.ts` the HTTP calls (via `requestUrl`, which avoids CORS).
+- Folder, file name, matching, properties and property values are per library (`LibrarySetting`); character replacements, images subfolder, renaming and documentary detection are plugin-wide. Changing settings shape needs a migration in `loadSettings`. Music libraries make one note per track and start as skipped.
+- Properties are user-configurable. The video defaults in `DEFAULT_PROPERTIES` (Genre, Summary, Date, Duration, Status, Link, Image, tags) are the owner's choice; don't rename them. To offer a new Plex field, add it to `FieldSource`, `FIELD_SOURCES` and `sourceValue`.
 - Documentaries never list "Documentary" as a genre.
-- Existing notes' contents are never modified; the only change allowed is renaming them to the file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place, and only when `planRenames` says the match is unambiguous). Matching uses the Plex rating key inside the Plex link property (plus `Link`), then the file name.
+- Existing notes: the only changes allowed are renaming them to their library's file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place) and adding properties marked `fill` when they're missing or empty (never overwriting), both only when `planRenames` says the match is unambiguous. Matching uses the Plex rating key inside the Plex link property (plus `Link`), then file names as the library's `matchBy` allows.
 - Never put the Plex token in note content (Plex image URLs need it, which is why posters are downloaded, into `<media folder>/Images`).
 - UI text must be sentence case (Obsidian lint rule); brand words are allowed in `eslint.config.mjs`.

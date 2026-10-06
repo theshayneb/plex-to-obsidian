@@ -1,9 +1,9 @@
 {
   "id": "plex-media-notes",
   "name": "Plex Media Notes",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "minAppVersion": "1.6.6",
-  "description": "Create notes for the movies, TV shows and documentaries on your Plex server.",
+  "description": "Create notes for the movies, TV shows, documentaries and music on your Plex server.",
   "author": "theshayneb",
   "isDesktopOnly": false
 }

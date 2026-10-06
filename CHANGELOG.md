@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.10] - 2026-10-06
+
+### Added
+- Music: set a music library's Type to "Music" to get one note per track. File names can use `{{artist}}`, `{{title}}`, `{{album}}`, `{{albumartist}}`, `{{track}}`, `{{disc}}` and `{{year}}` (default `{{artist}} - {{title}}`), and the default properties are Artist, Album, Track, Genre, Date, Duration (`4:24`), Link, Image (the album cover, saved once per album) and tags (`music`). New property sources: artist, album artist, album, track number, disc number, styles, moods, and duration as a clock. Genres, styles, moods, label and dates come from the track's album. Music libraries start as Skip.
+- Every library now has its own folder, file name, properties and property values, in its own section of the settings. Your current folders, file name, properties and values are copied into each existing library. Character replacements, the images subfolder, renaming and documentary detection stay plugin-wide.
+- Match existing notes by (per library): Plex link, title, title and year, or file name; Plex link or file name; or Plex link only.
+- Fill in existing notes: each property has a switch to add it to existing notes that match a Plex item when it's missing or empty there. On by default for Link and Summary. Values already in a note are never replaced, and nothing else changes.
+
+### Changed
+- Documentary-genre items from other libraries now use your Documentaries library's settings (folder, file name, properties).
+- A note whose Link points at another Plex item no longer matches by name (e.g. a `Dune` note linked to the 1984 film no longer stops a note for the 2021 one).
+- A note named like `Airbag 2` (numbered because the name was taken) counts as correctly named and isn't renamed.
+- Big libraries are read from Plex in pages of 500.
+- The command is now "Create notes for new Plex items".
+
 ## [0.0.9] - 2026-10-06
 
 ### Changed

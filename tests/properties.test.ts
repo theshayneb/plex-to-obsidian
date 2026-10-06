@@ -3,7 +3,7 @@ import type { PlexItem } from '../src/notes'
 import {
   buildFrontmatter,
   DEFAULT_PROPERTIES,
-  DEFAULT_VALUES,
+  defaultValues,
   FIELD_SOURCES,
   linkPropertyNames,
   sourceValue,
@@ -31,7 +31,7 @@ const movie: PlexItem = {
   Guid: [{ id: 'imdb://tt2543164' }, { id: 'tmdb://329865' }],
 }
 
-const ctx: NoteContext = { kind: 'movie', link: 'LINK', image: '[[Media/Movies/Images/Arrival (2016).jpg]]', values: DEFAULT_VALUES }
+const ctx: NoteContext = { kind: 'movie', link: 'LINK', image: '[[Media/Movies/Images/Arrival (2016).jpg]]', values: defaultValues('movie') }
 
 describe('buildFrontmatter', () => {
   it('produces the default properties in order', () => {
@@ -57,7 +57,7 @@ describe('buildFrontmatter', () => {
       { name: 'Kind', source: 'typeTag' },
       { name: 'Source', source: 'text', text: 'Plex' },
       { name: '  ', source: 'summary' },
-    ], { ...ctx, values: { watched: 'seen', started: 'watching', unwatched: 'to watch', tags: { movie: 'film', tv: 'series', documentary: 'doc' } } })
+    ], { ...ctx, values: { watched: 'seen', started: 'watching', unwatched: 'to watch', tag: 'film' } })
     expect(fm).toEqual({ Runtime: '1h 56m', Genre: ['Denis Villeneuve'], Watched: 'seen', Kind: ['film'], Source: 'Plex' })
   })
 
@@ -121,6 +121,29 @@ describe('sourceValue', () => {
     expect(value('userRatingEmoji', rated(9))).toBe('🩷')
     expect(value('userRatingEmoji', rated(10))).toBe('🩷')
     expect(value('userRatingEmoji', rated(undefined))).toBeUndefined()
+  })
+
+  it('reads track fields, falling back to the album', () => {
+    const track: PlexItem = {
+      ratingKey: '7', type: 'track', title: 'Karma Police', grandparentTitle: 'Radiohead', parentTitle: 'OK Computer',
+      index: 6, parentIndex: 1, duration: 264000,
+      album: { ratingKey: '90', type: 'album', title: 'OK Computer', year: 1997, studio: 'Parlophone',
+        Genre: [{ tag: 'Alternative' }], Style: [{ tag: 'Art Rock' }], Mood: [{ tag: 'Brooding' }] },
+    }
+    const c = { ...ctx, kind: 'music' as const, values: defaultValues('music') }
+    expect(value('artist', track, c)).toBe('Radiohead')
+    expect(value('album', track, c)).toBe('OK Computer')
+    expect(value('trackNumber', track, c)).toBe(6)
+    expect(value('discNumber', track, c)).toBe(1)
+    expect(value('durationClock', track, c)).toBe('4:24')
+    expect(value('durationClock', { ...track, duration: 3725000 }, c)).toBe('1:02:05')
+    expect(value('genres', track, c)).toEqual(['Alternative'])
+    expect(value('styles', track, c)).toEqual(['Art Rock'])
+    expect(value('moods', track, c)).toEqual(['Brooding'])
+    expect(value('studio', track, c)).toBe('Parlophone')
+    expect(value('year', track, c)).toBe(1997)
+    expect(value('typeTag', track, c)).toEqual(['music'])
+    expect(value('artist')).toBeUndefined()
   })
 
   it('has a label for every source', () => {

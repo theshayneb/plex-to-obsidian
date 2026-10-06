@@ -35,8 +35,10 @@ vi.mock('obsidian', () => {
   }
 })
 
+import type { PlexNotesSettings } from '../src/config'
+
 const { PlexSync } = await import('../src/sync')
-const { defaultSettings } = await import('../src/settings')
+const { defaultSettings, loadSettings, newLibrary } = await import('../src/config')
 
 function makeApp(existing: Record<string, Record<string, unknown>>) {
   const files = new Map<string, { path: string }>()
@@ -81,6 +83,18 @@ const movies = [
   { ratingKey: '3', type: 'movie', title: 'Free Solo', year: 2018 },
 ]
 
+const tracks = [
+  { ratingKey: '100', type: 'track', title: 'Karma Police', grandparentTitle: 'Radiohead', parentTitle: 'OK Computer',
+    parentRatingKey: '90', index: 6, duration: 264000, parentThumb: '/library/metadata/90/thumb/1' },
+  { ratingKey: '101', type: 'track', title: 'Airbag', grandparentTitle: 'Radiohead', parentTitle: 'OK Computer',
+    parentRatingKey: '90', index: 1, duration: 287000, parentThumb: '/library/metadata/90/thumb/1' },
+  { ratingKey: '102', type: 'track', title: 'Intro', grandparentTitle: 'Various Artists', originalTitle: 'DJ X',
+    parentTitle: 'Mix', parentRatingKey: '91', index: 1 },
+  // Same artist and title as 101, on another album.
+  { ratingKey: '103', type: 'track', title: 'Airbag', grandparentTitle: 'Radiohead', parentTitle: 'Live',
+    parentRatingKey: '92', index: 3 },
+]
+
 beforeEach(() => {
   responses.clear()
   requested.length = 0
@@ -88,12 +102,16 @@ beforeEach(() => {
   responses.set('/library/sections', { MediaContainer: { Directory: [
     { key: '1', title: 'Movies', type: 'movie' },
     { key: '2', title: 'TV Shows', type: 'show' },
-    { key: '3', title: 'Music', type: 'artist' },
+    { key: '3', title: "Shayne's Music", type: 'artist' },
+    { key: '4', title: 'Documentaries', type: 'movie' },
+    { key: '5', title: 'Photos', type: 'photo' },
   ] } })
   responses.set('/library/sections/1/all', { MediaContainer: { Metadata: movies } })
   responses.set('/library/sections/2/all', { MediaContainer: { Metadata: [
     { ratingKey: '10', type: 'show', title: 'Severance', year: 2022 },
   ] } })
+  responses.set('/library/sections/3/all', { MediaContainer: { Metadata: tracks } })
+  responses.set('/library/sections/4/all', { MediaContainer: { Metadata: [] } })
   responses.set('/library/metadata/1', { MediaContainer: { Metadata: [{
     ...movies[0], summary: 'Linguist meets aliens.', originallyAvailableAt: '2016-11-11',
     duration: 6960000, viewCount: 2, thumb: '/library/metadata/1/thumb/9', Genre: [{ tag: 'Sci-Fi' }, { tag: 'Drama' }],
@@ -103,12 +121,28 @@ beforeEach(() => {
     ratingKey: '10', type: 'show', title: 'Severance', year: 2022, leafCount: 19, viewedLeafCount: 19,
     originallyAvailableAt: '2022-02-18', duration: 3000000, Genre: [{ tag: 'Thriller' }],
   }] } })
+  responses.set('/library/metadata/90', { MediaContainer: { Metadata: [{
+    ratingKey: '90', type: 'album', title: 'OK Computer', year: 1997, originallyAvailableAt: '1997-05-21',
+    studio: 'Parlophone', Genre: [{ tag: 'Alternative' }], Style: [{ tag: 'Art Rock' }],
+  }] } })
+})
+
+/** Music libraries start skipped, so the tests switch one on, as the owner would. */
+const settingsWith = (extra: object = {}): PlexNotesSettings => ({
+  ...defaultSettings(),
+  serverUrl: 'plex:32400',
+  token: 't',
+  libraries: { 3: newLibrary("Shayne's Music", 'artist', 'music') },
+  ...extra,
 })
 
 describe('PlexSync', () => {
-  it('creates notes only for items without one, in the right folders', async () => {
-    const { app, files, frontmatter, binaries } = makeApp({ 'Media/Movies/Heat.md': { Status: 'abandoned' } })
-    const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't' }
+  it('creates notes only for items without one, using each library\'s settings', async () => {
+    const { app, files, frontmatter, binaries } = makeApp({
+      'Media/Movies/Heat.md': { Status: 'abandoned' },
+      'Media/Music/Intro.md': {},
+    })
+    const settings = settingsWith()
     const save = vi.fn(() => Promise.resolve())
 
     const result = await new PlexSync(app as never, settings, save).run(() => {})
@@ -117,10 +151,19 @@ describe('PlexSync', () => {
     expect(result.skipped).toBe(1)
     expect(result.renamed).toEqual([{ from: 'Media/Movies/Heat.md', to: 'Media/Movies/Heat (1995).md' }])
     expect(files.has('Media/Movies/Heat.md')).toBe(false)
-    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({ Status: 'abandoned' })
+    // Only the empty Link is filled in; Plex has no summary for it here, and Status is left alone.
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({
+      Status: 'abandoned',
+      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2',
+    })
+    expect(result.filled).toEqual(['Media/Movies/Heat (1995).md'])
     expect(result.created.sort()).toEqual([
       'Media/Documentaries/Free Solo (2018).md',
       'Media/Movies/Arrival (2016).md',
+      'Media/Music/DJ X - Intro.md',
+      'Media/Music/Radiohead - Airbag 2.md',
+      'Media/Music/Radiohead - Airbag.md',
+      'Media/Music/Radiohead - Karma Police.md',
       'Media/TV Shows/Severance (2022).md',
     ])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({
@@ -135,31 +178,125 @@ describe('PlexSync', () => {
     })
     expect(frontmatter.get('Media/TV Shows/Severance (2022).md')).toMatchObject({ Status: 'completed', tags: ['tv_show'] })
     expect(frontmatter.get('Media/Documentaries/Free Solo (2018).md')).toMatchObject({ Genre: ['Sport'], Status: 'pending', tags: ['documentary'] })
-    expect(binaries).toEqual(['Media/Movies/Images/Arrival (2016).jpg'])
-    expect(settings.libraries).toEqual({
-      1: { title: 'Movies', type: 'movie', target: 'movie' },
-      2: { title: 'TV Shows', type: 'show', target: 'tv' },
-      3: { title: 'Music', type: 'artist', target: 'skip' },
+    expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')).toEqual({
+      Artist: 'Radiohead',
+      Album: 'OK Computer',
+      Track: 6,
+      Genre: ['Alternative'],
+      Date: '1997-05-21',
+      Duration: '4:24',
+      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F100',
+      Image: '[[Media/Music/Images/Radiohead - OK Computer.jpg]]',
+      tags: ['music'],
     })
-    expect(requested.some(u => u.includes('/sections/3/'))).toBe(false)
+    expect(frontmatter.get('Media/Music/DJ X - Intro.md')).toMatchObject({ Artist: 'DJ X', Album: 'Mix', Genre: [], Image: null })
+    expect(binaries.sort()).toEqual(['Media/Movies/Images/Arrival (2016).jpg', 'Media/Music/Images/Radiohead - OK Computer.jpg'])
+    expect(requested.filter(u => u.includes('/library/metadata/90')).length).toBe(1)
+    expect(requested.some(u => u.includes('/library/metadata/100'))).toBe(false)
+    expect(Object.fromEntries(Object.entries(settings.libraries).map(([k, lib]) => [k, lib.target]))).toEqual({
+      1: 'movie', 2: 'tv', 3: 'music', 4: 'documentary', 5: 'skip',
+    })
+    expect(requested.some(u => u.includes('/sections/5/'))).toBe(false)
+    expect(requested.find(u => u.includes('/sections/3/all'))).toContain('type=10')
+  })
+
+  it('uses each library\'s own folder, file name and properties', async () => {
+    const { app, frontmatter } = makeApp({})
+    const settings = settingsWith()
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    await sync.run(() => {})
+    const music = settings.libraries['3']
+    music.folder = 'Songs'
+    music.fileNameFormat = '{{track}} {{title}} ({{album}})'
+    music.properties = [{ name: 'By', source: 'artist' }]
+    music.values.tag = 'song'
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [
+      { ratingKey: '104', type: 'track', title: 'Lucky', grandparentTitle: 'Radiohead', parentTitle: 'OK Computer', parentRatingKey: '90', index: 11 },
+    ] } })
+    const result = await sync.run(() => {})
+    expect(result.created).toEqual(['Songs/11 Lucky (OK Computer).md'])
+    expect(frontmatter.get('Songs/11 Lucky (OK Computer).md')).toEqual({ By: 'Radiohead' })
+  })
+
+  it('fills in only the chosen properties, and only where empty', async () => {
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{
+      ...movies[1], summary: 'Cops and robbers.', Genre: [{ tag: 'Crime' }], studio: 'Warner',
+    }] } })
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Heat (1995).md': { Summary: '', Link: 'my own link', Genre: ['Mine'] },
+    })
+    const settings = settingsWith()
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    await sync.run(() => {})
+    const movieLib = settings.libraries['1']
+    movieLib.properties.push({ name: 'Studio', source: 'studio', fill: true })
+    movieLib.properties.find(m => m.name === 'Genre')!.fill = true
+    await sync.run(() => {})
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({
+      Summary: 'Cops and robbers.',
+      Link: 'my own link',
+      Genre: ['Mine'],
+      Studio: 'Warner',
+    })
+  })
+
+  it('matches only by Plex link when a library is set to', async () => {
+    const { app } = makeApp({ 'Media/Movies/Heat.md': {} })
+    const settings = settingsWith()
+    settings.libraries['1'] = newLibrary('Movies', 'movie', 'movie')
+    settings.libraries['1'].matchBy = 'link'
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(result.renamed).toEqual([])
+    expect(result.created).toContain('Media/Movies/Heat (1995).md')
   })
 
   it('leaves names alone when renaming is off', async () => {
     const { app, files } = makeApp({ 'Media/Movies/Heat.md': {} })
-    const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't', renameExistingNotes: false }
-    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    const result = await new PlexSync(app as never, settingsWith({ renameExistingNotes: false }), () => Promise.resolve()).run(() => {})
     expect(result.renamed).toEqual([])
     expect(files.has('Media/Movies/Heat.md')).toBe(true)
     expect(result.created).not.toContain('Media/Movies/Heat (1995).md')
   })
 
-  it('does nothing on a second run', async () => {
+  it('does nothing on a second run, even with duplicate track names', async () => {
     const { app } = makeApp({})
-    const settings = { ...defaultSettings(), serverUrl: 'http://plex:32400/', token: 't' }
-    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
-    expect((await sync.run(() => {})).created).toHaveLength(4)
+    const sync = new PlexSync(app as never, settingsWith({ serverUrl: 'http://plex:32400/' }), () => Promise.resolve())
+    expect((await sync.run(() => {})).created).toHaveLength(8)
     const again = await sync.run(() => {})
     expect(again.created).toHaveLength(0)
-    expect(again.skipped).toBe(4)
+    expect(again.renamed).toEqual([])
+    expect(again.failed).toEqual([])
+    expect(again.skipped).toBe(8)
+  })
+
+  it('starts a new music library as skipped, with music defaults once switched on', async () => {
+    const { app } = makeApp({})
+    const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't' }
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(settings.libraries['3'].target).toBe('skip')
+    expect(result.created.some(p => p.startsWith('Media/Music/'))).toBe(false)
+    const { retarget } = await import('../src/config')
+    retarget(settings.libraries['3'], 'music')
+    expect(settings.libraries['3']).toMatchObject({ folder: 'Media/Music', fileNameFormat: '{{artist}} - {{title}}', values: { tag: 'music' } })
+    expect(settings.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Album', 'Track', 'Genre', 'Date', 'Duration', 'Link', 'Image', 'tags'])
+  })
+
+  it('moves settings from older versions into each library', () => {
+    const settings = loadSettings({
+      serverUrl: 'x', token: 'y', moviesFolder: 'Films', fileNameFormat: '{{title}}',
+      properties: [{ name: 'G', source: 'genres' }],
+      values: { watched: 'seen', tags: { movie: 'film' } },
+      libraries: {
+        1: { title: 'Movies', type: 'movie', target: 'movie' },
+        3: { title: 'Music', type: 'artist', target: 'skip' },
+      },
+    })
+    expect(settings.libraries['1']).toEqual({
+      title: 'Movies', type: 'movie', target: 'movie', folder: 'Films', fileNameFormat: '{{title}}', matchBy: 'loose',
+      properties: [{ name: 'G', source: 'genres' }],
+      values: { watched: 'seen', started: 'started', unwatched: 'pending', tag: 'film' },
+    })
+    expect(settings.libraries['3']).toMatchObject({ target: 'skip' })
+    expect(settings.serverUrl).toBe('x')
   })
 })

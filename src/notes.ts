@@ -1,6 +1,6 @@
 // Pure helpers for turning Plex items into notes. No Obsidian imports, so they can be unit tested.
 
-export type MediaKind = 'movie' | 'tv' | 'documentary'
+export type MediaKind = 'movie' | 'tv' | 'documentary' | 'music'
 export type LibraryTarget = MediaKind | 'skip'
 
 export interface PlexTag {
@@ -39,6 +39,36 @@ export interface PlexItem {
   Collection?: PlexTag[]
   Label?: PlexTag[]
   Guid?: { id: string }[]
+  // Music tracks
+  /** Album artist. */
+  grandparentTitle?: string
+  /** Album title. */
+  parentTitle?: string
+  parentRatingKey?: string
+  parentYear?: number
+  parentThumb?: string
+  /** Track number. */
+  index?: number
+  /** Disc number. */
+  parentIndex?: number
+  Style?: PlexTag[]
+  Mood?: PlexTag[]
+  /** The track's album, fetched separately; genres, styles, label and dates come from it. */
+  album?: PlexItem
+}
+
+export function isMusic(kind: MediaKind): boolean {
+  return kind === 'music'
+}
+
+/** A track's own artist (Plex keeps it in originalTitle when it differs from the album artist). */
+export function trackArtist(item: PlexItem): string | undefined {
+  if (item.type !== 'track') return undefined
+  return item.originalTitle || item.grandparentTitle
+}
+
+export function yearOf(item: PlexItem): number | undefined {
+  return item.year ?? item.parentYear ?? item.album?.year
 }
 
 export function genresOf(item: PlexItem): string[] {
@@ -51,13 +81,17 @@ export function isDocumentaryGenre(genre: string): boolean {
 
 /** The library decides movie vs TV; a "Documentary" genre (when enabled) moves the item to documentaries. */
 export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentaryGenre: boolean): MediaKind {
+  if (libraryTarget === 'music') return 'music'
   if (useDocumentaryGenre && genresOf(item).some(isDocumentaryGenre)) {
     return 'documentary'
   }
   return libraryTarget
 }
 
-/** Default target for a Plex library section, guessed from its type and title. */
+/**
+ * Default target for a Plex library section, guessed from its type and title. Music libraries start
+ * skipped: one note per track can be thousands of notes, so they're switched on by hand.
+ */
 export function defaultLibraryTarget(type: string, title: string): LibraryTarget {
   if (type !== 'movie' && type !== 'show') return 'skip'
   if (/documentar/i.test(title)) return 'documentary'
@@ -118,11 +152,27 @@ export function sanitizeFileName(name: string, replacements: Record<string, stri
     .replace(/[. ]+$/, '')
 }
 
+/** Values for the {{…}} placeholders in a file name format. */
+function placeholders(item: PlexItem): Record<string, string> {
+  const year = yearOf(item)
+  return {
+    title: item.title,
+    year: year ? String(year) : '',
+    artist: trackArtist(item) ?? '',
+    albumartist: item.grandparentTitle ?? '',
+    album: item.parentTitle ?? '',
+    track: item.index ? String(item.index).padStart(2, '0') : '',
+    disc: item.parentIndex ? String(item.parentIndex) : '',
+  }
+}
+
 export function renderFileName(naming: FileNaming, item: PlexItem): string {
+  const values = placeholders(item)
   const raw = naming.format
-    .replace(/\{\{\s*title\s*\}\}/gi, item.title)
-    .replace(/\{\{\s*year\s*\}\}/gi, item.year ? String(item.year) : '')
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (all: string, key: string) => values[key.toLowerCase()] ?? all)
     .replace(/\(\s*\)|\[\s*\]/g, '')
+    // Separators left dangling by an empty placeholder, e.g. " - " when there's no artist.
+    .replace(/^\s*[-–—]\s+|\s+[-–—]\s*$/g, '')
   return sanitizeFileName(raw, naming.replacements)
     || sanitizeFileName(item.title, naming.replacements)
     || item.ratingKey
@@ -138,10 +188,21 @@ export function normalizeTitle(text: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
+/**
+ * How existing notes are recognised, besides their Plex link: 'loose' also accepts the bare title
+ * or "Title (Year)", 'format' only the library's file name format, 'link' nothing but the link.
+ * Case, accents and punctuation are ignored for names.
+ */
+export type MatchBy = 'loose' | 'format' | 'link'
+
 /** Names an existing note might have for this item. */
-export function candidateNames(item: PlexItem, naming: FileNaming): string[] {
-  const names = [item.title, renderFileName(naming, item)]
-  if (item.year) names.push(`${item.title} (${item.year})`)
+export function candidateNames(item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): string[] {
+  if (matchBy === 'link') return []
+  const names = [renderFileName(naming, item)]
+  if (matchBy === 'loose') {
+    names.push(item.title)
+    if (item.year) names.push(`${item.title} (${item.year})`)
+  }
   return names.map(normalizeTitle).filter(Boolean)
 }
 
@@ -149,14 +210,17 @@ export function candidateNames(item: PlexItem, naming: FileNaming): string[] {
 export interface ExistingNotes {
   ratingKeys: Map<string, string>
   names: Map<string, string[]>
+  /** Rating keys each note links to, so a note linked to one item never name-matches another. */
+  keysByPath: Map<string, string[]>
 }
 
 export function emptyIndex(): ExistingNotes {
-  return { ratingKeys: new Map(), names: new Map() }
+  return { ratingKeys: new Map(), names: new Map(), keysByPath: new Map() }
 }
 
 export function addToIndex(index: ExistingNotes, path: string, baseName: string, ratingKeys: string[] = []): void {
   for (const key of ratingKeys) if (!index.ratingKeys.has(key)) index.ratingKeys.set(key, path)
+  if (ratingKeys.length) index.keysByPath.set(path, [...(index.keysByPath.get(path) ?? []), ...ratingKeys])
   const name = normalizeTitle(baseName)
   if (!name) return
   const paths = index.names.get(name) ?? []
@@ -171,18 +235,21 @@ export interface NoteMatch {
   byRatingKey: boolean
 }
 
-export function findNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming): NoteMatch | null {
+export function findNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): NoteMatch | null {
   const keyed = existing.ratingKeys.get(item.ratingKey)
   if (keyed) return { paths: [keyed], byRatingKey: true }
   const paths = new Set<string>()
-  for (const name of candidateNames(item, naming)) {
-    for (const path of existing.names.get(name) ?? []) paths.add(path)
+  for (const name of candidateNames(item, naming, matchBy)) {
+    for (const path of existing.names.get(name) ?? []) {
+      const linked = existing.keysByPath.get(path)
+      if (!linked || linked.includes(item.ratingKey)) paths.add(path)
+    }
   }
   return paths.size ? { paths: [...paths], byRatingKey: false } : null
 }
 
-export function hasNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming): boolean {
-  return findNote(existing, item, naming) !== null
+export function hasNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): boolean {
+  return findNote(existing, item, naming, matchBy) !== null
 }
 
 export interface RenamePlan {
@@ -209,4 +276,10 @@ export function planRenames(matches: { item: PlexItem, match: NoteMatch | null }
     if (match.byRatingKey || (!keyed.has(path) && claims.get(path) === 1)) plans.push({ item, path })
   }
   return plans
+}
+
+/** Already named right: exactly the expected name, or it with the " 2", " 3"… added when the name was taken. */
+export function isNamedAs(baseName: string, expected: string): boolean {
+  if (baseName === expected) return true
+  return baseName.startsWith(`${expected} `) && /^\d+$/.test(baseName.slice(expected.length + 1))
 }

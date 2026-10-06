@@ -1,80 +1,47 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
-import { defaultLibraryTarget, OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type PlexItem } from './notes'
-import { PlexClient } from './plex'
 import {
-  DEFAULT_PROPERTIES,
-  DEFAULT_VALUES,
-  FIELD_SOURCES,
-  type FieldSource,
-  type PropertyMapping,
-  type PropertyValues,
-} from './properties'
-
-export interface LibrarySetting {
-  title: string
-  type: string
-  target: LibraryTarget
-}
-
-export interface PlexNotesSettings {
-  serverUrl: string
-  token: string
-  moviesFolder: string
-  tvFolder: string
-  documentariesFolder: string
-  /** Subfolder of each media folder that downloaded posters go in. */
-  imagesSubfolder: string
-  fileNameFormat: string
-  /** What each character that can't be in a file name becomes; missing or '' drops it. */
-  fileNameReplacements: Record<string, string>
-  useDocumentaryGenre: boolean
-  /** Rename matching existing notes to the file name format. */
-  renameExistingNotes: boolean
-  /** Keyed by Plex library section key. */
-  libraries: Record<string, LibrarySetting>
-  /** Frontmatter properties written to new notes, in order. */
-  properties: PropertyMapping[]
-  values: PropertyValues
-}
-
-export const DEFAULT_SETTINGS: PlexNotesSettings = {
-  serverUrl: '',
-  token: '',
-  moviesFolder: 'Media/Movies',
-  tvFolder: 'Media/TV Shows',
-  documentariesFolder: 'Media/Documentaries',
-  imagesSubfolder: 'Images',
-  fileNameFormat: '{{title}} ({{year}})',
-  fileNameReplacements: {},
-  useDocumentaryGenre: true,
-  renameExistingNotes: true,
-  libraries: {},
-  properties: DEFAULT_PROPERTIES,
-  values: DEFAULT_VALUES,
-}
-
-/** Fresh copy of the defaults, so editing settings never changes them. */
-export function defaultSettings(): PlexNotesSettings {
-  return structuredClone(DEFAULT_SETTINGS)
-}
+  DEFAULT_FILE_NAMES,
+  DEFAULT_FOLDERS,
+  DEFAULT_MATCH_BY,
+  mergeLibraries,
+  retarget,
+  type LibrarySetting,
+} from './config'
+import { OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
+import { PlexClient } from './plex'
+import { defaultProperties, defaultValues, FIELD_SOURCES, type FieldSource } from './properties'
 
 const PREVIEW_ITEMS: PlexItem[] = [
-  { ratingKey: '1', type: 'movie', title: 'Mission: Impossible', year: 1996 },
-  { ratingKey: '2', type: 'movie', title: 'Face/Off', year: 1997 },
-  { ratingKey: '3', type: 'movie', title: 'What About Bob?', year: 1991 },
+  { ratingKey: '1', type: 'movie', title: 'Mission: Impossible' },
+  { ratingKey: '2', type: 'movie', title: 'Face/Off' },
+  { ratingKey: '3', type: 'movie', title: 'What About Bob?' },
 ]
+
+const MATCH_LABELS: Record<MatchBy, string> = {
+  loose: 'Plex link, title, title and year, or file name',
+  format: 'Plex link or file name',
+  link: 'Plex link only',
+}
 
 const TARGET_LABELS: Record<LibraryTarget, string> = {
   movie: 'Movies',
   tv: 'TV shows',
   documentary: 'Documentaries',
+  music: 'Music (one note per track)',
   skip: 'Skip',
 }
 
 export class PlexNotesSettingTab extends PluginSettingTab {
+  /** Library sections the user has expanded, kept open across redraws. */
+  private readonly openLibraries = new Set<string>()
+
   constructor(app: App, private readonly plugin: PlexMediaNotesPlugin) {
     super(app, plugin)
+  }
+
+  private save(): Promise<void> {
+    return this.plugin.saveSettings()
   }
 
   display(): void {
@@ -92,7 +59,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .setValue(settings.serverUrl)
         .onChange(async value => {
           settings.serverUrl = value.trim()
-          await this.plugin.saveSettings()
+          await this.save()
         }))
 
     new Setting(containerEl)
@@ -104,13 +71,14 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           .setValue(settings.token)
           .onChange(async value => {
             settings.token = value.trim()
-            await this.plugin.saveSettings()
+            await this.save()
           })
       })
 
+    new Setting(containerEl).setName('Libraries').setHeading()
+
     new Setting(containerEl)
-      .setName('Libraries')
-      .setDesc('Load your Plex libraries, then choose where each one goes.')
+      .setDesc('Load your Plex libraries, then open each one to choose its type, folder, file names and properties.')
       .addButton(button => button
         .setButtonText('Load libraries')
         .onClick(async () => {
@@ -126,44 +94,197 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           }
         }))
 
-    for (const [key, library] of Object.entries(settings.libraries)) {
-      new Setting(containerEl)
-        .setName(library.title)
-        .setDesc(library.type === 'show' ? 'TV library' : library.type === 'movie' ? 'Movie library' : `${library.type} library`)
-        .addDropdown(dropdown => {
-          for (const [value, label] of Object.entries(TARGET_LABELS)) dropdown.addOption(value, label)
-          dropdown
-            .setValue(library.target)
-            .onChange(async value => {
-              settings.libraries[key].target = value as LibraryTarget
-              await this.plugin.saveSettings()
-            })
-        })
-    }
+    for (const [key, lib] of Object.entries(settings.libraries)) this.displayLibrary(key, lib)
 
-    new Setting(containerEl).setName('Notes').setHeading()
+    this.displayGeneral()
+  }
 
-    this.addFolderSetting('Movies folder', 'moviesFolder')
-    this.addFolderSetting('TV shows folder', 'tvFolder')
-    this.addFolderSetting('Documentaries folder', 'documentariesFolder')
-    this.addFolderSetting('Images subfolder', 'imagesSubfolder', 'Posters are saved in this subfolder of the movies, TV shows or documentaries folder, for properties set to "Poster image".')
+  private displayLibrary(key: string, lib: LibrarySetting): void {
+    const details = this.containerEl.createEl('details')
+    details.open = this.openLibraries.has(key)
+    details.addEventListener('toggle', () => {
+      if (details.open) this.openLibraries.add(key)
+      else this.openLibraries.delete(key)
+    })
+    details.createEl('summary', { text: `${lib.title} (${TARGET_LABELS[lib.target]})` })
+    const el = details.createDiv()
 
-    new Setting(containerEl)
-      .setName('File name')
-      .setDesc('Use {{title}} and {{year}}. Empty brackets are dropped when an item has no year.')
+    new Setting(el)
+      .setName('Type')
+      .setDesc('What this library holds. Skipped libraries get no notes.')
+      .addDropdown(dropdown => {
+        for (const [value, label] of Object.entries(TARGET_LABELS)) dropdown.addOption(value, label)
+        dropdown
+          .setValue(lib.target)
+          .onChange(async value => {
+            retarget(lib, value as LibraryTarget)
+            await this.save()
+            this.refresh()
+          })
+      })
+    if (lib.target === 'skip') return
+    const kind = lib.target
+    const music = kind === 'music'
+
+    new Setting(el)
+      .setName('Folder')
+      .setDesc('New notes go here. Existing notes are looked for here too, including subfolders.')
       .addText(text => text
-        .setPlaceholder(DEFAULT_SETTINGS.fileNameFormat)
-        .setValue(settings.fileNameFormat)
+        .setPlaceholder(DEFAULT_FOLDERS[kind])
+        .setValue(lib.folder)
         .onChange(async value => {
-          settings.fileNameFormat = value.trim() || DEFAULT_SETTINGS.fileNameFormat
-          await this.plugin.saveSettings()
-          updatePreview()
+          lib.folder = value.trim() || DEFAULT_FOLDERS[kind]
+          await this.save()
         }))
 
-    const preview = new Setting(containerEl)
-      .setName('Characters in file names')
+    new Setting(el)
+      .setName('File name')
+      .setDesc(music
+        ? 'Use {{artist}}, {{title}}, {{album}}, {{albumartist}}, {{track}}, {{disc}} and {{year}}. Empty brackets and dangling dashes are dropped.'
+        : 'Use {{title}} and {{year}}. Empty brackets are dropped when an item has no year.')
+      .addText(text => text
+        .setPlaceholder(DEFAULT_FILE_NAMES[kind])
+        .setValue(lib.fileNameFormat)
+        .onChange(async value => {
+          lib.fileNameFormat = value.trim() || DEFAULT_FILE_NAMES[kind]
+          await this.save()
+        }))
+
+    new Setting(el)
+      .setName('Match existing notes by')
+      .setDesc('How a note already in the folder is recognised as this Plex item, so no second note is made. Case, accents and punctuation are ignored in names. A note linking to a different Plex item never matches by name.')
+      .addDropdown(dropdown => {
+        for (const [value, label] of Object.entries(MATCH_LABELS)) dropdown.addOption(value, label)
+        dropdown
+          .setValue(lib.matchBy ?? DEFAULT_MATCH_BY[kind])
+          .onChange(async value => {
+            lib.matchBy = value as MatchBy
+            await this.save()
+          })
+      })
+
+    this.displayProperties(el, lib)
+
+    new Setting(el).setName('Property values').setHeading()
+    const defaults = defaultValues(kind)
+    if (!music) {
+      this.addValueSetting(el, 'Watched', 'For "Watched or played status": a movie that has been played, or a show with every episode watched.',
+        () => lib.values.watched, v => { lib.values.watched = v || defaults.watched })
+      this.addValueSetting(el, 'Started', 'For "Watched or played status": a movie stopped part way, or a show with some episodes watched.',
+        () => lib.values.started, v => { lib.values.started = v || defaults.started })
+      this.addValueSetting(el, 'Not watched', 'For "Watched or played status": everything else.',
+        () => lib.values.unwatched, v => { lib.values.unwatched = v || defaults.unwatched })
+    }
+    this.addValueSetting(el, 'Type tag', 'For "Type tag".',
+      () => lib.values.tag, v => { lib.values.tag = v || defaults.tag })
+  }
+
+  private displayProperties(el: HTMLElement, lib: LibrarySetting): void {
+    new Setting(el).setName('Properties').setHeading()
+    el.createEl('p', {
+      cls: 'setting-item-description',
+      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in. Switch on the toggle next to a property to also add a property to existing notes that match a Plex item, when it is missing or empty there; nothing else in those notes changes.',
+    })
+
+    lib.properties.forEach((mapping, index) => {
+      const row = new Setting(el)
+        .addText(text => text
+          .setPlaceholder('Property name')
+          .setValue(mapping.name)
+          .onChange(async value => {
+            mapping.name = value
+            await this.save()
+          }))
+        .addDropdown(dropdown => {
+          for (const [value, label] of Object.entries(FIELD_SOURCES)) dropdown.addOption(value, label)
+          dropdown
+            .setValue(mapping.source)
+            .onChange(async value => {
+              const textChanged = (mapping.source === 'text') !== (value === 'text')
+              mapping.source = value as FieldSource
+              await this.save()
+              // Only the "Fixed text" choice changes the row's layout.
+              if (textChanged) this.refresh()
+            })
+        })
+      if (mapping.source === 'text') {
+        row.addText(text => text
+          .setPlaceholder('Value')
+          .setValue(mapping.text ?? '')
+          .onChange(async value => {
+            mapping.text = value
+            await this.save()
+          }))
+      }
+      row.addToggle(toggle => {
+        toggle
+          .setTooltip('Fill in on existing notes when empty')
+          .setValue(mapping.fill ?? false)
+          .onChange(async value => {
+            mapping.fill = value
+            await this.save()
+          })
+      })
+      row
+        .addExtraButton(button => button
+          .setIcon('arrow-up')
+          .setTooltip('Move up')
+          .setDisabled(index === 0)
+          .onClick(() => this.moveProperty(lib, index, -1)))
+        .addExtraButton(button => button
+          .setIcon('arrow-down')
+          .setTooltip('Move down')
+          .setDisabled(index === lib.properties.length - 1)
+          .onClick(() => this.moveProperty(lib, index, 1)))
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Remove')
+          .onClick(async () => {
+            lib.properties.splice(index, 1)
+            await this.save()
+            this.refresh()
+          }))
+    })
+
+    new Setting(el)
+      .addButton(button => button
+        .setButtonText('Add property')
+        .setCta()
+        .onClick(async () => {
+          lib.properties.push({ name: '', source: 'summary' })
+          await this.save()
+          this.refresh()
+        }))
+      .addButton(button => button
+        .setButtonText('Reset to defaults')
+        .onClick(async () => {
+          if (lib.target === 'skip') return
+          lib.properties = defaultProperties(lib.target)
+          await this.save()
+          this.refresh()
+        }))
+  }
+
+  private displayGeneral(): void {
+    const { containerEl } = this
+    const settings = this.plugin.settings
+
+    new Setting(containerEl).setName('All libraries').setHeading()
+
+    new Setting(containerEl)
+      .setName('Images subfolder')
+      .setDesc('Posters are saved in this subfolder of each library folder, for properties set to "Poster image". Every track on an album shares one cover.')
+      .addText(text => text
+        .setPlaceholder('Images')
+        .setValue(settings.imagesSubfolder)
+        .onChange(async value => {
+          settings.imagesSubfolder = value.trim() || 'Images'
+          await this.save()
+        }))
+
+    const preview = new Setting(containerEl).setName('Characters in file names')
     const updatePreview = () => {
-      const naming = { format: settings.fileNameFormat, replacements: settings.fileNameReplacements }
+      const naming = { format: '{{title}}', replacements: settings.fileNameReplacements }
       const examples = PREVIEW_ITEMS.map(item => `${item.title} → ${renderFileName(naming, item)}`)
       preview.setDesc(`These characters can't be in file names. Choose what each becomes, or leave it empty to drop it. For example: ${examples.join(';  ')}`)
     }
@@ -181,32 +302,30 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           .setValue(settings.fileNameReplacements[key] ?? '')
           .onChange(async value => {
             settings.fileNameReplacements[key] = value
-            await this.plugin.saveSettings()
+            await this.save()
             updatePreview()
           }))
     }
 
     new Setting(containerEl)
       .setName('Fix names of existing notes')
-      .setDesc('Rename notes that already exist for a Plex item to the file name format above, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
+      .setDesc('Rename notes that already exist for a Plex item to their library\'s file name format, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
       .addToggle(toggle => toggle
         .setValue(settings.renameExistingNotes)
         .onChange(async value => {
           settings.renameExistingNotes = value
-          await this.plugin.saveSettings()
+          await this.save()
         }))
 
     new Setting(containerEl)
       .setName('Detect documentaries by genre')
-      .setDesc('Items in the documentary genre go to the documentaries folder, whichever library they are in.')
+      .setDesc('Movies and shows in the documentary genre get their notes from your documentaries library\'s settings (folder, file name and properties), whichever library they are in.')
       .addToggle(toggle => toggle
         .setValue(settings.useDocumentaryGenre)
         .onChange(async value => {
           settings.useDocumentaryGenre = value
-          await this.plugin.saveSettings()
+          await this.save()
         }))
-
-    this.displayProperties()
   }
 
   /** Redraws the page without losing the scroll position. */
@@ -220,135 +339,23 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     scrollers.forEach((el, i) => { el.scrollTop = positions[i] })
   }
 
-  private displayProperties(): void {
-    const { containerEl } = this
-    const settings = this.plugin.settings
-    const save = () => this.plugin.saveSettings()
-
-    new Setting(containerEl).setName('Properties').setHeading()
-    containerEl.createEl('p', {
-      cls: 'setting-item-description',
-      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in.',
-    })
-
-    settings.properties.forEach((mapping, index) => {
-      const row = new Setting(containerEl)
-        .addText(text => text
-          .setPlaceholder('Property name')
-          .setValue(mapping.name)
-          .onChange(async value => {
-            mapping.name = value
-            await save()
-          }))
-        .addDropdown(dropdown => {
-          for (const [value, label] of Object.entries(FIELD_SOURCES)) dropdown.addOption(value, label)
-          dropdown
-            .setValue(mapping.source)
-            .onChange(async value => {
-              const textChanged = (mapping.source === 'text') !== (value === 'text')
-              mapping.source = value as FieldSource
-              await save()
-              // Only the "Fixed text" choice changes the row's layout.
-              if (textChanged) this.refresh()
-            })
-        })
-      if (mapping.source === 'text') {
-        row.addText(text => text
-          .setPlaceholder('Value')
-          .setValue(mapping.text ?? '')
-          .onChange(async value => {
-            mapping.text = value
-            await save()
-          }))
-      }
-      row
-        .addExtraButton(button => button
-          .setIcon('arrow-up')
-          .setTooltip('Move up')
-          .setDisabled(index === 0)
-          .onClick(() => this.moveProperty(index, -1)))
-        .addExtraButton(button => button
-          .setIcon('arrow-down')
-          .setTooltip('Move down')
-          .setDisabled(index === settings.properties.length - 1)
-          .onClick(() => this.moveProperty(index, 1)))
-        .addExtraButton(button => button
-          .setIcon('trash')
-          .setTooltip('Remove')
-          .onClick(async () => {
-            settings.properties.splice(index, 1)
-            await save()
-            this.refresh()
-          }))
-    })
-
-    new Setting(containerEl)
-      .addButton(button => button
-        .setButtonText('Add property')
-        .setCta()
-        .onClick(async () => {
-          settings.properties.push({ name: '', source: 'summary' })
-          await save()
-          this.refresh()
-        }))
-      .addButton(button => button
-        .setButtonText('Reset to defaults')
-        .onClick(async () => {
-          settings.properties = structuredClone(DEFAULT_PROPERTIES)
-          await save()
-          this.refresh()
-        }))
-
-    new Setting(containerEl).setName('Property values').setHeading()
-
-    this.addValueSetting('Watched', 'For "Watched status": a movie that has been played, or a show with every episode watched.',
-      () => settings.values.watched, v => { settings.values.watched = v || DEFAULT_VALUES.watched })
-    this.addValueSetting('Started', 'For "Watched status": a movie stopped part way, or a show with some episodes watched.',
-      () => settings.values.started, v => { settings.values.started = v || DEFAULT_VALUES.started })
-    this.addValueSetting('Not watched', 'For "Watched status": everything else.',
-      () => settings.values.unwatched, v => { settings.values.unwatched = v || DEFAULT_VALUES.unwatched })
-    this.addValueSetting('Movie tag', 'For "Type tag".',
-      () => settings.values.tags.movie, v => { settings.values.tags.movie = v || DEFAULT_VALUES.tags.movie })
-    this.addValueSetting('TV show tag', 'For "Type tag".',
-      () => settings.values.tags.tv, v => { settings.values.tags.tv = v || DEFAULT_VALUES.tags.tv })
-    this.addValueSetting('Documentary tag', 'For "Type tag".',
-      () => settings.values.tags.documentary, v => { settings.values.tags.documentary = v || DEFAULT_VALUES.tags.documentary })
-  }
-
-  private async moveProperty(index: number, by: number): Promise<void> {
-    const list = this.plugin.settings.properties
-    const [moved] = list.splice(index, 1)
-    list.splice(index + by, 0, moved)
-    await this.plugin.saveSettings()
+  private async moveProperty(lib: LibrarySetting, index: number, by: number): Promise<void> {
+    const [moved] = lib.properties.splice(index, 1)
+    lib.properties.splice(index + by, 0, moved)
+    await this.save()
     this.refresh()
   }
 
-  private addValueSetting(name: string, desc: string, get: () => string, set: (value: string) => void): void {
-    new Setting(this.containerEl)
+  private addValueSetting(el: HTMLElement, name: string, desc: string, get: () => string, set: (value: string) => void): void {
+    new Setting(el)
       .setName(name)
       .setDesc(desc)
       .addText(text => text
         .setValue(get())
         .onChange(async value => {
           set(value.trim())
-          await this.plugin.saveSettings()
+          await this.save()
         }))
-  }
-
-  private addFolderSetting(
-    name: string,
-    key: 'moviesFolder' | 'tvFolder' | 'documentariesFolder' | 'imagesSubfolder',
-    desc?: string,
-  ): void {
-    const setting = new Setting(this.containerEl).setName(name)
-    if (desc) setting.setDesc(desc)
-    setting.addText(text => text
-      .setPlaceholder(DEFAULT_SETTINGS[key])
-      .setValue(this.plugin.settings[key])
-      .onChange(async value => {
-        this.plugin.settings[key] = value.trim() || DEFAULT_SETTINGS[key]
-        await this.plugin.saveSettings()
-      }))
   }
 
   private async loadLibraries(): Promise<void> {
@@ -356,17 +363,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     if (!serverUrl || !token) throw new Error('enter the server address and token first')
     const libraries = await new PlexClient(serverUrl, token).libraries()
     mergeLibraries(this.plugin.settings, libraries)
-    await this.plugin.saveSettings()
-  }
-}
-
-/** Adds libraries Plex reports that the settings don't know yet, keeping existing choices. */
-export function mergeLibraries(settings: PlexNotesSettings, libraries: { key: string, title: string, type: string }[]): void {
-  for (const lib of libraries) {
-    const existing = settings.libraries[lib.key]
-    settings.libraries[lib.key] = existing
-      ? { ...existing, title: lib.title, type: lib.type }
-      : { title: lib.title, type: lib.type, target: defaultLibraryTarget(lib.type, lib.title) }
+    await this.save()
   }
 }
 

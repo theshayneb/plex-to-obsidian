@@ -1,15 +1,25 @@
 # Plex Media Notes
 
-An Obsidian plugin that creates a note for every movie, TV show and documentary on your Plex server that doesn't already have one in your vault.
+An Obsidian plugin that creates a note for every movie, TV show, documentary and music track on your Plex server that doesn't already have one in your vault.
 
 ## Setup
 
 1. Settings → Plex Media Notes: enter the server address (e.g. `http://192.168.1.10:32400`) and your Plex token.
    To find the token, open any item in Plex Web, choose **Get info → View XML**, and copy the value after `X-Plex-Token=` in the address bar.
-2. Press **Load libraries** and choose, for each library, Movies, TV shows, Documentaries or Skip.
-3. Run **Create notes for new Plex movies and shows** from the command palette, or click the clapperboard in the ribbon.
+2. Press **Load libraries**. Each Plex library gets its own section: open it and choose its **Type** (Movies, TV shows, Documentaries, Music or Skip). Music libraries start as Skip, since they make one note per track.
+3. Run **Create notes for new Plex items** from the command palette, or click the clapperboard in the ribbon.
 
-## What a new note looks like
+## Per library
+
+Each library has its own:
+
+- **Folder** where its notes go (defaults `Media/Movies`, `Media/TV Shows`, `Media/Documentaries`, `Media/Music`).
+- **File name**: `{{title}} ({{year}})` by default; music can also use `{{artist}}`, `{{album}}`, `{{albumartist}}`, `{{track}}` and `{{disc}}` and defaults to `{{artist}} - {{title}}`.
+- **Match existing notes by**: Plex link, title, title and year, or file name (the default for video); Plex link or file name (the default for music, where titles like "Intro" are too common); or Plex link only.
+- **Properties**: rename, reorder or remove them, and choose which Plex information fills each one (genres, summary, tagline, release date, duration in minutes, as "1h 52m" or as "3:45", directors, writers, cast, studio or label, content rating, ratings (yours as 0–5 stars or as ⭐ emoji), collections, labels, dates added and last watched, play count, seasons and episodes, IMDb/TMDB/TVDB IDs, music artist, album, track and disc numbers, styles and moods, or a fixed text). Properties Plex has no value for are still added, empty, so you can fill them in by hand. The switch on each property fills it in on existing notes (see below).
+- **Property values**: the status words (not for music) and the type tag.
+
+The default video note:
 
 ```yaml
 ---
@@ -27,23 +37,26 @@ tags:
 ---
 ```
 
-All of this can be changed in Settings → Properties: rename properties, reorder or remove them, change which Plex information fills each one (genres, summary, tagline, release date, duration in minutes or as "1h 52m", directors, writers, cast, studio, content rating, ratings (yours as 0–5 stars or as ⭐ emoji), collections, labels, dates added and last watched, play count, seasons and episodes, IMDb/TMDB/TVDB IDs, or a fixed text), and change the status words and type tags under Property values. Properties Plex has no value for are still added, empty, so you can fill them in by hand. The defaults are:
-
 - **Duration** is in minutes. For TV shows it's Plex's typical episode length.
-- **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; `started` for a movie stopped part way or a show with some episodes watched; otherwise `pending`. Other statuses (such as revisit or abandoned) are yours to set by hand; the plugin never changes existing notes.
-- **Image** is the poster, downloaded into an `Images` subfolder of the note's folder (e.g. `Media/Movies/Images`). The subfolder name can be changed in settings. The Plex image URL itself would expose your token.
+- **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; `started` for a movie stopped part way or a show with some episodes watched; otherwise `pending`.
+- **Image** is the poster, downloaded into an `Images` subfolder of the library's folder. The Plex image URL itself would expose your token.
 - **Genre** leaves out "Documentary" for documentaries.
-- **tags** is `movie`, `tv_show` or `documentary`. With "Detect documentaries by genre" on, anything with the Documentary genre counts as a documentary and goes to the documentaries folder, whatever library it's in.
+- With "Detect documentaries by genre" on, a movie or show with the Documentary genre gets its note from your Documentaries library's settings, whatever library it's in.
+
+The default music (track) note has Artist, Album, Track, Genre (from the album), Date (the album's release date), Duration (`4:24`), Link, Image (the album cover, shared by its tracks) and tags (`music`).
 
 ## File names
 
-New notes are named with the **File name** setting (default `{{title}} ({{year}})`). Characters that can't be in file names are dropped, unless you choose a replacement for them under **Characters in file names**; e.g. `:` → `-` gives `Mission- Impossible (1996)`.
+Characters that can't be in file names are dropped, unless you choose a replacement for them under **Characters in file names** (for all libraries); e.g. `:` → `-` gives `Mission- Impossible (1996)`.
 
 ## Existing notes
 
-The contents of existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link (or whatever the Plex link property is called) to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.
+An item is skipped when a note in its library's folder (including subfolders) matches it, as set by **Match existing notes by**. Movies, shows and documentaries also look in each other's folders. A note whose Link points at a different Plex item never matches by name.
 
-With **Fix names of existing notes** on (the default), a matched note is renamed to the file name format, e.g. `Heat` → `Heat (1995)`. Only the file name changes, the note stays in its folder, and links to it are updated if Obsidian's "Automatically update internal links" is on. A note that could belong to more than one Plex item is left alone, and so is one whose new name is already taken.
+When a note matches exactly one Plex item (and no other item could be it):
+
+- With **Fix names of existing notes** on (the default), it's renamed to its library's file name format, e.g. `Heat` → `Heat (1995)`. Only the file name changes, the note stays in its folder, and links to it are updated if Obsidian's "Automatically update internal links" is on.
+- Properties with their fill-in switch on (Link and Summary by default) are added when missing or empty in the note. Values already there are never replaced, and nothing else in the note changes.
 
 ## Mobile
 

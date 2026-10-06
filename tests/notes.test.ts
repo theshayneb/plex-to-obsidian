@@ -7,6 +7,7 @@ import {
   findNote,
   hasNote,
   planRenames,
+  isNamedAs,
   isStarted,
   isWatched,
   plexWebLink,
@@ -54,6 +55,7 @@ describe('defaultLibraryTarget', () => {
     expect(defaultLibraryTarget('show', 'TV Shows')).toBe('tv')
     expect(defaultLibraryTarget('movie', 'Documentaries')).toBe('documentary')
     expect(defaultLibraryTarget('artist', 'Music')).toBe('skip')
+    expect(defaultLibraryTarget('photo', 'Photos')).toBe('skip')
   })
 })
 
@@ -149,5 +151,49 @@ describe('isStarted', () => {
     expect(isStarted(show)).toBe(true)
     expect(isStarted({ ...show, viewedLeafCount: 11 })).toBe(false)
     expect(isStarted({ ...show, viewedLeafCount: 0 })).toBe(false)
+  })
+})
+
+describe('music file names and matching', () => {
+  const track: PlexItem = {
+    ratingKey: '7', type: 'track', title: 'Karma Police', grandparentTitle: 'Radiohead',
+    parentTitle: 'OK Computer', index: 6, parentIndex: 1, parentYear: 1997,
+  }
+  const naming = (f: string) => ({ format: f, replacements: {} })
+
+  it('fills the music placeholders', () => {
+    expect(renderFileName(naming('{{artist}} - {{title}}'), track)).toBe('Radiohead - Karma Police')
+    expect(renderFileName(naming('{{albumartist}} - {{album}} ({{year}}) {{disc}}-{{track}} {{title}}'), track))
+      .toBe('Radiohead - OK Computer (1997) 1-06 Karma Police')
+    expect(renderFileName(naming('{{artist}} - {{title}}'), { ...track, originalTitle: 'Guest' })).toBe('Guest - Karma Police')
+  })
+
+  it('drops a dash left by an empty placeholder', () => {
+    expect(renderFileName(naming('{{artist}} - {{title}}'), { ...track, grandparentTitle: undefined })).toBe('Karma Police')
+  })
+
+  it('matches by file name only, or loosely, or by link only', () => {
+    const index = emptyIndex()
+    addToIndex(index, 'Media/Music/Karma Police.md', 'Karma Police')
+    expect(hasNote(index, track, naming('{{artist}} - {{title}}'), 'format')).toBe(false)
+    expect(hasNote(index, track, naming('{{artist}} - {{title}}'), 'loose')).toBe(true)
+    addToIndex(index, 'Media/Music/Radiohead - Karma Police.md', 'Radiohead - Karma Police')
+    expect(hasNote(index, track, naming('{{artist}} - {{title}}'), 'format')).toBe(true)
+    expect(hasNote(index, track, naming('{{artist}} - {{title}}'), 'link')).toBe(false)
+  })
+
+  it('never name-matches a note linked to another Plex item', () => {
+    const index = emptyIndex()
+    addToIndex(index, 'Media/Music/Radiohead - Karma Police.md', 'Radiohead - Karma Police', ['999'])
+    expect(hasNote(index, track, naming('{{artist}} - {{title}}'))).toBe(false)
+  })
+})
+
+describe('isNamedAs', () => {
+  it('accepts the name or a numbered copy of it', () => {
+    expect(isNamedAs('Airbag', 'Airbag')).toBe(true)
+    expect(isNamedAs('Airbag 2', 'Airbag')).toBe(true)
+    expect(isNamedAs('Airbag live', 'Airbag')).toBe(false)
+    expect(isNamedAs('Airbag2', 'Airbag')).toBe(false)
   })
 })

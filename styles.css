@@ -14,6 +14,7 @@
 }
 
 .pmn-approval-scroll {
+  container: pmn-approval / inline-size;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -38,22 +39,29 @@
   padding: var(--size-4-2) var(--size-4-3);
   border-bottom: 1px solid var(--background-modifier-border);
   vertical-align: top;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
-.pmn-approval-name {
+/* Property names never break mid-word; the value columns share what's left. */
+.pmn-approval-table .pmn-approval-name {
   font-weight: var(--font-semibold);
   white-space: nowrap;
+  width: 1%;
 }
 
-.pmn-approval-now {
+.pmn-approval-table .pmn-approval-now,
+.pmn-approval-table .pmn-approval-new {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.pmn-approval-table .pmn-approval-now {
   color: var(--text-muted);
-  width: 40%;
+  width: 45%;
 }
 
-.pmn-approval-new {
-  width: 40%;
+.pmn-approval-table .pmn-approval-new {
+  width: 55%;
 }
 
 .pmn-approval-empty {
@@ -112,4 +120,49 @@
 
 .pmn-approval-add {
   width: 100%;
+}
+
+/* A narrow pop-up (phones, small windows): one row per property, stacked, with Now and New labelled. */
+@container pmn-approval (max-width: 600px) {
+  .pmn-approval-table thead {
+    display: none;
+  }
+
+  .pmn-approval-table,
+  .pmn-approval-table tbody {
+    display: block;
+  }
+
+  .pmn-approval-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: var(--size-4-2) 0;
+  }
+
+  .pmn-approval-table td {
+    border-bottom: none;
+    padding: var(--size-4-1) var(--size-4-2);
+  }
+
+  .pmn-approval-table .pmn-approval-name {
+    white-space: normal;
+    width: auto;
+  }
+
+  .pmn-approval-table .pmn-approval-now,
+  .pmn-approval-table .pmn-approval-new {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+
+  .pmn-approval-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 }

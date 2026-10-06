@@ -81,13 +81,15 @@ export class ApprovalModal extends Modal {
       box.checked = true
       box.disabled = Boolean(required)
       row.createEl('td', { cls: 'pmn-approval-name', text: label })
-      if (!create) cell(row, current ?? null, 'pmn-approval-now')
+      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Now')
+      const newLabel = create ? 'Value' : 'New'
+      const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
       let input: HTMLTextAreaElement | HTMLInputElement | null = null
       if (edit === 'list') {
-        input = this.pmnListEditor(row.createEl('td', { cls: 'pmn-approval-new' }), key, items ?? [])
+        input = this.pmnListEditor(newCell(), key, items ?? [])
       } else if (edit) {
         const original = value ?? ''
-        input = row.createEl('td', { cls: 'pmn-approval-new' }).createEl('textarea', { cls: 'pmn-approval-input' })
+        input = newCell().createEl('textarea', { cls: 'pmn-approval-input' })
         input.value = original
         input.placeholder = 'Empty'
         input.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
@@ -97,7 +99,7 @@ export class ApprovalModal extends Modal {
           else this.pmnEdits[key] = field.value
         })
       } else {
-        cell(row, value, 'pmn-approval-new')
+        cell(row, value, 'pmn-approval-new', newLabel)
       }
       box.addEventListener('change', () => {
         row.toggleClass('pmn-approval-off', !box.checked)
@@ -177,8 +179,8 @@ export function askApproval(app: App, request: ApprovalRequest): Promise<Decisio
 }
 
 /** A table cell showing a value, or "empty" in italics. */
-function cell(row: HTMLElement, value: string | null, cls: string): void {
-  const td = row.createEl('td', { cls })
+function cell(row: HTMLElement, value: string | null, cls: string, label: string): void {
+  const td = row.createEl('td', { cls, attr: { 'data-label': label } })
   if (value === null) td.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
   else td.setText(value)
 }

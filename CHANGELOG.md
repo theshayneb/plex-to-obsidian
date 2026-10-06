@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.17] - 2026-10-06
+
+### Fixed
+- Approval pop-up: property names no longer get squeezed into a column one letter wide. When the pop-up is narrow (a phone or a small window), each property is shown as a block instead: tick box and name, then "Now" and "New" underneath at full width.
+
 ## [0.0.16] - 2026-10-06
 
 ### Added

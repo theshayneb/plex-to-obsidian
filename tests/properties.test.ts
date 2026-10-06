@@ -109,6 +109,20 @@ describe('sourceValue', () => {
     expect(value('addedAt', { ...movie, addedAt: added })).toBe('2024-01-05')
   })
 
+  it('turns your rating into whole stars and emoji, rounding half stars up', () => {
+    const rated = (userRating?: number) => ({ ...movie, userRating })
+    expect(value('userRating', rated(6))).toBe(3)
+    expect(value('userRating', rated(5))).toBe(3)
+    expect(value('userRating', rated(10))).toBe(5)
+    expect(value('userRating', rated(undefined))).toBeUndefined()
+    expect(value('userRatingEmoji', rated(2))).toBe('⭐')
+    expect(value('userRatingEmoji', rated(5))).toBe('⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(8))).toBe('⭐⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(9))).toBe('🩷')
+    expect(value('userRatingEmoji', rated(10))).toBe('🩷')
+    expect(value('userRatingEmoji', rated(undefined))).toBeUndefined()
+  })
+
   it('has a label for every source', () => {
     for (const source of Object.keys(FIELD_SOURCES) as FieldSource[]) {
       expect(() => value(source)).not.toThrow()

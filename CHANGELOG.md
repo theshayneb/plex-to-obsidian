@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.9] - 2026-10-06
+
+### Changed
+- "Your rating" is now in stars, 0–5, as shown in Plex, instead of Plex's internal 0–10. Half stars round up (2½ → 3).
+
+### Added
+- Property source "Your rating (⭐ emoji, 🩷 for 5 stars)": 1 star → ⭐, 3 stars → ⭐⭐⭐, 5 stars → 🩷. Half stars round up.
+
 ## [0.0.8] - 2026-10-06
 
 ### Added

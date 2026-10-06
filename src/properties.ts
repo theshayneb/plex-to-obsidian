@@ -7,7 +7,7 @@ export type FieldSource =
   | 'status' | 'plexLink' | 'poster' | 'typeTag'
   | 'contentRating' | 'studio' | 'directors' | 'writers' | 'castTop5' | 'castAll'
   | 'countries' | 'collections' | 'labels'
-  | 'criticRating' | 'audienceRating' | 'userRating'
+  | 'criticRating' | 'audienceRating' | 'userRating' | 'userRatingEmoji'
   | 'addedAt' | 'lastViewedAt' | 'viewCount' | 'seasons' | 'episodes'
   | 'imdbId' | 'tmdbId' | 'tvdbId' | 'text'
 
@@ -45,7 +45,8 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   labels: 'Plex labels',
   criticRating: 'Critic rating (0–10)',
   audienceRating: 'Audience rating (0–10)',
-  userRating: 'Your rating (0–10)',
+  userRating: 'Your rating (stars, 0–5)',
+  userRatingEmoji: 'Your rating (⭐ emoji, 🩷 for 5 stars)',
   addedAt: 'Date added to Plex',
   lastViewedAt: 'Date last watched',
   viewCount: 'Play count',
@@ -109,6 +110,16 @@ function durationText(ms: number | undefined): string | undefined {
   return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`
 }
 
+/** Plex stores your rating as 0–10 (2 per star); half stars round up to the next whole star. */
+function userStars(item: PlexItem): number | undefined {
+  return item.userRating ? Math.min(5, Math.ceil(item.userRating / 2)) : undefined
+}
+
+function starEmoji(stars: number | undefined): string | undefined {
+  if (!stars) return undefined
+  return stars >= 5 ? '🩷' : '⭐'.repeat(stars)
+}
+
 function externalId(item: PlexItem, scheme: string): string | undefined {
   const guid = (item.Guid ?? []).find(g => g.id.startsWith(`${scheme}://`))
   return guid?.id.slice(scheme.length + 3)
@@ -144,7 +155,8 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'labels': return tags(item.Label)
     case 'criticRating': return item.rating
     case 'audienceRating': return item.audienceRating
-    case 'userRating': return item.userRating
+    case 'userRating': return userStars(item)
+    case 'userRatingEmoji': return starEmoji(userStars(item))
     case 'addedAt': return localDate(item.addedAt)
     case 'lastViewedAt': return localDate(item.lastViewedAt)
     case 'viewCount': return item.viewCount ?? 0

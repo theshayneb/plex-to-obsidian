@@ -37,7 +37,9 @@ All of this can be changed in Settings → Properties: rename properties, reorde
 
 ## Existing notes
 
-Existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link (or whatever the Plex link property is called) to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.
+The contents of existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link (or whatever the Plex link property is called) to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.
+
+With **Fix names of existing notes** on (the default), a matched note is renamed to the file name format, e.g. `Heat` → `Heat (1995)`. Only the file name changes, the note stays in its folder, and links to it are updated if Obsidian's "Automatically update internal links" is on. A note that could belong to more than one Plex item is left alone, and so is one whose new name is already taken.
 
 ## Mobile
 

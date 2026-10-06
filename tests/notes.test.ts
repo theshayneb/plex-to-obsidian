@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   classify,
   defaultLibraryTarget,
+  addToIndex,
+  emptyIndex,
+  findNote,
   hasNote,
+  planRenames,
   isStarted,
   isWatched,
-  normalizeTitle,
   plexWebLink,
   ratingKeyFromLink,
   renderFileName,
@@ -85,16 +88,46 @@ describe('renderFileName', () => {
   })
 })
 
+const format = '{{title}} ({{year}})'
+const indexOf = (...names: string[]) => {
+  const index = emptyIndex()
+  for (const n of names) addToIndex(index, `Media/Movies/${n}.md`, n)
+  return index
+}
+
 describe('hasNote', () => {
-  const format = '{{title}} ({{year}})'
   it('matches by rating key', () => {
-    expect(hasNote({ ratingKeys: new Set(['1234']), names: new Set() }, movie, format)).toBe(true)
+    const index = emptyIndex()
+    addToIndex(index, 'Media/Movies/Whatever.md', 'Whatever', ['1234'])
+    expect(hasNote(index, movie, format)).toBe(true)
   })
   it('matches existing file names loosely, with or without the year', () => {
-    const names = (...n: string[]) => ({ ratingKeys: new Set<string>(), names: new Set(n.map(normalizeTitle)) })
-    expect(hasNote(names('Spider-Man - Into the Spider-Verse'), movie, format)).toBe(true)
-    expect(hasNote(names('spider-man into the spider-verse (2018)'), movie, format)).toBe(true)
-    expect(hasNote(names('Spider-Man'), movie, format)).toBe(false)
+    expect(hasNote(indexOf('Spider-Man - Into the Spider-Verse'), movie, format)).toBe(true)
+    expect(hasNote(indexOf('spider-man into the spider-verse (2018)'), movie, format)).toBe(true)
+    expect(hasNote(indexOf('Spider-Man'), movie, format)).toBe(false)
+  })
+})
+
+describe('planRenames', () => {
+  const heat: PlexItem = { ratingKey: '2', type: 'movie', title: 'Heat', year: 1995 }
+  const dune84: PlexItem = { ratingKey: '3', type: 'movie', title: 'Dune', year: 1984 }
+  const dune21: PlexItem = { ratingKey: '4', type: 'movie', title: 'Dune', year: 2021 }
+  const plan = (index: ReturnType<typeof emptyIndex>, ...items: PlexItem[]) =>
+    planRenames(items.map(item => ({ item, match: findNote(index, item, format) }))).map(p => `${p.item.ratingKey}:${p.path}`)
+
+  it('renames a note only one Plex item matches', () => {
+    expect(plan(indexOf('Heat', 'Dune'), heat)).toEqual(['2:Media/Movies/Heat.md'])
+  })
+  it('leaves a note two Plex items could match', () => {
+    expect(plan(indexOf('Dune'), dune84, dune21)).toEqual([])
+  })
+  it('leaves an item that matches two notes', () => {
+    expect(plan(indexOf('Heat', 'Heat (1995)'), heat)).toEqual([])
+  })
+  it('trusts the Plex link over a name match', () => {
+    const index = indexOf('Dune')
+    addToIndex(index, 'Media/Movies/Dune.md', 'Dune', ['4'])
+    expect(plan(index, dune84, dune21)).toEqual(['4:Media/Movies/Dune.md'])
   })
 })
 

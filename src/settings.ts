@@ -27,6 +27,8 @@ export interface PlexNotesSettings {
   imagesSubfolder: string
   fileNameFormat: string
   useDocumentaryGenre: boolean
+  /** Rename matching existing notes to the file name format. */
+  renameExistingNotes: boolean
   /** Keyed by Plex library section key. */
   libraries: Record<string, LibrarySetting>
   /** Frontmatter properties written to new notes, in order. */
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: PlexNotesSettings = {
   imagesSubfolder: 'Images',
   fileNameFormat: '{{title}} ({{year}})',
   useDocumentaryGenre: true,
+  renameExistingNotes: true,
   libraries: {},
   properties: DEFAULT_PROPERTIES,
   values: DEFAULT_VALUES,
@@ -144,6 +147,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .setValue(settings.fileNameFormat)
         .onChange(async value => {
           settings.fileNameFormat = value.trim() || DEFAULT_SETTINGS.fileNameFormat
+          await this.plugin.saveSettings()
+        }))
+
+    new Setting(containerEl)
+      .setName('Fix names of existing notes')
+      .setDesc('Rename notes that already exist for a Plex item to the file name format above, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
+      .addToggle(toggle => toggle
+        .setValue(settings.renameExistingNotes)
+        .onChange(async value => {
+          settings.renameExistingNotes = value
           await this.plugin.saveSettings()
         }))
 

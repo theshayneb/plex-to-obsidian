@@ -125,12 +125,68 @@ export function candidateNames(item: PlexItem, fileNameFormat: string): string[]
   return names.map(normalizeTitle).filter(Boolean)
 }
 
+/** Paths of existing notes, by the Plex rating key in their link property and by normalized file name. */
 export interface ExistingNotes {
-  ratingKeys: Set<string>
-  names: Set<string>
+  ratingKeys: Map<string, string>
+  names: Map<string, string[]>
+}
+
+export function emptyIndex(): ExistingNotes {
+  return { ratingKeys: new Map(), names: new Map() }
+}
+
+export function addToIndex(index: ExistingNotes, path: string, baseName: string, ratingKeys: string[] = []): void {
+  for (const key of ratingKeys) if (!index.ratingKeys.has(key)) index.ratingKeys.set(key, path)
+  const name = normalizeTitle(baseName)
+  if (!name) return
+  const paths = index.names.get(name) ?? []
+  if (!paths.includes(path)) paths.push(path)
+  index.names.set(name, paths)
+}
+
+export interface NoteMatch {
+  /** Every existing note the item could be; one when the match is unambiguous. */
+  paths: string[]
+  /** Matched through the Plex link, so it's certainly this item. */
+  byRatingKey: boolean
+}
+
+export function findNote(existing: ExistingNotes, item: PlexItem, fileNameFormat: string): NoteMatch | null {
+  const keyed = existing.ratingKeys.get(item.ratingKey)
+  if (keyed) return { paths: [keyed], byRatingKey: true }
+  const paths = new Set<string>()
+  for (const name of candidateNames(item, fileNameFormat)) {
+    for (const path of existing.names.get(name) ?? []) paths.add(path)
+  }
+  return paths.size ? { paths: [...paths], byRatingKey: false } : null
 }
 
 export function hasNote(existing: ExistingNotes, item: PlexItem, fileNameFormat: string): boolean {
-  if (existing.ratingKeys.has(item.ratingKey)) return true
-  return candidateNames(item, fileNameFormat).some(n => existing.names.has(n))
+  return findNote(existing, item, fileNameFormat) !== null
+}
+
+export interface RenamePlan {
+  item: PlexItem
+  path: string
+}
+
+/**
+ * Notes that can safely be renamed: each matched exactly one note, and no other Plex item matched
+ * that note. A note matched through its Plex link always belongs to that item.
+ */
+export function planRenames(matches: { item: PlexItem, match: NoteMatch | null }[]): RenamePlan[] {
+  const claims = new Map<string, number>()
+  const keyed = new Set<string>()
+  for (const { match } of matches) {
+    if (!match) continue
+    for (const path of match.paths) claims.set(path, (claims.get(path) ?? 0) + 1)
+    if (match.byRatingKey) keyed.add(match.paths[0])
+  }
+  const plans: RenamePlan[] = []
+  for (const { item, match } of matches) {
+    if (!match || match.paths.length !== 1) continue
+    const path = match.paths[0]
+    if (match.byRatingKey || (!keyed.has(path) && claims.get(path) === 1)) plans.push({ item, path })
+  }
+  return plans
 }

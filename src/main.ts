@@ -54,6 +54,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       notice.hide()
 
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]
+      if (result.renamed.length) {
+        parts.push(`renamed ${result.renamed.length}`)
+        console.log('Plex media notes: renamed', result.renamed)
+      }
       parts.push(`${result.skipped} already had one`)
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed`)

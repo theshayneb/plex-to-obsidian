@@ -25,6 +25,6 @@ npm run build
 - `src/notes.ts` (matching, file names, classification) and `src/properties.ts` (the Plex field → property catalogue, `FIELD_SOURCES`) are pure (no Obsidian imports) and unit tested; `src/sync.ts` does the vault work, `src/plex.ts` the HTTP calls (via `requestUrl`, which avoids CORS).
 - Properties are user-configurable (Settings → Properties). The defaults in `DEFAULT_PROPERTIES` (Genre, Summary, Date, Duration, Status, Link, Image, tags) are the owner's choice; don't rename them. To offer a new Plex field, add it to `FieldSource`, `FIELD_SOURCES` and `sourceValue`.
 - Documentaries never list "Documentary" as a genre.
-- Existing notes are never modified. Matching uses the Plex rating key inside the Plex link property (plus `Link`), then the file name.
+- Existing notes' contents are never modified; the only change allowed is renaming them to the file name format (`renameExistingNotes`, via `fileManager.renameFile`, in place, and only when `planRenames` says the match is unambiguous). Matching uses the Plex rating key inside the Plex link property (plus `Link`), then the file name.
 - Never put the Plex token in note content (Plex image URLs need it, which is why posters are downloaded, into `<media folder>/Images`).
 - UI text must be sentence case (Obsidian lint rule); brand words are allowed in `eslint.config.mjs`.

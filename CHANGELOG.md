@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.7] - 2026-10-06
+
+### Added
+- Existing notes that match a Plex item are renamed to the file name format (by default `Title (Year)`), so a note called `Heat` becomes `Heat (1995)` and characters that can't be in file names are dropped. Only the file name changes; the note's contents and properties are untouched, and links to it are updated according to Obsidian's "Automatically update internal links" setting. The note stays in its folder. A note that could belong to more than one Plex item (say `Dune`, with both the 1984 and 2021 films in Plex) is left alone, as is a rename whose new name is already taken. Turn it off with Settings → Fix names of existing notes.
+
 ## [0.0.6] - 2026-10-06
 
 ### Fixed

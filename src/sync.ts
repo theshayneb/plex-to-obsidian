@@ -1,12 +1,16 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import {
+  addToIndex,
   classify,
+  emptyIndex,
+  findNote,
   hasNote,
-  normalizeTitle,
+  planRenames,
   plexWebLink,
   ratingKeyFromLink,
   renderFileName,
   type ExistingNotes,
+  type LibraryTarget,
   type MediaKind,
   type PlexItem,
 } from './notes'
@@ -16,6 +20,7 @@ import { mergeLibraries, type PlexNotesSettings } from './settings'
 
 export interface SyncResult {
   created: string[]
+  renamed: { from: string, to: string }[]
   skipped: number
   failed: { title: string, error: string }[]
 }
@@ -47,48 +52,86 @@ export class PlexSync {
     mergeLibraries(this.settings, await plex.libraries())
     await this.saveSettings()
 
+    const format = this.settings.fileNameFormat
     const existing = this.indexExistingNotes()
-    const result: SyncResult = { created: [], skipped: 0, failed: [] }
+    const result: SyncResult = { created: [], renamed: [], skipped: 0, failed: [] }
 
+    const entries: { item: PlexItem, target: Exclude<LibraryTarget, 'skip'> }[] = []
     for (const [key, library] of Object.entries(this.settings.libraries)) {
       if (library.target === 'skip') continue
       progress(`Reading ${library.title}…`)
-      const items = await plex.libraryItems(key)
+      for (const item of await plex.libraryItems(key)) {
+        if (item.type === 'movie' || item.type === 'show') entries.push({ item, target: library.target })
+      }
+    }
 
-      for (const listed of items) {
-        if (listed.type !== 'movie' && listed.type !== 'show') continue
-        if (hasNote(existing, listed, this.settings.fileNameFormat)) {
-          result.skipped++
-          continue
-        }
+    if (this.settings.renameExistingNotes) {
+      progress('Checking existing note names…')
+      const matches = entries.map(({ item }) => ({ item, match: findNote(existing, item, format) }))
+      for (const { item, path } of planRenames(matches)) {
         try {
-          progress(`Creating ${listed.title}…`)
-          const item = (await plex.item(listed.ratingKey).catch(() => null)) ?? listed
-          const path = await this.createNote(plex, machineId, item, classify(item, library.target, this.settings.useDocumentaryGenre))
-          result.created.push(path)
-          existing.ratingKeys.add(item.ratingKey)
-          existing.names.add(normalizeTitle(renderFileName(this.settings.fileNameFormat, item)))
+          const to = await this.renameNote(path, item)
+          if (to) {
+            result.renamed.push({ from: path, to })
+            addToIndex(existing, to, renderFileName(format, item))
+          }
         } catch (err) {
-          result.failed.push({ title: listed.title, error: err instanceof Error ? err.message : String(err) })
+          result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
         }
+      }
+    }
+
+    for (const { item: listed, target } of entries) {
+      if (hasNote(existing, listed, format)) {
+        result.skipped++
+        continue
+      }
+      try {
+        progress(`Creating ${listed.title}…`)
+        const item = (await plex.item(listed.ratingKey).catch(() => null)) ?? listed
+        const path = await this.createNote(plex, machineId, item, classify(item, target, this.settings.useDocumentaryGenre))
+        result.created.push(path)
+        addToIndex(existing, path, renderFileName(format, item), [item.ratingKey])
+      } catch (err) {
+        result.failed.push({ title: listed.title, error: errorText(err) })
       }
     }
     return result
   }
 
+  /**
+   * Renames an existing note to the file name format, in its current folder. Only the file name
+   * changes; links to it are updated according to Obsidian's own setting. Returns the new path,
+   * or null when the name is already right or the new name is taken.
+   */
+  private async renameNote(path: string, item: PlexItem): Promise<string | null> {
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (!(file instanceof TFile)) return null
+    const baseName = renderFileName(this.settings.fileNameFormat, item)
+    if (file.basename === baseName) return null
+    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+    const to = normalizePath(parent ? `${parent}/${baseName}.${file.extension}` : `${baseName}.${file.extension}`)
+    const taken = this.app.vault.getAbstractFileByPath(to)
+    // A case-only change finds the note itself, which is fine to rename.
+    if (taken && taken !== file) {
+      throw new Error(`${to} already exists`)
+    }
+    await this.app.fileManager.renameFile(file, to)
+    return to
+  }
+
   /** Rating keys (from the Plex link property) and file names of every note in the three media folders. */
   private indexExistingNotes(): ExistingNotes {
-    const index: ExistingNotes = { ratingKeys: new Set(), names: new Set() }
+    const index: ExistingNotes = emptyIndex()
     const folders = (['movie', 'tv', 'documentary'] as const).map(kind => this.folderFor(kind))
     const linkProps = linkPropertyNames(this.settings.properties)
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(folder => file.path.startsWith(`${folder}/`))) continue
-      index.names.add(normalizeTitle(file.basename))
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter
-      for (const prop of linkProps) {
-        const ratingKey = ratingKeyFromLink(frontmatter?.[prop])
-        if (ratingKey) index.ratingKeys.add(ratingKey)
-      }
+      const ratingKeys = linkProps
+        .map(prop => ratingKeyFromLink(frontmatter?.[prop]))
+        .filter((key): key is string => key !== null)
+      addToIndex(index, file.path, file.basename, ratingKeys)
     }
     return index
   }
@@ -151,4 +194,8 @@ export class PlexSync {
       await this.app.vault.createFolder(current)
     }
   }
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }

@@ -8,6 +8,7 @@ const { TFile, TFolder } = vi.hoisted(() => {
   class TAbstractFile { constructor(public path: string) {} }
   class TFile extends TAbstractFile {
     get basename(): string { return this.path.split('/').pop()!.replace(/\.[^.]+$/, '') }
+    get extension(): string { return this.path.split('.').pop()! }
   }
   class TFolder extends TAbstractFile {}
   return { TFile, TFolder }
@@ -57,6 +58,14 @@ function makeApp(existing: Record<string, Record<string, unknown>>) {
       getFileCache: (f: { path: string }) => ({ frontmatter: frontmatter.get(f.path) }),
     },
     fileManager: {
+      renameFile: (f: { path: string }, to: string) => {
+        files.delete(f.path)
+        frontmatter.set(to, frontmatter.get(f.path)!)
+        frontmatter.delete(f.path)
+        f.path = to
+        files.set(to, f)
+        return Promise.resolve()
+      },
       processFrontMatter: (f: { path: string }, fn: (fm: Record<string, unknown>) => void) => {
         fn(frontmatter.get(f.path)!)
         return Promise.resolve()
@@ -98,7 +107,7 @@ beforeEach(() => {
 
 describe('PlexSync', () => {
   it('creates notes only for items without one, in the right folders', async () => {
-    const { app, frontmatter, binaries } = makeApp({ 'Media/Movies/Heat.md': {} })
+    const { app, files, frontmatter, binaries } = makeApp({ 'Media/Movies/Heat.md': { Status: 'abandoned' } })
     const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't' }
     const save = vi.fn(() => Promise.resolve())
 
@@ -106,6 +115,9 @@ describe('PlexSync', () => {
 
     expect(result.failed).toEqual([])
     expect(result.skipped).toBe(1)
+    expect(result.renamed).toEqual([{ from: 'Media/Movies/Heat.md', to: 'Media/Movies/Heat (1995).md' }])
+    expect(files.has('Media/Movies/Heat.md')).toBe(false)
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({ Status: 'abandoned' })
     expect(result.created.sort()).toEqual([
       'Media/Documentaries/Free Solo (2018).md',
       'Media/Movies/Arrival (2016).md',
@@ -130,6 +142,15 @@ describe('PlexSync', () => {
       3: { title: 'Music', type: 'artist', target: 'skip' },
     })
     expect(requested.some(u => u.includes('/sections/3/'))).toBe(false)
+  })
+
+  it('leaves names alone when renaming is off', async () => {
+    const { app, files } = makeApp({ 'Media/Movies/Heat.md': {} })
+    const settings = { ...defaultSettings(), serverUrl: 'plex:32400', token: 't', renameExistingNotes: false }
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(result.renamed).toEqual([])
+    expect(files.has('Media/Movies/Heat.md')).toBe(true)
+    expect(result.created).not.toContain('Media/Movies/Heat (1995).md')
   })
 
   it('does nothing on a second run', async () => {

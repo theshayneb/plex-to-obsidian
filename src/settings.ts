@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
-import { defaultLibraryTarget, type LibraryTarget } from './notes'
+import { defaultLibraryTarget, OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type PlexItem } from './notes'
 import { PlexClient } from './plex'
 import {
   DEFAULT_PROPERTIES,
@@ -26,6 +26,8 @@ export interface PlexNotesSettings {
   /** Subfolder of each media folder that downloaded posters go in. */
   imagesSubfolder: string
   fileNameFormat: string
+  /** What each character that can't be in a file name becomes; missing or '' drops it. */
+  fileNameReplacements: Record<string, string>
   useDocumentaryGenre: boolean
   /** Rename matching existing notes to the file name format. */
   renameExistingNotes: boolean
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: PlexNotesSettings = {
   documentariesFolder: 'Media/Documentaries',
   imagesSubfolder: 'Images',
   fileNameFormat: '{{title}} ({{year}})',
+  fileNameReplacements: {},
   useDocumentaryGenre: true,
   renameExistingNotes: true,
   libraries: {},
@@ -55,6 +58,12 @@ export const DEFAULT_SETTINGS: PlexNotesSettings = {
 export function defaultSettings(): PlexNotesSettings {
   return structuredClone(DEFAULT_SETTINGS)
 }
+
+const PREVIEW_ITEMS: PlexItem[] = [
+  { ratingKey: '1', type: 'movie', title: 'Mission: Impossible', year: 1996 },
+  { ratingKey: '2', type: 'movie', title: 'Face/Off', year: 1997 },
+  { ratingKey: '3', type: 'movie', title: 'What About Bob?', year: 1991 },
+]
 
 const TARGET_LABELS: Record<LibraryTarget, string> = {
   movie: 'Movies',
@@ -148,7 +157,34 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .onChange(async value => {
           settings.fileNameFormat = value.trim() || DEFAULT_SETTINGS.fileNameFormat
           await this.plugin.saveSettings()
+          updatePreview()
         }))
+
+    const preview = new Setting(containerEl)
+      .setName('Characters in file names')
+    const updatePreview = () => {
+      const naming = { format: settings.fileNameFormat, replacements: settings.fileNameReplacements }
+      const examples = PREVIEW_ITEMS.map(item => `${item.title} → ${renderFileName(naming, item)}`)
+      preview.setDesc(`These characters can't be in file names. Choose what each becomes, or leave it empty to drop it. For example: ${examples.join(';  ')}`)
+    }
+    updatePreview()
+
+    const chars: { key: string, label: string }[] = [
+      ...REPLACEABLE_CHARS.map(char => ({ key: char, label: `Replace ${char}` })),
+      { key: 'other', label: `Replace ${OTHER_CHARS}` },
+    ]
+    for (const { key, label } of chars) {
+      new Setting(containerEl)
+        .setName(label)
+        .addText(text => text
+          .setPlaceholder('Dropped')
+          .setValue(settings.fileNameReplacements[key] ?? '')
+          .onChange(async value => {
+            settings.fileNameReplacements[key] = value
+            await this.plugin.saveSettings()
+            updatePreview()
+          }))
+    }
 
     new Setting(containerEl)
       .setName('Fix names of existing notes')

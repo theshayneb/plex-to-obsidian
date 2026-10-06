@@ -92,20 +92,40 @@ export function ratingKeyFromLink(link: unknown): string | null {
   return match ? match[1] : null
 }
 
-export function sanitizeFileName(name: string): string {
+/** Characters that can't be in file names (or break links), each with its own replacement setting. */
+export const REPLACEABLE_CHARS = [':', '?', '/', '"', '*', '#'] as const
+/** The rest share one replacement setting, stored under 'other'. */
+export const OTHER_CHARS = '\\ < > | ^ [ ]'
+const FORBIDDEN = /[\\/:*?"<>|#^[\]]/g
+
+/** How file names are built: the format, and what each forbidden character becomes ('' drops it). */
+export interface FileNaming {
+  format: string
+  replacements: Record<string, string>
+}
+
+function replacementFor(char: string, replacements: Record<string, string>): string {
+  const value = (REPLACEABLE_CHARS as readonly string[]).includes(char) ? replacements[char] : replacements.other
+  return (value ?? '').replace(FORBIDDEN, '')
+}
+
+/** Swaps each character that can't be in file names for its replacement, as is ("Mission: Impossible" → "Mission- Impossible"). */
+export function sanitizeFileName(name: string, replacements: Record<string, string> = {}): string {
   return name
-    .replace(/[\\/:*?"<>|#^[\]]/g, '')
+    .replace(FORBIDDEN, (char: string) => replacementFor(char, replacements))
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/[. ]+$/, '')
 }
 
-export function renderFileName(format: string, item: PlexItem): string {
-  const raw = format
+export function renderFileName(naming: FileNaming, item: PlexItem): string {
+  const raw = naming.format
     .replace(/\{\{\s*title\s*\}\}/gi, item.title)
     .replace(/\{\{\s*year\s*\}\}/gi, item.year ? String(item.year) : '')
     .replace(/\(\s*\)|\[\s*\]/g, '')
-  return sanitizeFileName(raw) || sanitizeFileName(item.title) || item.ratingKey
+  return sanitizeFileName(raw, naming.replacements)
+    || sanitizeFileName(item.title, naming.replacements)
+    || item.ratingKey
 }
 
 /** Loose key for comparing titles with file names: case, accents, punctuation and spacing ignored. */
@@ -119,8 +139,8 @@ export function normalizeTitle(text: string): string {
 }
 
 /** Names an existing note might have for this item. */
-export function candidateNames(item: PlexItem, fileNameFormat: string): string[] {
-  const names = [item.title, renderFileName(fileNameFormat, item)]
+export function candidateNames(item: PlexItem, naming: FileNaming): string[] {
+  const names = [item.title, renderFileName(naming, item)]
   if (item.year) names.push(`${item.title} (${item.year})`)
   return names.map(normalizeTitle).filter(Boolean)
 }
@@ -151,18 +171,18 @@ export interface NoteMatch {
   byRatingKey: boolean
 }
 
-export function findNote(existing: ExistingNotes, item: PlexItem, fileNameFormat: string): NoteMatch | null {
+export function findNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming): NoteMatch | null {
   const keyed = existing.ratingKeys.get(item.ratingKey)
   if (keyed) return { paths: [keyed], byRatingKey: true }
   const paths = new Set<string>()
-  for (const name of candidateNames(item, fileNameFormat)) {
+  for (const name of candidateNames(item, naming)) {
     for (const path of existing.names.get(name) ?? []) paths.add(path)
   }
   return paths.size ? { paths: [...paths], byRatingKey: false } : null
 }
 
-export function hasNote(existing: ExistingNotes, item: PlexItem, fileNameFormat: string): boolean {
-  return findNote(existing, item, fileNameFormat) !== null
+export function hasNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming): boolean {
+  return findNote(existing, item, naming) !== null
 }
 
 export interface RenamePlan {

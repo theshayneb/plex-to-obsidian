@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.8] - 2026-10-06
+
+### Added
+- Settings → Characters in file names: choose what `:`, `?`, `/`, `"`, `*` and `#` (and, together, `\ < > | ^ [ ]`) become in file names, instead of always dropping them. For example `:` → `-` turns `Mission: Impossible` into `Mission- Impossible (1996)`. Empty still drops the character. A preview shows the result as you type. This applies to new notes and, with "Fix names of existing notes" on, renames existing ones to match.
+
 ## [0.0.7] - 2026-10-06
 
 ### Added

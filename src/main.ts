@@ -31,6 +31,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       ...defaults,
       ...data,
       libraries: { ...data?.libraries },
+      fileNameReplacements: { ...data?.fileNameReplacements },
       properties: Array.isArray(data?.properties) ? data.properties : defaults.properties,
       values: { ...defaults.values, ...data?.values, tags: { ...defaults.values.tags, ...data?.values?.tags } },
     }

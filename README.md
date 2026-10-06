@@ -35,6 +35,10 @@ All of this can be changed in Settings → Properties: rename properties, reorde
 - **Genre** leaves out "Documentary" for documentaries.
 - **tags** is `movie`, `tv_show` or `documentary`. With "Detect documentaries by genre" on, anything with the Documentary genre counts as a documentary and goes to the documentaries folder, whatever library it's in.
 
+## File names
+
+New notes are named with the **File name** setting (default `{{title}} ({{year}})`). Characters that can't be in file names are dropped, unless you choose a replacement for them under **Characters in file names**; e.g. `:` → `-` gives `Mission- Impossible (1996)`.
+
 ## Existing notes
 
 The contents of existing notes are never changed. An item is skipped when a note in any of the three folders (including subfolders) either has a Link (or whatever the Plex link property is called) to that Plex item or has a file name matching its title, with or without the year. Case, punctuation and accents are ignored when matching.

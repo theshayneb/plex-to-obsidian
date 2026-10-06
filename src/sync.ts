@@ -10,6 +10,7 @@ import {
   ratingKeyFromLink,
   renderFileName,
   type ExistingNotes,
+  type FileNaming,
   type LibraryTarget,
   type MediaKind,
   type PlexItem,
@@ -34,6 +35,10 @@ export class PlexSync {
     private readonly saveSettings: () => Promise<void>,
   ) {}
 
+  private naming(): FileNaming {
+    return { format: this.settings.fileNameFormat, replacements: this.settings.fileNameReplacements }
+  }
+
   private folderFor(kind: MediaKind): string {
     const folder = kind === 'movie'
       ? this.settings.moviesFolder
@@ -52,7 +57,7 @@ export class PlexSync {
     mergeLibraries(this.settings, await plex.libraries())
     await this.saveSettings()
 
-    const format = this.settings.fileNameFormat
+    const naming = this.naming()
     const existing = this.indexExistingNotes()
     const result: SyncResult = { created: [], renamed: [], skipped: 0, failed: [] }
 
@@ -67,13 +72,13 @@ export class PlexSync {
 
     if (this.settings.renameExistingNotes) {
       progress('Checking existing note names…')
-      const matches = entries.map(({ item }) => ({ item, match: findNote(existing, item, format) }))
+      const matches = entries.map(({ item }) => ({ item, match: findNote(existing, item, naming) }))
       for (const { item, path } of planRenames(matches)) {
         try {
           const to = await this.renameNote(path, item)
           if (to) {
             result.renamed.push({ from: path, to })
-            addToIndex(existing, to, renderFileName(format, item))
+            addToIndex(existing, to, renderFileName(naming, item))
           }
         } catch (err) {
           result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
@@ -82,7 +87,7 @@ export class PlexSync {
     }
 
     for (const { item: listed, target } of entries) {
-      if (hasNote(existing, listed, format)) {
+      if (hasNote(existing, listed, naming)) {
         result.skipped++
         continue
       }
@@ -91,7 +96,7 @@ export class PlexSync {
         const item = (await plex.item(listed.ratingKey).catch(() => null)) ?? listed
         const path = await this.createNote(plex, machineId, item, classify(item, target, this.settings.useDocumentaryGenre))
         result.created.push(path)
-        addToIndex(existing, path, renderFileName(format, item), [item.ratingKey])
+        addToIndex(existing, path, renderFileName(naming, item), [item.ratingKey])
       } catch (err) {
         result.failed.push({ title: listed.title, error: errorText(err) })
       }
@@ -107,7 +112,7 @@ export class PlexSync {
   private async renameNote(path: string, item: PlexItem): Promise<string | null> {
     const file = this.app.vault.getAbstractFileByPath(path)
     if (!(file instanceof TFile)) return null
-    const baseName = renderFileName(this.settings.fileNameFormat, item)
+    const baseName = renderFileName(this.naming(), item)
     if (file.basename === baseName) return null
     const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
     const to = normalizePath(parent ? `${parent}/${baseName}.${file.extension}` : `${baseName}.${file.extension}`)
@@ -139,7 +144,7 @@ export class PlexSync {
   private async createNote(plex: PlexClient, machineId: string, item: PlexItem, kind: MediaKind): Promise<string> {
     const folder = this.folderFor(kind)
     await this.ensureFolder(folder)
-    const baseName = renderFileName(this.settings.fileNameFormat, item)
+    const baseName = renderFileName(this.naming(), item)
     const path = this.freePath(folder, baseName, 'md')
 
     const { properties, values } = this.settings

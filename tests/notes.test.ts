@@ -81,14 +81,25 @@ describe('links', () => {
 
 describe('renderFileName', () => {
   it('fills the format and strips characters files cannot use', () => {
-    expect(renderFileName('{{title}} ({{year}})', movie)).toBe('Spider-Man Into the Spider-Verse (2018)')
+    expect(renderFileName({ format: '{{title}} ({{year}})', replacements: {} }, movie)).toBe('Spider-Man Into the Spider-Verse (2018)')
   })
   it('drops empty brackets when there is no year', () => {
-    expect(renderFileName('{{title}} ({{year}})', { ...movie, year: undefined })).toBe('Spider-Man Into the Spider-Verse')
+    expect(renderFileName({ format: '{{title}} ({{year}})', replacements: {} }, { ...movie, year: undefined })).toBe('Spider-Man Into the Spider-Verse')
+  })
+  it('swaps in the chosen replacements as they are', () => {
+    const naming = { format: '{{title}} ({{year}})', replacements: { ':': '-', '/': '-', '?': '', other: '_' } }
+    expect(renderFileName(naming, movie)).toBe('Spider-Man- Into the Spider-Verse (2018)')
+    expect(renderFileName(naming, { ...movie, title: 'Face/Off' })).toBe('Face-Off (2018)')
+    expect(renderFileName(naming, { ...movie, title: 'What About Bob?' })).toBe('What About Bob (2018)')
+    expect(renderFileName(naming, { ...movie, title: 'A|B' })).toBe('A_B (2018)')
+    expect(renderFileName(naming, { ...movie, title: '10:30' })).toBe('10-30 (2018)')
+  })
+  it('never lets a replacement add a forbidden character', () => {
+    expect(renderFileName({ format: '{{title}}', replacements: { ':': '/:' } }, { ...movie, title: 'A: B' })).toBe('A B')
   })
 })
 
-const format = '{{title}} ({{year}})'
+const format = { format: '{{title}} ({{year}})', replacements: {} }
 const indexOf = (...names: string[]) => {
   const index = emptyIndex()
   for (const n of names) addToIndex(index, `Media/Movies/${n}.md`, n)

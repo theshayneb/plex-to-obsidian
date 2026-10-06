@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.12] - 2026-10-06
+
+### Added
+- Property names in Settings → each library → Properties now suggest the properties already used in your vault as you type, most used first. Pick one, or keep typing a new name.
+
 ## [0.0.11] - 2026-10-06
 
 ### Added

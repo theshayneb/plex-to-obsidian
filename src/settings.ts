@@ -10,6 +10,7 @@ import {
 } from './config'
 import { OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
 import { PlexClient } from './plex'
+import { PropertyNameSuggest } from './property-suggest'
 import { defaultProperties, defaultValues, FIELD_SOURCES, type FieldSource } from './properties'
 
 const PREVIEW_ITEMS: PlexItem[] = [
@@ -191,18 +192,21 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(el).setName('Properties').setHeading()
     el.createEl('p', {
       cls: 'setting-item-description',
-      text: 'Properties added to new notes, in this order. Choose the name of each property and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in. Switch on the toggle next to a property to also add a property to existing notes that match a Plex item, when it is missing or empty there; nothing else in those notes changes.',
+      text: 'Properties added to new notes, in this order. Choose the name of each property (start typing to pick from the properties already in your vault) and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in. Switch on the toggle next to a property to also add a property to existing notes that match a Plex item, when it is missing or empty there; nothing else in those notes changes.',
     })
 
     lib.properties.forEach((mapping, index) => {
       const row = new Setting(el)
-        .addText(text => text
-          .setPlaceholder('Property name')
-          .setValue(mapping.name)
-          .onChange(async value => {
-            mapping.name = value
-            await this.save()
-          }))
+        .addText(text => {
+          text
+            .setPlaceholder('Property name')
+            .setValue(mapping.name)
+            .onChange(async value => {
+              mapping.name = value
+              await this.save()
+            })
+          new PropertyNameSuggest(this.app, text.inputEl)
+        })
         .addDropdown(dropdown => {
           for (const [value, label] of Object.entries(FIELD_SOURCES)) dropdown.addOption(value, label)
           dropdown

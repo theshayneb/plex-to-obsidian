@@ -57,7 +57,7 @@ describe('buildFrontmatter', () => {
       { name: 'Kind', source: 'typeTag' },
       { name: 'Source', source: 'text', text: 'Plex' },
       { name: '  ', source: 'summary' },
-    ], { ...ctx, values: { watched: 'seen', unwatched: 'to watch', tags: { movie: 'film', tv: 'series', documentary: 'doc' } } })
+    ], { ...ctx, values: { watched: 'seen', started: 'watching', unwatched: 'to watch', tags: { movie: 'film', tv: 'series', documentary: 'doc' } } })
     expect(fm).toEqual({ Runtime: '1h 56m', Genre: ['Denis Villeneuve'], Watched: 'seen', Kind: ['film'], Source: 'Plex' })
   })
 
@@ -69,6 +69,16 @@ describe('buildFrontmatter', () => {
 
 describe('sourceValue', () => {
   const value = (source: FieldSource, item: PlexItem = movie, c: NoteContext = ctx) => sourceValue(source, item, c)
+
+  it('sets completed, started or pending', () => {
+    expect(value('status')).toBe('completed')
+    expect(value('status', { ...movie, viewCount: 0, viewOffset: 600000 })).toBe('started')
+    expect(value('status', { ...movie, viewCount: 0 })).toBe('pending')
+    const show: PlexItem = { ratingKey: '9', type: 'show', title: 'S', leafCount: 10 }
+    expect(value('status', { ...show, viewedLeafCount: 10 })).toBe('completed')
+    expect(value('status', { ...show, viewedLeafCount: 3 })).toBe('started')
+    expect(value('status', { ...show, viewedLeafCount: 0 })).toBe('pending')
+  })
 
   it('removes the Documentary genre from documentaries only', () => {
     const doc = { ...movie, Genre: [{ tag: 'Documentary' }, { tag: 'History' }] }

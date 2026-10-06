@@ -3,6 +3,7 @@ import {
   classify,
   defaultLibraryTarget,
   hasNote,
+  isStarted,
   isWatched,
   normalizeTitle,
   plexWebLink,
@@ -94,5 +95,15 @@ describe('hasNote', () => {
     expect(hasNote(names('Spider-Man - Into the Spider-Verse'), movie, format)).toBe(true)
     expect(hasNote(names('spider-man into the spider-verse (2018)'), movie, format)).toBe(true)
     expect(hasNote(names('Spider-Man'), movie, format)).toBe(false)
+  })
+})
+
+describe('isStarted', () => {
+  it('is a movie stopped part way or a partly watched show', () => {
+    expect(isStarted({ ...movie, viewCount: 0, viewOffset: 1000 })).toBe(true)
+    expect(isStarted({ ...movie, viewOffset: 1000 })).toBe(false)
+    expect(isStarted(show)).toBe(true)
+    expect(isStarted({ ...show, viewedLeafCount: 11 })).toBe(false)
+    expect(isStarted({ ...show, viewedLeafCount: 0 })).toBe(false)
   })
 })

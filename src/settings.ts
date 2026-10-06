@@ -241,6 +241,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     this.addValueSetting('Watched', 'For "Watched status": a movie that has been played, or a show with every episode watched.',
       () => settings.values.watched, v => { settings.values.watched = v || DEFAULT_VALUES.watched })
+    this.addValueSetting('Started', 'For "Watched status": a movie stopped part way, or a show with some episodes watched.',
+      () => settings.values.started, v => { settings.values.started = v || DEFAULT_VALUES.started })
     this.addValueSetting('Not watched', 'For "Watched status": everything else.',
       () => settings.values.unwatched, v => { settings.values.unwatched = v || DEFAULT_VALUES.unwatched })
     this.addValueSetting('Movie tag', 'For "Type tag".',

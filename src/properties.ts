@@ -1,5 +1,5 @@
 // Which Plex field fills which frontmatter property. No Obsidian imports, so it can be unit tested.
-import { genresOf, isDocumentaryGenre, isWatched, type MediaKind, type PlexItem, type PlexTag } from './notes'
+import { genresOf, isDocumentaryGenre, isStarted, isWatched, type MediaKind, type PlexItem, type PlexTag } from './notes'
 
 export type FieldSource =
   | 'genres' | 'summary' | 'tagline' | 'title' | 'originalTitle'
@@ -70,12 +70,14 @@ export const DEFAULT_PROPERTIES: PropertyMapping[] = [
 
 export interface PropertyValues {
   watched: string
+  started: string
   unwatched: string
   tags: Record<MediaKind, string>
 }
 
 export const DEFAULT_VALUES: PropertyValues = {
   watched: 'completed',
+  started: 'started',
   unwatched: 'pending',
   tags: { movie: 'movie', tv: 'tv_show', documentary: 'documentary' },
 }
@@ -127,7 +129,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'year': return item.year
     case 'durationMinutes': return item.duration ? Math.round(item.duration / 60000) : undefined
     case 'durationText': return durationText(item.duration)
-    case 'status': return isWatched(item) ? ctx.values.watched : ctx.values.unwatched
+    case 'status': return isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched
     case 'plexLink': return ctx.link
     case 'poster': return ctx.image ?? undefined
     case 'typeTag': return [ctx.values.tags[ctx.kind]]

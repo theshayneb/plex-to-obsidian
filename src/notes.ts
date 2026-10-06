@@ -16,6 +16,8 @@ export interface PlexItem {
   originallyAvailableAt?: string
   duration?: number
   viewCount?: number
+  /** Milliseconds into a partly watched movie. */
+  viewOffset?: number
   leafCount?: number
   viewedLeafCount?: number
   thumb?: string
@@ -69,6 +71,13 @@ export function isWatched(item: PlexItem): boolean {
     return total > 0 && (item.viewedLeafCount ?? 0) >= total
   }
   return (item.viewCount ?? 0) > 0
+}
+
+/** Partly watched: a movie stopped part way, or a show with some but not all episodes watched. */
+export function isStarted(item: PlexItem): boolean {
+  if (isWatched(item)) return false
+  if (item.type === 'show') return (item.viewedLeafCount ?? 0) > 0
+  return (item.viewOffset ?? 0) > 0
 }
 
 export function plexWebLink(machineIdentifier: string, ratingKey: string): string {

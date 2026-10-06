@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.4] - 2026-10-06
+
+### Added
+- A third watch status, `started`, for a movie stopped part way through or a show with some but not all episodes watched. Its word can be changed in Settings → Property values, like `completed` and `pending`.
+
 ## [0.0.3] - 2026-10-06
 
 ### Added

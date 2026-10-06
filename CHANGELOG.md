@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.2] - 2026-10-06
+
+### Changed
+- Posters are now saved next to the notes, in an `Images` subfolder of the movies, TV shows or documentaries folder (e.g. `Media/Movies/Images`), instead of `Media/Posters`. The Posters folder setting is replaced by "Images subfolder". Posters already downloaded to `Media/Posters` aren't moved.
+
 ## [0.0.1] - 2026-10-06
 
 ### Added

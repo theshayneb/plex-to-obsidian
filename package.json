@@ -1,6 +1,6 @@
 {
   "name": "plex-media-notes",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Create Obsidian notes for the movies and TV shows on a Plex server",
   "main": "main.js",
   "scripts": {

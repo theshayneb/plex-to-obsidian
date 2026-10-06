@@ -27,6 +27,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const data = (await this.loadData()) as Partial<PlexNotesSettings> | null
     this.settings = { ...DEFAULT_SETTINGS, ...data, libraries: { ...data?.libraries } }
+    delete (this.settings as Partial<PlexNotesSettings> & { postersFolder?: string }).postersFolder
   }
 
   async saveSettings(): Promise<void> {

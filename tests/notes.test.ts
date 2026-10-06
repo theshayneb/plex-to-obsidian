@@ -100,7 +100,7 @@ describe('hasNote', () => {
 
 describe('buildFrontmatter', () => {
   it('maps Plex fields to the note properties in order', () => {
-    const fm = buildFrontmatter(movie, 'movie', 'LINK', '[[Media/Posters/x.jpg]]')
+    const fm = buildFrontmatter(movie, 'movie', 'LINK', '[[Media/Movies/Images/x.jpg]]')
     expect(fm).toEqual({
       Genre: ['Animation', 'Action'],
       Summary: 'Miles Morales becomes Spider-Man.',
@@ -108,7 +108,7 @@ describe('buildFrontmatter', () => {
       Duration: 117,
       Status: 'completed',
       Link: 'LINK',
-      Image: '[[Media/Posters/x.jpg]]',
+      Image: '[[Media/Movies/Images/x.jpg]]',
       tags: ['movie'],
     })
     expect(Object.keys(fm)).toEqual(['Genre', 'Summary', 'Date', 'Duration', 'Status', 'Link', 'Image', 'tags'])

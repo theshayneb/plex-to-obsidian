@@ -118,12 +118,12 @@ describe('PlexSync', () => {
       Duration: 116,
       Status: 'completed',
       Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F1',
-      Image: '[[Media/Posters/Arrival (2016).jpg]]',
+      Image: '[[Media/Movies/Images/Arrival (2016).jpg]]',
       tags: ['movie'],
     })
     expect(frontmatter.get('Media/TV Shows/Severance (2022).md')).toMatchObject({ Status: 'completed', tags: ['tv_show'] })
     expect(frontmatter.get('Media/Documentaries/Free Solo (2018).md')).toMatchObject({ Status: 'pending', tags: ['documentary'] })
-    expect(binaries).toEqual(['Media/Posters/Arrival (2016).jpg'])
+    expect(binaries).toEqual(['Media/Movies/Images/Arrival (2016).jpg'])
     expect(settings.libraries).toEqual({
       1: { title: 'Movies', type: 'movie', target: 'movie' },
       2: { title: 'TV Shows', type: 'show', target: 'tv' },

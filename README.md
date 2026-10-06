@@ -21,7 +21,7 @@ Date: 2016-11-11
 Duration: 116
 Status: completed
 Link: https://app.plex.tv/desktop/#!/server/…/details?key=%2Flibrary%2Fmetadata%2F1234
-Image: "[[Media/Posters/Arrival (2016).jpg]]"
+Image: "[[Media/Movies/Images/Arrival (2016).jpg]]"
 tags:
   - movie
 ---
@@ -29,7 +29,7 @@ tags:
 
 - **Duration** is in minutes. For TV shows it's Plex's typical episode length.
 - **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; otherwise `pending`.
-- **Image** is the poster, downloaded into the posters folder (the Plex image URL would expose your token).
+- **Image** is the poster, downloaded into an `Images` subfolder of the note's folder (e.g. `Media/Movies/Images`). The subfolder name can be changed in settings. The Plex image URL itself would expose your token.
 - **tags** is `movie`, `tv_show` or `documentary`. With "Detect documentaries by genre" on, anything with the Documentary genre counts as a documentary and goes to the documentaries folder, whatever library it's in.
 
 ## Existing notes

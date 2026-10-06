@@ -15,7 +15,8 @@ export interface PlexNotesSettings {
   moviesFolder: string
   tvFolder: string
   documentariesFolder: string
-  postersFolder: string
+  /** Subfolder of each media folder that downloaded posters go in. */
+  imagesSubfolder: string
   fileNameFormat: string
   useDocumentaryGenre: boolean
   /** Keyed by Plex library section key. */
@@ -28,7 +29,7 @@ export const DEFAULT_SETTINGS: PlexNotesSettings = {
   moviesFolder: 'Media/Movies',
   tvFolder: 'Media/TV Shows',
   documentariesFolder: 'Media/Documentaries',
-  postersFolder: 'Media/Posters',
+  imagesSubfolder: 'Images',
   fileNameFormat: '{{title}} ({{year}})',
   useDocumentaryGenre: true,
   libraries: {},
@@ -115,7 +116,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     this.addFolderSetting('Movies folder', 'moviesFolder')
     this.addFolderSetting('TV shows folder', 'tvFolder')
     this.addFolderSetting('Documentaries folder', 'documentariesFolder')
-    this.addFolderSetting('Posters folder', 'postersFolder', 'Downloaded posters are saved here and linked from the Image property.')
+    this.addFolderSetting('Images subfolder', 'imagesSubfolder', 'Posters are saved in this subfolder of the movies, TV shows or documentaries folder and linked from the Image property.')
 
     new Setting(containerEl)
       .setName('File name')
@@ -141,7 +142,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
   private addFolderSetting(
     name: string,
-    key: 'moviesFolder' | 'tvFolder' | 'documentariesFolder' | 'postersFolder',
+    key: 'moviesFolder' | 'tvFolder' | 'documentariesFolder' | 'imagesSubfolder',
     desc?: string,
   ): void {
     const setting = new Setting(this.containerEl).setName(name)

@@ -95,7 +95,7 @@ export class PlexSync {
     const baseName = renderFileName(this.settings.fileNameFormat, item)
     const path = this.freePath(folder, baseName, 'md')
 
-    const image = item.thumb ? await this.savePoster(plex, item.thumb, baseName) : null
+    const image = item.thumb ? await this.savePoster(plex, item.thumb, folder, baseName) : null
     const frontmatter = buildFrontmatter(item, kind, plexWebLink(machineId, item.ratingKey), image)
 
     const file = await this.app.vault.create(path, '')
@@ -105,9 +105,9 @@ export class PlexSync {
     return path
   }
 
-  /** Saves the poster in the posters folder and returns a link to it for the Image property. */
-  private async savePoster(plex: PlexClient, thumb: string, baseName: string): Promise<string | null> {
-    const folder = normalizePath(this.settings.postersFolder)
+  /** Saves the poster in the media folder's images subfolder and returns a link to it for the Image property. */
+  private async savePoster(plex: PlexClient, thumb: string, mediaFolder: string, baseName: string): Promise<string | null> {
+    const folder = normalizePath(`${mediaFolder}/${this.settings.imagesSubfolder}`)
     for (const ext of ['jpg', 'png', 'webp']) {
       const existing = this.app.vault.getAbstractFileByPath(`${folder}/${baseName}.${ext}`)
       if (existing instanceof TFile) return `[[${existing.path}]]`

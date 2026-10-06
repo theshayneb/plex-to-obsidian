@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.18] - 2026-10-06
+
+### Added
+- "Skip every time" in the approval pop-up: the Plex item is added to an ignore list, and every later sync (including background play count updates) passes over it completely: no new note, rename, fill-in or play count. Ignored items still count when matching, so their notes are never taken for another item.
+- Settings → All libraries → Skipped every time: lists the ignored items with their library and date, each with "Un-ignore", plus "Un-ignore all". An un-ignored item is asked about again on the next sync.
+
 ## [0.0.17] - 2026-10-06
 
 ### Fixed

@@ -13,6 +13,7 @@ import {
   ratingKeyFromLink,
   renderFileName,
   sanitizeFileName,
+  displayName,
   type ExistingNotes,
   type FileNaming,
   type MediaKind,
@@ -32,6 +33,10 @@ export interface SyncResult {
   declined: number
   /** You pressed Stop. */
   stopped: boolean
+  /** Items passed over because "Skip every time" was chosen for them, now or before. */
+  ignored: number
+  /** Items "Skip every time" was chosen for in this sync. */
+  newlyIgnored: string[]
   skipped: number
   failed: { title: string, error: string }[]
 }
@@ -97,7 +102,7 @@ export class PlexSync {
    * Whether to go ahead with one creation or change, and which of its lines were unticked
    * (those parts are left out). Null means no.
    */
-  private async ask(request: ApprovalRequest, result: SyncResult): Promise<Approval | null> {
+  private async ask(request: ApprovalRequest, result: SyncResult, item: PlexItem, lib: LibrarySetting): Promise<Approval | null> {
     if (result.stopped) return null
     if (!this.settings.askBeforeChanges || !this.approve) return { excluded: new Set(), edits: {} }
     const remembered = this.approvedAll[request.action]
@@ -108,6 +113,12 @@ export class PlexSync {
     if (choice === 'all') this.approvedAll[request.action] = skipped
     if (choice === 'stop') result.stopped = true
     if (choice === 'apply' || choice === 'all') return { excluded: skipped, edits: edits ?? {} }
+    if (choice === 'ignore') {
+      this.settings.ignored[item.ratingKey] = { name: displayName(item), library: lib.title, since: Date.now() }
+      result.newlyIgnored.push(displayName(item))
+      result.ignored++
+      return null
+    }
     result.declined++
     return null
   }
@@ -145,7 +156,7 @@ export class PlexSync {
       video: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'video')),
       music: this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === 'music')),
     }
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
@@ -156,6 +167,8 @@ export class PlexSync {
         if (wanted) entries.push({ item, lib })
       }
     }
+
+    result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
     const full = mode === 'full'
     const renaming = full && this.settings.renameExistingNotes
@@ -174,6 +187,8 @@ export class PlexSync {
         for (const { item, path } of plans) {
           position++
           if (result.stopped) break
+          // Ignored items still count above, so their notes are never taken for another item.
+          if (this.isIgnored(item)) continue
           const { lib, kind } = this.libraryFor(item, libOf.get(item)!)
           const file = this.app.vault.getAbstractFileByPath(path)
           if (!(file instanceof TFile)) continue
@@ -214,7 +229,7 @@ export class PlexSync {
           for (const name of plays?.names ?? []) {
             lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.count), edit: 'number' })
           }
-          const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result)
+          const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
           const { excluded, edits } = approval
           // Leave out whatever was unticked, and use whatever was edited.
@@ -269,10 +284,11 @@ export class PlexSync {
         }
       }
     }
-    if (!full) return result
+    if (!full) return this.finish(result)
 
-    const toCreate = entries.filter(({ item, lib }) => !hasNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy))
-    result.skipped = entries.length - toCreate.length
+    const toCreate = entries.filter(({ item, lib }) =>
+      !this.isIgnored(item) && !hasNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy))
+    result.skipped = entries.length - toCreate.length - result.ignored
     let position = 0
     for (const { item: listed, lib: listedLib } of toCreate) {
       position++
@@ -288,7 +304,7 @@ export class PlexSync {
         const item = await this.fullItem(plex, listed)
         const { lib, kind } = this.libraryFor(item, listedLib)
         const preview = this.previewNote(machineId, item, lib, kind)
-        const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result)
+        const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result, item, lib)
         if (!approval) continue
         const { excluded, edits } = approval
         const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
@@ -310,6 +326,16 @@ export class PlexSync {
         result.failed.push({ title: listed.title, error: errorText(err) })
       }
     }
+    return this.finish(result)
+  }
+
+  private isIgnored(item: PlexItem): boolean {
+    return item.ratingKey in this.settings.ignored
+  }
+
+  /** Saves newly ignored items before handing back the result. */
+  private async finish(result: SyncResult): Promise<SyncResult> {
+    if (result.newlyIgnored.length) await this.saveSettings()
     return result
   }
 

@@ -380,6 +380,56 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Arrival.md')).toMatchObject({ Genre: ['Drama'], Duration: 120, Summary: 'Linguist meets aliens.' })
   })
 
+  it('"Skip every time" ignores an item in every later sync, until un-ignored', async () => {
+    const { app, files } = makeApp({})
+    const settings = settingsWith()
+    settings.libraries = {}
+    const save = vi.fn(() => Promise.resolve())
+    let ignoreArrival = true
+    const decide = (r: ApprovalRequest): Choice => (ignoreArrival && r.path.includes('Arrival') ? 'ignore' : 'apply')
+    const approve = vi.fn((r: ApprovalRequest) => Promise.resolve({ choice: decide(r), excluded: [] }))
+    const sync = () => new PlexSync(app as never, settings, save, approve).run(() => {})
+
+    const first = await sync()
+    expect(first.newlyIgnored).toEqual(['Arrival (2016)'])
+    expect(settings.ignored['1']).toMatchObject({ name: 'Arrival (2016)', library: 'Movies' })
+    expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
+    expect(save).toHaveBeenCalled()
+
+    approve.mockClear()
+    const second = await sync()
+    expect(second.ignored).toBe(1)
+    expect(second.created).toEqual([])
+    expect(approve.mock.calls.some(c => c[0].path.includes('Arrival'))).toBe(false)
+
+    delete settings.ignored['1']
+    ignoreArrival = false
+    const third = await sync()
+    expect(approve.mock.calls.some(c => c[0].path.includes('Arrival'))).toBe(true)
+    expect(third.created).toEqual(['Media/Movies/Arrival (2016).md'])
+  })
+
+  it('never changes an ignored item\'s note, or lets another item claim it', async () => {
+    const { app, files, frontmatter } = makeApp({ 'Media/Movies/Heat.md': { Plays: 0 } })
+    const settings = settingsWith({ updatePlayCounts: true, askBeforeChanges: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties.push({ name: 'Plays', source: 'viewCount' })
+    settings.ignored = { 2: { name: 'Heat (1995)', library: 'Movies', since: 0 } }
+    // A second "Heat" that would otherwise be the only item matching Heat.md by title.
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
+      { ...movies[1], viewCount: 3 }, { ratingKey: '9', type: 'movie', title: 'Heat', year: 1986 },
+    ] } })
+
+    const full = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    const background = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
+
+    expect(files.has('Media/Movies/Heat.md')).toBe(true)
+    expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({ Plays: 0 })
+    expect(full.renamed).toEqual([])
+    expect(full.ignored).toBe(1)
+    expect(background.playCounts).toEqual([])
+  })
+
   it('stops when told to', async () => {
     const { app, files } = makeApp({})
     const approve = vi.fn(() => Promise.resolve({ choice: 'stop' as const, excluded: [] }))
@@ -446,5 +496,7 @@ describe('PlexSync', () => {
     })
     expect(settings.libraries['3']).toMatchObject({ target: 'skip' })
     expect(settings.serverUrl).toBe('x')
+    expect(loadSettings({ ignored: { 5: { name: 'X', library: 'Movies', since: 1 } } }).ignored).toEqual({ 5: { name: 'X', library: 'Movies', since: 1 } })
+    expect(loadSettings({}).ignored).toEqual({})
   })
 })

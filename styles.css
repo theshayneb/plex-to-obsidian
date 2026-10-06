@@ -166,3 +166,8 @@
     letter-spacing: 0.05em;
   }
 }
+
+/* Items listed under "Skipped every time", indented under their heading. */
+.pmn-ignored-item {
+  padding-left: var(--size-4-4);
+}

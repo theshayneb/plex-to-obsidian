@@ -86,6 +86,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       }
       parts.push(`${result.skipped} already had one`)
       if (result.declined) parts.push(`${result.declined} skipped by you`)
+      if (result.ignored) parts.push(`${result.ignored} skipped every time`)
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed`)

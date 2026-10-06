@@ -67,6 +67,16 @@ export function trackArtist(item: PlexItem): string | undefined {
   return item.originalTitle || item.grandparentTitle
 }
 
+/** How an item is named in lists: "Title (Year)", or "Artist - Title" for a track. */
+export function displayName(item: PlexItem): string {
+  if (item.type === 'track') {
+    const artist = trackArtist(item)
+    return artist ? `${artist} - ${item.title}` : item.title
+  }
+  const year = yearOf(item)
+  return year ? `${item.title} (${year})` : item.title
+}
+
 export function yearOf(item: PlexItem): number | undefined {
   return item.year ?? item.parentYear ?? item.album?.year
 }

@@ -366,6 +366,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         })
     }
 
+    this.displayIgnored()
+
     new Setting(containerEl)
       .setName('Detect documentaries by genre')
       .setDesc('Movies and shows in the documentary genre get their notes from your documentaries library\'s settings (folder, file name and properties), whichever library they are in.')
@@ -375,6 +377,42 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           settings.useDocumentaryGenre = value
           await this.save()
         }))
+  }
+
+  /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */
+  private displayIgnored(): void {
+    const { containerEl } = this
+    const ignored = this.plugin.settings.ignored
+    const entries = Object.entries(ignored).sort((a, b) => a[1].name.localeCompare(b[1].name))
+
+    const heading = new Setting(containerEl)
+      .setName('Skipped every time')
+      .setDesc(entries.length
+        ? 'Plex items you chose "Skip every time" for. Syncs pass over them completely: no new notes, renames, fill-ins or play counts. Un-ignore one to be asked about it again on the next sync.'
+        : 'Nothing yet. Choose "Skip every time" in the approval pop-up to have syncs pass over an item.')
+    if (entries.length > 1) {
+      heading.addButton(button => button
+        .setButtonText('Un-ignore all')
+        .onClick(async () => {
+          this.plugin.settings.ignored = {}
+          await this.save()
+          this.refresh()
+        }))
+    }
+
+    for (const [key, item] of entries) {
+      new Setting(containerEl)
+        .setClass('pmn-ignored-item')
+        .setName(item.name)
+        .setDesc(`${item.library}, since ${new Date(item.since).toLocaleDateString()}`)
+        .addButton(button => button
+          .setButtonText('Un-ignore')
+          .onClick(async () => {
+            delete this.plugin.settings.ignored[key]
+            await this.save()
+            this.refresh()
+          }))
+    }
   }
 
   /** Redraws the page without losing the scroll position. */

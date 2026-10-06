@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian'
 
-export type Choice = 'apply' | 'skip' | 'all' | 'stop'
+/** 'ignore' is "Skip every time": this item is passed over by every sync until un-ignored in settings. */
+export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'stop'
 
 export interface Decision {
   choice: Choice
@@ -112,6 +113,9 @@ export class ApprovalModal extends Modal {
     new Setting(contentEl)
       .addButton(b => b.setButtonText(create ? 'Create' : 'Apply').setCta().onClick(() => this.pmnDecide('apply')))
       .addButton(b => b.setButtonText('Skip').onClick(() => this.pmnDecide('skip')))
+      .addButton(b => b.setButtonText('Skip every time')
+        .setTooltip('Never create or change a note for this item; undo in settings')
+        .onClick(() => this.pmnDecide('ignore')))
       .addButton(b => b.setButtonText(create ? 'Create all the rest' : 'Apply to all the rest')
         .setTooltip('With the same lines unticked')
         .onClick(() => this.pmnDecide('all')))

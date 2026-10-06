@@ -23,6 +23,15 @@ export interface LibrarySetting {
   values: PropertyValues
 }
 
+/** A Plex item "Skip every time" was chosen for. */
+export interface IgnoredItem {
+  /** How it's listed in settings, e.g. "Heat (1995)" or "Radiohead - Airbag". */
+  name: string
+  library: string
+  /** When it was ignored (ms since 1970). */
+  since: number
+}
+
 export interface PlexNotesSettings {
   serverUrl: string
   token: string
@@ -35,6 +44,8 @@ export interface PlexNotesSettings {
   renameExistingNotes: boolean
   /** Show what will happen and ask before creating or changing each note. */
   askBeforeChanges: boolean
+  /** Plex items every sync passes over, keyed by rating key. */
+  ignored: Record<string, IgnoredItem>
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also refresh play counts in the background every this many hours; 0 is off. */
@@ -76,6 +87,7 @@ export function defaultSettings(): PlexNotesSettings {
     useDocumentaryGenre: true,
     renameExistingNotes: true,
     askBeforeChanges: true,
+    ignored: {},
     updatePlayCounts: false,
     playCountHours: 0,
     lastPlayCountUpdate: 0,
@@ -168,6 +180,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }
+  settings.ignored = { ...saved.ignored }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {
     movie: saved.moviesFolder,

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.30] - 2026-10-07
+
+### Changed
+- The **All libraries** section of the settings is now collapsible, and closed until you open it, like Setup.
+
 ## [0.0.29] - 2026-10-07
 
 ### Removed

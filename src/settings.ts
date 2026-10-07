@@ -59,7 +59,7 @@ function targetChoices(key: string): [string, string][] {
 export class PlexNotesSettingTab extends PluginSettingTab {
   /** Library sections the user has expanded, kept open across redraws. */
   private readonly openLibraries = new Set<string>()
-  /** Collapsible sections the user has opened (Setup, Skipped every time). */
+  /** Collapsible sections the user has opened (Setup, All libraries, Skipped every time). */
   private readonly openSections = new Set<string>()
 
   constructor(app: App, private readonly plugin: PlexMediaNotesPlugin) {
@@ -75,7 +75,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     containerEl.empty()
 
     this.displaySetup(this.section(containerEl, 'setup', 'Setup', 'Servers, accounts and API keys.'))
-    this.displayGeneral(containerEl)
+    this.displayGeneral(this.section(containerEl, 'general', 'All libraries', 'File names, images, approvals and play counts.'))
     this.displayLibraries(containerEl)
     this.displayIgnored(this.section(containerEl, 'ignored', 'Skipped every time'))
   }
@@ -334,8 +334,6 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
   private displayGeneral(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
-
-    new Setting(containerEl).setName('All libraries').setHeading()
 
     new Setting(containerEl)
       .setName('Images subfolder')

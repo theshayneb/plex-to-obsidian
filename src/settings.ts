@@ -436,6 +436,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           await this.save()
         }))
     new Setting(containerEl)
+      .setName('SteamGridDB API key')
+      .setDesc('Optional. You can get a free key in your SteamGridDB profile preferences. With a key, the approval pop-up also offers covers from SteamGridDB to pick from, along with the Steam and HowLongToBeat covers. HowLongToBeat times need no key. They are looked up by name for the properties that use them, which are in the game defaults.')
+      .addText(text => {
+        text.inputEl.type = 'password'
+        text.setValue(steam.gridKey ?? '').onChange(async value => {
+          steam.gridKey = value.trim()
+          await this.save()
+        })
+      })
+    new Setting(containerEl)
       .setName('Check Steam')
       .setDesc('Reads your games list once, to check the key and account, and adds the Steam library below.')
       .addButton(button => button

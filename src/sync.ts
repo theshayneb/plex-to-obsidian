@@ -32,8 +32,10 @@ import {
   type PlexItem,
 } from './notes'
 import { PlexClient } from './plex'
-import { buildFrontmatter, linkPropertyNames, PLAY_SOURCES, sourceValue } from './properties'
+import { HltbClient } from './hltb'
+import { buildFrontmatter, HLTB_SOURCES, linkPropertyNames, PLAY_SOURCES, sourceValue, usesSource } from './properties'
 import { SteamClient } from './steam'
+import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
   created: string[]
@@ -87,6 +89,8 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
 
 interface FillPlan {
   item: PlexItem
+  /** For a game, the property its cover link goes in (offered with other covers to pick from). */
+  coverProperty?: string
   additions: [string, unknown][]
   /** The property the poster goes in, if it's wanted and Plex has one; downloaded only once approved. */
   imageProperty: string | null
@@ -109,6 +113,7 @@ export class PlexSync {
   private plex: PlexClient | null = null
   private machineId = ''
   private steam: SteamClient | null = null
+  private hltb: HltbClient | null = null
 
   /** "Apply to all the rest" was chosen, per kind of approval, with the lines unticked then. */
   private readonly approvedAll: Record<ApprovalRequest['action'], Set<string> | null> = { create: null, change: null }
@@ -291,7 +296,8 @@ export class PlexSync {
             lines.push({ key: 'rename', label: 'File name', current: file.basename, value: newName, edit: 'text' })
           }
           for (const [name, value] of fill?.additions ?? []) {
-            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), ...editable(value) })
+            const choices = name === fill?.coverProperty ? fill.item.coverChoices : undefined
+            lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), ...editable(value), choices })
           }
           if (fill?.imageProperty) {
             const name = fill.imageProperty
@@ -372,7 +378,7 @@ export class PlexSync {
       }
       try {
         progress(`Creating ${listed.title}…`)
-        const item = await this.fullItem(listed)
+        const item = await this.fullItem(listed, listedLib)
         const { lib, kind } = this.libraryFor(item, listedLib)
         const preview = this.previewNote(item, lib, kind)
         const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result, item, lib)
@@ -499,8 +505,8 @@ export class PlexSync {
    * Movies and shows are fetched again for their full metadata (the listing can leave out genres).
    * Tracks keep their listing, which is complete, plus their album, fetched once per album.
    */
-  private async fullItem(listed: PlexItem): Promise<PlexItem> {
-    if (listed.type === 'game') return this.steam ? this.steam.details(listed) : listed
+  private async fullItem(listed: PlexItem, lib?: LibrarySetting): Promise<PlexItem> {
+    if (listed.type === 'game') return this.gameDetails(listed, lib)
     const plex = this.plex
     if (!plex) return listed
     if (listed.type !== 'track') return (await plex.item(listed.ratingKey).catch(() => null)) ?? listed
@@ -512,6 +518,42 @@ export class PlexSync {
       this.albums.set(albumKey, album)
     }
     return { ...listed, album: (await album) ?? undefined }
+  }
+
+  /**
+   * A game's store details, plus (when its library wants them) HowLongToBeat's times and, when
+   * asking first, other covers to pick from. Lookups that fail leave those parts out.
+   */
+  private async gameDetails(listed: PlexItem, lib?: LibrarySetting): Promise<PlexItem> {
+    const item = this.steam ? await this.steam.details(listed) : listed
+    const properties = lib?.properties ?? []
+    const wantsCover = usesSource(properties, 'poster') && this.settings.askBeforeChanges
+    const wantsHltb = properties.some(m => HLTB_SOURCES.includes(m.source) && m.name.trim())
+    if (wantsHltb || wantsCover) {
+      try {
+        this.hltb ??= new HltbClient()
+        item.hltb = (await this.hltb.times(item.title, item.year)) ?? undefined
+      } catch (err) {
+        console.warn(`Media import and sync: HowLongToBeat lookup for ${item.title} failed`, err)
+      }
+    }
+    if (wantsCover) {
+      const choices: CoverChoice[] = []
+      if (item.portrait) choices.push({ url: item.portrait, thumb: item.portrait, label: 'Steam' })
+      if (item.hltb?.image) choices.push({ url: item.hltb.image, thumb: item.hltb.image, label: 'HowLongToBeat' })
+      const gridKey = (this.settings.steam.gridKey ?? '').trim()
+      if (gridKey && item.steamAppId) {
+        try {
+          choices.push(...await steamGridCovers(gridKey, item.steamAppId))
+        } catch (err) {
+          console.warn(`Media import and sync: SteamGridDB covers for ${item.title} failed`, err)
+        }
+      }
+      item.coverChoices = choices
+      // With no Steam portrait, HowLongToBeat's cover is the next best thing.
+      item.portrait ??= item.hltb?.image
+    }
+    return item
   }
 
   /**
@@ -546,7 +588,7 @@ export class PlexSync {
 
     // The link needs nothing more; everything else may need the item's full metadata.
     const needsMore = wanted.some(m => m.source !== 'plexLink' && m.source !== 'text' && m.source !== 'typeTag')
-    const item = needsMore ? await this.fullItem(listed) : listed
+    const item = needsMore ? await this.fullItem(listed, lib) : listed
     // A game's cover is a link, filled in like any value; a Plex poster is downloaded once approved.
     const game = item.type === 'game'
     const values = buildFrontmatter(item, wanted.filter(m => game || m.source !== 'poster'), {
@@ -559,7 +601,8 @@ export class PlexSync {
     const poster = game ? undefined : wanted.find(m => m.source === 'poster')
     const imageProperty = poster && hasImage(item) ? poster.name.trim() : null
     if (!additions.length && !imageProperty) return null
-    return { item, additions, imageProperty }
+    const coverProperty = game ? wanted.find(m => m.source === 'poster')?.name.trim() : undefined
+    return { item, additions, imageProperty, coverProperty }
   }
 
   /** Adds the planned properties, downloading the poster if one is wanted. Never replaces a value. */
@@ -616,9 +659,10 @@ export class PlexSync {
     const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
     for (const [name, value] of Object.entries(frontmatter)) {
       const poster = value === POSTER_PREVIEW
+      const cover = item.type === 'game' && lib.properties.some(m => m.source === 'poster' && m.name.trim() === name)
       lines.push(poster
         ? { key: `prop:${name}`, label: name, value: describeValue(value) }
-        : { key: `prop:${name}`, label: name, ...editable(value) })
+        : { key: `prop:${name}`, label: name, ...editable(value), choices: cover ? item.coverChoices : undefined })
     }
     return { path, lines, values: frontmatter }
   }

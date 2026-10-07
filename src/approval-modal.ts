@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian'
+import type { CoverChoice } from './steamgriddb'
 
 /** 'ignore' is "Skip every time": this item is passed over by every sync until un-ignored in settings. */
 export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'stop'
@@ -29,6 +30,8 @@ export interface ApprovalLine {
   items?: string[]
   /** Can't be unticked (a new note's file name). */
   required?: boolean
+  /** Images to pick from for the value (game covers). */
+  choices?: CoverChoice[]
 }
 
 export interface ApprovalRequest {
@@ -85,7 +88,7 @@ export class ApprovalModal extends Modal {
     if (!create) head.createEl('th', { text: 'Now' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
-    for (const { key, label, current, value, edit, items, required } of lines) {
+    for (const { key, label, current, value, edit, items, required, choices } of lines) {
       const row = body.createEl('tr')
       const box = row.createEl('td').createEl('input', { type: 'checkbox' })
       box.checked = true
@@ -108,6 +111,7 @@ export class ApprovalModal extends Modal {
           if (field.value === original) delete this.pmnEdits[key]
           else this.pmnEdits[key] = field.value
         })
+        if (choices?.length) this.pmnCoverPicker(field, choices)
       } else {
         cell(row, value, 'pmn-approval-new', newLabel)
       }
@@ -134,6 +138,28 @@ export class ApprovalModal extends Modal {
   onClose(): void {
     this.contentEl.empty()
     if (!this.pmnDecided) this.pmnResolve({ choice: 'skip', excluded: [] })
+  }
+
+  /** Thumbnails under a cover's link: clicking one puts its address in the box. */
+  private pmnCoverPicker(field: HTMLTextAreaElement, choices: CoverChoice[]): void {
+    const picker = field.parentElement!.createDiv('pmn-approval-covers')
+    const tiles: HTMLElement[] = []
+    const mark = () => tiles.forEach((tile, i) => tile.toggleClass('is-selected', choices[i].url === field.value.trim()))
+    choices.forEach(choice => {
+      const tile = picker.createEl('button', { cls: 'pmn-approval-cover', attr: { 'aria-label': `Use the ${choice.label} cover` } })
+      tile.createEl('img', { attr: { src: choice.thumb, alt: choice.label, loading: 'lazy' } })
+      tile.createSpan({ text: choice.label })
+      tile.addEventListener('click', evt => {
+        evt.preventDefault()
+        if (field.disabled) return
+        field.value = choice.url
+        field.dispatchEvent(new Event('input'))
+        mark()
+      })
+      tiles.push(tile)
+    })
+    field.addEventListener('input', mark)
+    mark()
   }
 
   /** A list as removable chips, plus a box to add items (Enter or comma). Returns the add box. */

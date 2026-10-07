@@ -193,3 +193,39 @@
 .pmn-explain-report p {
   margin: var(--size-4-1) 0;
 }
+
+/* Covers to pick from under a game's Image in the approval pop-up. */
+.pmn-approval-covers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-2);
+}
+
+.pmn-approval-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--size-4-1);
+  height: auto;
+  padding: var(--size-4-1);
+  border: 2px solid transparent;
+  border-radius: var(--radius-s);
+  background: none;
+  box-shadow: none;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.pmn-approval-cover img {
+  width: 80px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius-s);
+}
+
+.pmn-approval-cover.is-selected {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}

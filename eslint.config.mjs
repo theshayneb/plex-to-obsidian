@@ -23,7 +23,7 @@ export default defineConfig([
       'no-undef': 'off',           // TypeScript handles this via tsc
       'no-console': 'off',
       'no-irregular-whitespace': 'error',
-      'obsidianmd/ui/sentence-case': ['error', { brands: ['Plex', 'Plex Web', 'X-Plex-Token', 'Steam', 'Steam Web API', 'Steam ID', 'Steam Store', 'Public'], ignoreWords: ['Get', 'View', 'XML'], ignoreRegex: ['"[^"]*"'] }],
+      'obsidianmd/ui/sentence-case': ['error', { brands: ['Plex', 'Plex Web', 'X-Plex-Token', 'Steam', 'Steam Web API', 'Steam ID', 'Steam Store', 'Public', 'SteamGridDB', 'SteamGridDB API', 'HowLongToBeat', 'API'], ignoreWords: ['Get', 'View', 'XML'], ignoreRegex: ['"[^"]*"'] }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/require-await': 'error',
       '@typescript-eslint/no-floating-promises': 'error',

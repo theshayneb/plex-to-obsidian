@@ -24,6 +24,7 @@ vi.mock('obsidian', () => {
     TFolder,
     Notice: Unused,
     Modal: Unused,
+    Platform: { isDesktopApp: false },
     PluginSettingTab: Unused,
     Setting: Unused,
     normalizePath: (p: string) => p.replace(/\/+/g, '/').replace(/^\/|\/$/g, ''),
@@ -32,7 +33,9 @@ vi.mock('obsidian', () => {
       if (url.startsWith('https://')) {
         if (method === 'HEAD') return Promise.resolve({ status: portraits.has(url) ? 200 : 404, headers: {} })
         const key = Object.keys(steamResponses).find(k => url.startsWith(k))
-        return Promise.resolve(key ? { status: 200, json: steamResponses[key], headers: {} } : { status: 404, json: {}, headers: {} })
+        return Promise.resolve(key
+          ? { status: 200, json: steamResponses[key], text: JSON.stringify(steamResponses[key]), headers: {} }
+          : { status: 404, json: {}, text: '{}', headers: {} })
       }
       const path = url.replace('http://plex:32400', '').split('?')[0]
       if (path.startsWith('/photo/')) {
@@ -50,6 +53,8 @@ import type { PlexNotesSettings } from '../src/config'
 const { PlexSync } = await import('../src/sync')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
+const { HltbClient } = await import('../src/hltb')
+HltbClient.gapMs = 0
 const { defaultSettings, loadSettings, newLibrary } = await import('../src/config')
 
 function makeApp(existing: Record<string, Record<string, unknown>>) {
@@ -453,6 +458,11 @@ describe('PlexSync', () => {
         genres: [{ description: 'Action' }, { description: 'Adventure' }], release_date: { date: '18 Apr, 2011' },
       } } },
       'https://store.steampowered.com/api/appdetails?appids=440': { 440: { success: false } },
+      'https://howlongtobeat.com/api/search/site/init': { token: 't0k' },
+      'https://howlongtobeat.com/api/search/site': { data: [
+        { game_id: 7232, game_name: 'Portal 2: Peer Review', comp_main: 11784 },
+        { game_id: 7231, game_name: 'Portal 2', release_world: 2011, comp_main: 30885, comp_plus: 49567, comp_100: 82549, game_image: 'Portal2cover.jpg' },
+      ] },
     }
     portraits.clear()
     portraits.add('https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg')
@@ -473,6 +483,9 @@ describe('PlexSync', () => {
       Link: 'https://store.steampowered.com/app/620/',
       Image: 'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg',
       WideImage: 'https://cdn/620/header.jpg',
+      'Main Story': 8.6,
+      'Main + Extras': 13.8,
+      Completionist: 22.9,
       tags: ['video_game'],
     })
     // The existing note was matched by title: it gets its Link filled in and nothing else.

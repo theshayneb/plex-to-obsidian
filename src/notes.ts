@@ -72,6 +72,10 @@ export interface PlexItem {
   portrait?: string
   /** Landscape header art URL. */
   wideImage?: string
+  /** HowLongToBeat's times for the game, when looked up. */
+  hltb?: import('./hltb-data').HltbTimes
+  /** Other covers to choose from in the approval pop-up. */
+  coverChoices?: import('./steamgriddb').CoverChoice[]
 }
 
 export function isMusic(kind: MediaKind): boolean {

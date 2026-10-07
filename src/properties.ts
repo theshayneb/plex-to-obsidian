@@ -12,6 +12,7 @@ export type FieldSource =
   | 'imdbId' | 'tmdbId' | 'tvdbId'
   | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
+  | 'hltbMain' | 'hltbExtra' | 'hltbComplete' | 'hltbAll' | 'hltbLink'
   | 'text'
 
 export interface PropertyMapping {
@@ -75,6 +76,11 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   platforms: 'Games: platforms',
   metacritic: 'Games: Metacritic score',
   wideImage: 'Games: wide image (landscape header)',
+  hltbMain: 'Games: HowLongToBeat main story (hours)',
+  hltbExtra: 'Games: HowLongToBeat main + extras (hours)',
+  hltbComplete: 'Games: HowLongToBeat completionist (hours)',
+  hltbAll: 'Games: HowLongToBeat all styles (hours)',
+  hltbLink: 'Games: HowLongToBeat page',
   text: 'Fixed text',
 }
 
@@ -109,8 +115,16 @@ export const DEFAULT_GAME_PROPERTIES: PropertyMapping[] = [
   { name: 'Link', source: 'plexLink', fill: true },
   { name: 'Image', source: 'poster' },
   { name: 'WideImage', source: 'wideImage' },
+  { name: 'Main Story', source: 'hltbMain' },
+  { name: 'Main + Extras', source: 'hltbExtra' },
+  { name: 'Completionist', source: 'hltbComplete' },
   { name: 'tags', source: 'typeTag' },
 ]
+
+/** The game defaults of 0.0.19, before HowLongToBeat; a Steam library still using them is moved on. */
+export function oldGameProperties(): PropertyMapping[] {
+  return DEFAULT_GAME_PROPERTIES.filter(m => !HLTB_SOURCES.includes(m.source))
+}
 
 /** Fresh copy of the default properties for a kind of library. */
 export function defaultProperties(kind: MediaKind): PropertyMapping[] {
@@ -199,6 +213,9 @@ function hours(minutes: number | undefined): number {
   return Math.round((minutes ?? 0) / 6) / 10
 }
 
+/** Sources that need a HowLongToBeat lookup. */
+export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbExtra', 'hltbComplete', 'hltbAll', 'hltbLink']
+
 /** Sources kept up to date by "Keep play counts up to date": plays, and a game's playtime. */
 export const PLAY_SOURCES: FieldSource[] = ['viewCount', 'playtime']
 
@@ -266,6 +283,11 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'platforms': return item.platforms ?? []
     case 'metacritic': return item.metacritic
     case 'wideImage': return item.wideImage
+    case 'hltbMain': return item.hltb?.main
+    case 'hltbExtra': return item.hltb?.extra
+    case 'hltbComplete': return item.hltb?.complete
+    case 'hltbAll': return item.hltb?.all
+    case 'hltbLink': return item.hltb?.url
     case 'text': return text
   }
 }

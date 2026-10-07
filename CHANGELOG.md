@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.21] - 2026-10-07
+
+### Added
+- HowLongToBeat: game notes can get Main Story, Main + Extras and Completionist times (hours), plus "all styles" and a link to the game's HowLongToBeat page as other sources. They're looked up by the game's name (an exact match only, preferring the same release year, so a note never gets another game's times) and shown in the approval pop-up like any value. The first three are in the game defaults; a Steam library still on the 0.0.19 defaults gets them added.
+- Cover picker: in the approval pop-up, a game's Image shows covers to pick from: Steam's portrait cover, HowLongToBeat's cover, and, with a SteamGridDB API key (optional, new setting in the Steam section), up to 8 SteamGridDB portrait covers. Click one to use it; the link can still be edited by hand. A game with no Steam portrait gets HowLongToBeat's cover.
+
+### Changed
+- Checked against the live Steam API and store: the Steam code now has been run on real data, not just test data.
+
 ## [0.0.20] - 2026-10-07
 
 ### Fixed

@@ -4,6 +4,7 @@ import {
   DEFAULT_TAGS,
   defaultProperties,
   defaultValues,
+  oldGameProperties,
   type PropertyMapping,
   type PropertyValues,
 } from './properties'
@@ -40,6 +41,8 @@ export interface SteamSettings {
   account: string
   /** Also list free-to-play games that have been played. */
   includeFreeGames: boolean
+  /** Optional SteamGridDB API key, for more covers to choose from in the approval pop-up. */
+  gridKey: string
 }
 
 /** The library key Steam games are listed under, next to the Plex libraries. */
@@ -99,7 +102,7 @@ export function defaultSettings(): PlexNotesSettings {
   return {
     serverUrl: '',
     token: '',
-    steam: { apiKey: '', account: '', includeFreeGames: true },
+    steam: { apiKey: '', account: '', includeFreeGames: true, gridKey: '' },
     imagesSubfolder: 'Images',
     fileNameReplacements: {},
     useDocumentaryGenre: true,
@@ -256,6 +259,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       }
     }
     settings.libraries[key] = migrated
+  }
+  // A Steam library still on the first game defaults gets the HowLongToBeat times added.
+  const steamLib = settings.libraries[STEAM_LIBRARY]
+  if (steamLib && JSON.stringify(steamLib.properties) === JSON.stringify(oldGameProperties())) {
+    steamLib.properties = defaultProperties('game')
   }
   return settings
 }

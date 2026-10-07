@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.23] - 2026-10-07
+
+### Changed
+- HowLongToBeat's Main Story is now in whole minutes (e.g. Portal 2: 515), like Plex durations, instead of hours. Notes that already have it keep their hours value.
+
 ## [0.0.22] - 2026-10-07
 
 ### Changed

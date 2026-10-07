@@ -483,7 +483,7 @@ describe('PlexSync', () => {
       Link: 'https://store.steampowered.com/app/620/',
       Image: 'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg',
       WideImage: 'https://cdn/620/header.jpg',
-      'Main Story': 8.6,
+      'Main Story': 515,
       tags: ['video_game'],
     })
     // The existing note was matched by title: it gets its Link filled in and nothing else.

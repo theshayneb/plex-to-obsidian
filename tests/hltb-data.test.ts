@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hltbHours, hltbTimes, pickMatch, searchBody, searchTitle, type HltbGame } from '../src/hltb-data'
+import { hltbMinutes, hltbTimes, pickMatch, searchBody, searchTitle, type HltbGame } from '../src/hltb-data'
 
 const results: HltbGame[] = [
   { game_id: 2, game_name: 'Portal 2: Peer Review', release_world: 2011, comp_main: 11784 },
@@ -22,11 +22,11 @@ describe('HowLongToBeat', () => {
     expect(pickMatch(results, 'Portal')).toBeNull()
   })
 
-  it('turns seconds into hours, with links', () => {
-    expect(hltbHours(30885)).toBe(8.6)
-    expect(hltbHours(0)).toBeUndefined()
+  it('turns seconds into minutes, with links', () => {
+    expect(hltbMinutes(30885)).toBe(515)
+    expect(hltbMinutes(0)).toBeUndefined()
     expect(hltbTimes(results[1])).toEqual({
-      id: 1, name: 'Portal 2', main: 8.6,
+      id: 1, name: 'Portal 2', main: 515,
       url: 'https://howlongtobeat.com/game/1', image: 'https://howlongtobeat.com/games/Portal2cover.jpg',
     })
   })

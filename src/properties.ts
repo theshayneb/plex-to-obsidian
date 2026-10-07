@@ -76,7 +76,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   platforms: 'Games: platforms',
   metacritic: 'Games: Metacritic score',
   wideImage: 'Games: wide image (landscape header)',
-  hltbMain: 'Games: HowLongToBeat main story (hours)',
+  hltbMain: 'Games: HowLongToBeat main story (minutes)',
   hltbLink: 'Games: HowLongToBeat page',
   text: 'Fixed text',
 }

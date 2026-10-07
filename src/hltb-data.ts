@@ -16,7 +16,7 @@ export interface HltbGame {
 export interface HltbTimes {
   id: number
   name: string
-  /** Main story, in hours. */
+  /** Main story, in minutes. */
   main?: number
   url: string
   image?: string
@@ -57,9 +57,9 @@ export function searchBody(title: string): Record<string, unknown> {
   }
 }
 
-/** Seconds as hours, to one decimal place; undefined when HowLongToBeat has no time. */
-export function hltbHours(seconds: number | undefined): number | undefined {
-  return seconds && seconds > 0 ? Math.round(seconds / 360) / 10 : undefined
+/** Seconds as whole minutes (like Plex durations); undefined when HowLongToBeat has no time. */
+export function hltbMinutes(seconds: number | undefined): number | undefined {
+  return seconds && seconds > 0 ? Math.round(seconds / 60) : undefined
 }
 
 /**
@@ -79,7 +79,7 @@ export function hltbTimes(game: HltbGame): HltbTimes {
   return {
     id: game.game_id,
     name: game.game_name,
-    main: hltbHours(game.comp_main),
+    main: hltbMinutes(game.comp_main),
     url: `${HLTB}/game/${game.game_id}`,
     image: game.game_image ? `${HLTB}/games/${encodeURIComponent(game.game_image)}` : undefined,
   }

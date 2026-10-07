@@ -1,5 +1,6 @@
 import { requestUrl } from 'obsidian'
 import {
+  cleanOmdbKey,
   hltbFound,
   omdbFound,
   omdbItem,
@@ -24,14 +25,28 @@ const OPEN_LIBRARY_HEADERS = { 'User-Agent': 'MediaImportAndSync (Obsidian plugi
 
 async function getJson(url: string, headers: Record<string, string> = {}): Promise<unknown> {
   const res = await requestUrl({ url, headers, throw: false })
-  if (res.status >= 400) throw new Error(`${new URL(url).hostname} returned ${res.status}`)
+  if (res.status >= 400) {
+    // OMDb explains a 401 in its JSON ("Invalid API key!", "Request limit reached!").
+    let reason = ''
+    try {
+      reason = (res.json as { Error?: string } | null)?.Error ?? ''
+    } catch {
+      // not JSON
+    }
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    if (host === 'omdbapi.com' && res.status === 401) {
+      throw new Error(`OMDb refused the key${reason ? ` (${reason})` : ''}. Check the OMDb API key in the settings (the Test button there tries it); new keys only work after you click the link in OMDb's email.`)
+    }
+    throw new Error(`${host} returned ${res.status}${reason ? `: ${reason}` : ''}`)
+  }
   return res.json as unknown
 }
 
 /** Searches the databases for a kind of item. */
 export async function findItems(kind: FindKind, query: string, omdbKey: string): Promise<Found[]> {
   if (kind === 'movie' || kind === 'show') {
-    if (!omdbKey) throw new Error('Add an OMDb API key in the settings first (Other sources)')
+    omdbKey = cleanOmdbKey(omdbKey)
+    if (!omdbKey) throw new Error('Add an OMDb API key in the settings first (Adding things not in Plex or Steam)')
     const url = `https://www.omdbapi.com/?apikey=${encodeURIComponent(omdbKey)}&type=${kind === 'show' ? 'series' : 'movie'}&s=${encodeURIComponent(query)}`
     const body = await getJson(url) as { Response?: string, Error?: string, Search?: OmdbSearchResult[] }
     if (body.Response === 'False') {
@@ -63,7 +78,7 @@ export async function itemDetails(found: Found, omdbKey: string): Promise<PlexIt
   const { item } = found
   if (item.ratingKey.startsWith('imdb-')) {
     const id = item.ratingKey.slice(5)
-    const body = await getJson(`https://www.omdbapi.com/?apikey=${encodeURIComponent(omdbKey)}&i=${encodeURIComponent(id)}&plot=full`) as OmdbDetails & { Response?: string, Error?: string }
+    const body = await getJson(`https://www.omdbapi.com/?apikey=${encodeURIComponent(cleanOmdbKey(omdbKey))}&i=${encodeURIComponent(id)}&plot=full`) as OmdbDetails & { Response?: string, Error?: string }
     if (body.Response === 'False') throw new Error(`OMDb: ${body.Error ?? 'not found'}`)
     return omdbItem(body)
   }
@@ -74,4 +89,16 @@ export async function itemDetails(found: Found, omdbKey: string): Promise<PlexIt
     return { ...item, summary: openLibraryDescription(body) }
   }
   return item
+}
+
+/** Tries an OMDb key with one search, for the settings' Test button. Returns what to tell the user. */
+export async function testOmdbKey(pasted: string): Promise<string> {
+  const key = cleanOmdbKey(pasted)
+  if (!key) return 'Paste your OMDb API key first.'
+  try {
+    const found = await findItems('movie', 'Heat', key)
+    return `The key ${key} works (${found.length} results for "Heat").`
+  } catch (err) {
+    return `The key ${key} didn't work: ${err instanceof Error ? err.message : String(err)}`
+  }
 }

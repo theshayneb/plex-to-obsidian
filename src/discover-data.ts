@@ -56,6 +56,17 @@ function firstYear(year: string | undefined): number | undefined {
   return match ? Number(match[0]) : undefined
 }
 
+/**
+ * The OMDb key in what was pasted: the key itself, or the link from OMDb's email (which has
+ * `apikey=` in it). OMDb keys are letters and digits, so anything else (spaces, invisible
+ * characters picked up when copying) is dropped.
+ */
+export function cleanOmdbKey(pasted: string | undefined): string {
+  const text = pasted ?? ''
+  const fromLink = /apikey=([^&\s]+)/i.exec(text)
+  return (fromLink ? fromLink[1] : text).replace(/[^A-Za-z0-9]/g, '')
+}
+
 export function omdbFound(result: OmdbSearchResult): Found {
   const show = result.Type === 'series'
   return {

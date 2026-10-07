@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { cleanOmdbKey, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
+  it('cleans up a pasted key', () => {
+    expect(cleanOmdbKey(' a1b2c3d4 ')).toBe('a1b2c3d4')
+    expect(cleanOmdbKey('\u200Ba1b2\u00A0c3d4\n')).toBe('a1b2c3d4')
+    expect(cleanOmdbKey('http://www.omdbapi.com/?i=tt3896198&apikey=a1b2c3d4')).toBe('a1b2c3d4')
+    expect(cleanOmdbKey(undefined)).toBe('')
+  })
+
   it('lists movies and shows', () => {
     const found = omdbFound({ Title: 'Inception', Year: '2010', imdbID: 'tt1375666', Type: 'movie', Poster: 'https://m.media-amazon.com/x_SX300.jpg' })
     expect(found).toMatchObject({ detail: 'Movie · 2010', source: 'OMDb', thumb: 'https://m.media-amazon.com/x_SX300.jpg' })

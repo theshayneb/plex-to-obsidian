@@ -1,5 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
+import { cleanOmdbKey } from './discover-data'
+import { testOmdbKey } from './discover'
 import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
@@ -485,14 +487,18 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     })
     new Setting(containerEl)
       .setName('OMDb API key')
-      .setDesc('Needed for movies and TV shows. Get a free key at omdbapi.com, good for 1,000 searches a day.')
+      .setDesc('Needed for movies and TV shows. Get a free key at omdbapi.com, good for 1,000 searches a day. Paste the key or the link from OMDb\'s email; spaces and other stray characters are removed.')
       .addText(text => {
-        text.inputEl.type = 'password'
-        text.setValue(settings.omdbKey ?? '').onChange(async value => {
-          settings.omdbKey = value.trim()
+        text.setPlaceholder('For example a1b2c3d4').setValue(settings.omdbKey ?? '').onChange(async value => {
+          settings.omdbKey = cleanOmdbKey(value)
           await this.save()
         })
       })
+      .addButton(button => button.setButtonText('Test').onClick(async () => {
+        button.setDisabled(true)
+        new Notice(await testOmdbKey(settings.omdbKey ?? ''), 10_000)
+        button.setDisabled(false)
+      }))
   }
 
   /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.25] - 2026-10-07
+
+### Fixed
+- OMDb key: spaces and invisible characters picked up when copying are now removed (these made OMDb answer 401), and pasting the link from OMDb's email works too. The key is shown in plain text so you can check it.
+
+### Added
+- A **Test** button next to the OMDb API key, which tries the key and says whether it works.
+- When OMDb refuses a search, the message now gives OMDb's own reason (for example "Invalid API key!" or "Request limit reached!").
+
 ## [0.0.24] - 2026-10-07
 
 ### Added

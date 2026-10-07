@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.20] - 2026-10-07
+
+### Fixed
+- A note whose name matches more than one item (say a plain `Black Sheep` note, with both the 1996 and 2006 films in Plex) was silently left alone, and neither item got a note. Now a pop-up asks which item the note is for. The chosen item is treated as the note's (so you're offered the rename to `Black Sheep (2006)`, its Link and so on, as usual), and the other items get their own notes. "None of these" gives every item a new note; "Skip" leaves things as they were for this sync.
+
+### Added
+- Command "Explain why an item is or isn't imported": paste a Plex or Steam link, or type part of a title, and see what a sync does with that item and why: no note yet (and where it would go), a note linked to it, a note matched by name (and which other items match it too), "Skip every time", its library set to Skip or not loaded, an episode or album link, or not in Steam's list. Nothing is changed.
+
 ## [0.0.19] - 2026-10-06
 
 ### Added

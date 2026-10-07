@@ -171,3 +171,25 @@
 .pmn-ignored-item {
   padding-left: var(--size-4-4);
 }
+
+/* "Explain an item" pop-up. */
+.modal.pmn-explain {
+  width: min(800px, 95vw);
+}
+
+.pmn-explain .setting-item-control {
+  flex: 1;
+}
+
+.pmn-explain-input {
+  width: 100%;
+}
+
+.pmn-explain-report {
+  padding: var(--size-4-2) 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.pmn-explain-report p {
+  margin: var(--size-4-1) 0;
+}

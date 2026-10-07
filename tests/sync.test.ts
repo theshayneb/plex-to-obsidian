@@ -44,7 +44,7 @@ vi.mock('obsidian', () => {
   }
 })
 
-import type { ApprovalRequest, Choice, Decision } from '../src/approval-modal'
+import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
@@ -496,6 +496,73 @@ describe('PlexSync', () => {
     expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])
     expect(frontmatter.get('Media/Video Games/Portal 2.md')!['Total Playtime']).toBe(2)
     expect(requested.some(u => u.includes('appdetails'))).toBe(false)
+  })
+
+  describe('a note whose name matches two items', () => {
+    const blackSheep = [
+      { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },
+      { ratingKey: '600', type: 'movie', title: 'Black Sheep', year: 1996 },
+    ]
+    const setup = () => {
+      responses.set('/library/sections/1/all', { MediaContainer: { Metadata: blackSheep } })
+      const made = makeApp({ 'Media/Movies/Black Sheep.md': { Status: 'completed' } })
+      const settings = settingsWith()
+      settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+      return { ...made, settings }
+    }
+    const apply = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'apply' as const, excluded: [] }))
+
+    it('asks which item it is for, then treats it as that item\'s note', async () => {
+      const { app, files, frontmatter, settings } = setup()
+      const choose = vi.fn((_r: OwnerRequest) => Promise.resolve('53792'))
+      const result = await new PlexSync(app as never, settings, () => Promise.resolve(), apply, choose).run(() => {})
+
+      expect(choose.mock.calls[0][0]).toEqual({ path: 'Media/Movies/Black Sheep.md', candidates: [
+        { key: '53792', name: 'Black Sheep (2006)', library: 'Movies' },
+        { key: '600', name: 'Black Sheep (1996)', library: 'Movies' },
+      ] })
+      expect(result.renamed).toEqual([{ from: 'Media/Movies/Black Sheep.md', to: 'Media/Movies/Black Sheep (2006).md' }])
+      expect(frontmatter.get('Media/Movies/Black Sheep (2006).md')).toMatchObject({ Status: 'completed', Link: expect.stringContaining('metadata%2F53792') as string })
+      expect(result.created.filter(p => p.startsWith('Media/Movies/'))).toEqual(['Media/Movies/Black Sheep (1996).md'])
+      expect(files.has('Media/Movies/Black Sheep.md')).toBe(false)
+    })
+
+    it('makes notes for both when it\'s for neither, and leaves everything when skipped', async () => {
+      const none = setup()
+      const r1 = await new PlexSync(none.app as never, none.settings, () => Promise.resolve(), apply, () => Promise.resolve('none')).run(() => {})
+      expect(r1.created.filter(p => p.startsWith('Media/Movies/')).sort()).toEqual(['Media/Movies/Black Sheep (1996).md', 'Media/Movies/Black Sheep (2006).md'])
+      expect(none.files.has('Media/Movies/Black Sheep.md')).toBe(true)
+
+      const skip = setup()
+      const r2 = await new PlexSync(skip.app as never, skip.settings, () => Promise.resolve(), apply, () => Promise.resolve(null)).run(() => {})
+      expect(r2.created.filter(p => p.startsWith('Media/Movies/'))).toEqual([])
+      expect(r2.renamed).toEqual([])
+    })
+
+    it('is explained', async () => {
+      const { app, settings } = setup()
+      const reports = await new PlexSync(app as never, settings, () => Promise.resolve())
+        .explain('https://app.plex.tv/desktop/#!/server/abc/details?key=%2Flibrary%2Fmetadata%2F53792', () => {})
+      expect(reports).toHaveLength(1)
+      expect(reports[0][0]).toBe('Black Sheep (2006) (in Movies)')
+      expect(reports[0].join(' ')).toContain('Media/Movies/Black Sheep.md')
+      expect(reports[0].join(' ')).toContain('Black Sheep (1996) matches the same note')
+    })
+  })
+
+  it('explains items that aren\'t being synced', async () => {
+    const { app } = makeApp({})
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'skip') }
+    responses.set('/library/metadata/77', { MediaContainer: { Metadata: [{
+      ratingKey: '77', type: 'movie', title: 'Hidden', year: 2000, librarySectionID: 1, librarySectionTitle: 'Movies',
+    }] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    expect((await sync.explain('https://app.plex.tv/desktop/#!/server/x/details?key=%2Flibrary%2Fmetadata%2F77', () => {}))[0])
+      .toEqual(['Hidden (2000)', 'It\'s in "Movies", which is set to Skip, so no notes are made for it. Choose a type for that library in the settings.'])
+    expect((await sync.explain('https://app.plex.tv/desktop/#!/server/x/details?key=%2Flibrary%2Fmetadata%2F999', () => {}))[0][0])
+      .toContain('Plex has no item with that link')
+    expect((await sync.explain('Severance', () => {}))[0][0]).toBe('Severance (2022) (in TV Shows)')
   })
 
   it('stops when told to', async () => {

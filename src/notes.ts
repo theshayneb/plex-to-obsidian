@@ -39,6 +39,9 @@ export interface PlexItem {
   Collection?: PlexTag[]
   Label?: PlexTag[]
   Guid?: { id: string }[]
+  /** The Plex library the item is in (in its full metadata). */
+  librarySectionID?: number | string
+  librarySectionTitle?: string
   // Music tracks
   /** Album artist. */
   grandparentTitle?: string
@@ -310,6 +313,22 @@ export function planRenames(matches: { item: PlexItem, match: NoteMatch | null }
     if (match.byRatingKey || (!keyed.has(path) && claims.get(path) === 1)) plans.push({ item, path })
   }
   return plans
+}
+
+/**
+ * Notes no Plex link claims, whose names match more than one item: the plugin can't tell which
+ * item such a note is for, so it asks.
+ */
+export function ambiguousNotes(matches: { item: PlexItem, match: NoteMatch | null }[]): { path: string, items: PlexItem[] }[] {
+  const keyed = new Set(matches.filter(m => m.match?.byRatingKey).map(m => m.match!.paths[0]))
+  const claimants = new Map<string, PlexItem[]>()
+  for (const { item, match } of matches) {
+    if (!match || match.byRatingKey) continue
+    for (const path of match.paths) {
+      if (!keyed.has(path)) claimants.set(path, [...(claimants.get(path) ?? []), item])
+    }
+  }
+  return [...claimants.entries()].filter(([, items]) => items.length > 1).map(([path, items]) => ({ path, items }))
 }
 
 /** Already named right: exactly the expected name, or it with the " 2", " 3"… added when the name was taken. */

@@ -1,5 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
-import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver } from './approval-modal'
+import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver, type OwnerChooser } from './approval-modal'
 import {
   documentaryLibrary,
   ensureSteamLibrary,
@@ -12,10 +12,12 @@ import {
 } from './config'
 import {
   addToIndex,
+  ambiguousNotes,
   classify,
   emptyIndex,
   findNote,
   hasNote,
+  normalizeTitle,
   isNamedAs,
   planRenames,
   plexWebLink,
@@ -117,7 +119,32 @@ export class PlexSync {
     private readonly saveSettings: () => Promise<void>,
     /** Asks before each creation or change when "Ask before every change" is on. */
     private readonly approve?: Approver,
+    /** Asks which item an existing note is for, when its name matches several. */
+    private readonly chooseOwner?: OwnerChooser,
   ) {}
+
+  /**
+   * For each note whose name matches several items, asks which item it's for (in a full sync with
+   * asking on). The index is updated so the chosen item matches the note through its link (and so
+   * is offered renaming and filling in like any matched note), and the others get their own notes.
+   */
+  private async resolveAmbiguous(entries: Entry[], index: ExistingNotes, result: SyncResult): Promise<void> {
+    if (!this.chooseOwner || !this.settings.askBeforeChanges) return
+    const matches = entries.map(({ item, lib }) => ({ item, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
+    const libOf = new Map(entries.map(e => [e.item, e.lib]))
+    for (const { path, items } of ambiguousNotes(matches)) {
+      if (result.stopped) break
+      const choice = await this.chooseOwner({
+        path,
+        candidates: items.map(item => ({ key: item.ratingKey, name: displayName(item), library: libOf.get(item)!.title })),
+      })
+      if (choice === null) continue
+      const baseName = path.split('/').pop()!.replace(/\.md$/, '')
+      // Tie the note to the chosen item (or to none), so name matching stops offering it to the others.
+      addToIndex(index, path, baseName, [choice === 'none' ? `none:${path}` : choice])
+      if (choice !== 'none') index.ratingKeys.set(choice, path)
+    }
+  }
 
   /**
    * Whether to go ahead with one creation or change, and which of its lines were unticked
@@ -158,7 +185,11 @@ export class PlexSync {
     return { lib, kind }
   }
 
-  async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
+  /**
+   * Connects to Plex and Steam, refreshes the library list (unless only play counts are wanted),
+   * reads every active library and indexes the notes already in their folders.
+   */
+  private async prepare(progress: ProgressFn, refresh: boolean): Promise<{ active: [string, ActiveLibrary][], indexes: Record<Family, ExistingNotes>, entries: Entry[] }> {
     const usePlex = plexReady(this.settings)
     const useSteam = steamReady(this.settings)
     if (!usePlex && !useSteam) throw new Error('Set up Plex or Steam in the plugin settings first')
@@ -168,21 +199,20 @@ export class PlexSync {
       this.plex = new PlexClient(serverUrl, token)
       progress('Connecting to Plex…')
       this.machineId = await this.plex.machineIdentifier()
-      if (mode === 'full') mergeLibraries(this.settings, await this.plex.libraries())
+      if (refresh) mergeLibraries(this.settings, await this.plex.libraries())
     }
     if (useSteam) {
       const { apiKey, account, includeFreeGames } = this.settings.steam
       this.steam = new SteamClient(apiKey.trim(), account.trim(), includeFreeGames)
-      if (mode === 'full') ensureSteamLibrary(this.settings)
+      if (refresh) ensureSteamLibrary(this.settings)
     }
-    if (mode === 'full') await this.saveSettings()
+    if (refresh) await this.saveSettings()
 
     const active = Object.entries(this.settings.libraries)
       .filter((e): e is [string, ActiveLibrary] => e[1].target !== 'skip')
       .filter(([key]) => (key === STEAM_LIBRARY ? useSteam : usePlex))
     const indexes = Object.fromEntries(FAMILIES.map(family =>
       [family, this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === family))])) as Record<Family, ExistingNotes>
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
@@ -197,10 +227,21 @@ export class PlexSync {
         if (wanted) entries.push({ item, lib })
       }
     }
+    return { active, indexes, entries }
+  }
+
+  async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
+    const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
     const full = mode === 'full'
+    if (full) {
+      for (const family of FAMILIES) {
+        await this.resolveAmbiguous(entries.filter(e => familyOf(e.lib) === family), indexes[family], result)
+      }
+    }
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
     const counting = !full || this.settings.updatePlayCounts
@@ -357,6 +398,91 @@ export class PlexSync {
       }
     }
     return this.finish(result)
+  }
+
+  /**
+   * Explains, without changing anything, what a sync does with the items a Plex or Steam link
+   * points to, or whose title contains the text: one report (a list of paragraphs) per item.
+   */
+  async explain(query: string, progress: ProgressFn): Promise<string[][]> {
+    const { indexes, entries } = await this.prepare(progress, true)
+    const key = ratingKeyFromLink(query)
+    if (key) {
+      const found = entries.filter(e => e.item.ratingKey === key)
+      if (found.length) return found.map(e => this.explainEntry(e, indexes, entries))
+      return [await this.explainMissing(key)]
+    }
+    const wanted = normalizeTitle(query)
+    if (!wanted) return [['Paste a Plex or Steam link, or type part of a title.']]
+    const found = entries.filter(e => normalizeTitle(displayName(e.item)).includes(wanted))
+    if (!found.length) {
+      return [[`Nothing in the libraries being synced has a title containing "${query.trim()}". If it's in Plex, paste its link instead (in Plex Web, the address of its page): that also shows which library it's in.`]]
+    }
+    const reports = found.slice(0, 10).map(e => this.explainEntry(e, indexes, entries))
+    if (found.length > 10) reports.push([`…and ${found.length - 10} more. Type more of the title to narrow it down.`])
+    return reports
+  }
+
+  /** Why an item a link points to isn't in any library being synced. */
+  private async explainMissing(key: string): Promise<string[]> {
+    if (key.startsWith('steam-')) {
+      return [
+        `Steam app ${key.slice(6)}`,
+        'This game isn\'t in the games list Steam gives for your account. It may be a game you don\'t own, a free game you haven\'t played (or free-to-play games are switched off), or the Steam library is set to Skip.',
+      ]
+    }
+    if (!this.plex) return ['That\'s a Plex link, but Plex isn\'t set up in the plugin settings.']
+    const item = await this.plex.item(key).catch(() => null)
+    if (!item) return ['Plex has no item with that link. Check the address, or that it\'s on the server set up in the plugin.']
+    const name = displayName(item)
+    if (item.type === 'episode' || item.type === 'season') {
+      return [name, `That's a link to ${item.type === 'episode' ? 'an episode' : 'a season'}. Notes are made for whole shows: paste the show's link instead.`]
+    }
+    if (item.type === 'album' || item.type === 'artist') {
+      return [name, `That's a link to ${item.type === 'album' ? 'an album' : 'an artist'}. Music notes are made for each track.`]
+    }
+    const section = item.librarySectionID === undefined ? '' : String(item.librarySectionID)
+    const lib = this.settings.libraries[section]
+    const where = item.librarySectionTitle ?? lib?.title ?? 'a Plex library'
+    if (!lib) return [name, `It's in "${where}", which isn't in the plugin's settings yet. Press "Load libraries" in the settings, then choose its type.`]
+    if (lib.target === 'skip') return [name, `It's in "${lib.title}", which is set to Skip, so no notes are made for it. Choose a type for that library in the settings.`]
+    return [name, `It's in "${lib.title}", but wasn't in what Plex listed for that library just now. If it was added very recently, Plex may still be processing it; try again in a few minutes.`]
+  }
+
+  /** What a sync does with one listed item, and why. */
+  private explainEntry({ item, lib }: Entry, indexes: Record<Family, ExistingNotes>, entries: Entry[]): string[] {
+    const name = displayName(item)
+    const report = [`${name} (in ${lib.title})`]
+    if (this.isIgnored(item)) {
+      report.push('You chose "Skip every time" for it, so every sync passes over it. Un-ignore it under Settings → Skipped every time.')
+      return report
+    }
+    const { lib: noteLib } = this.libraryFor(item, lib)
+    if (noteLib !== lib) report.push(`It's in the Documentary genre, so its note uses the "${noteLib.title}" library's settings.`)
+    const index = indexes[familyOf(lib)]
+    const match = findNote(index, item, this.naming(lib), lib.matchBy)
+    if (!match) {
+      const path = this.freePath(normalizePath(noteLib.folder), renderFileName(this.naming(noteLib), item), 'md')
+      report.push(`It has no note yet. The next sync will ${this.settings.askBeforeChanges ? 'offer to create' : 'create'} ${path}.`)
+      return report
+    }
+    if (match.byRatingKey) {
+      report.push(`It already has a note, which links to it: ${match.paths[0]}. A sync only changes that note if renaming, filling in or play counts call for it.`)
+      return report
+    }
+    const notes = match.paths.join(', ')
+    report.push(match.paths.length > 1
+      ? `It counts as already having a note, because these notes' names match its title: ${notes}. So no new note is made for it.`
+      : `It counts as already having a note, because this note's name matches its title: ${notes}. So no new note is made for it.`)
+    const rivals = entries
+      .filter(e => e.item !== item && familyOf(e.lib) === familyOf(lib))
+      .filter(e => findNote(index, e.item, this.naming(e.lib), e.lib.matchBy)?.paths.some(p => match.paths.includes(p)))
+      .map(e => displayName(e.item))
+    if (rivals.length) {
+      report.push(`${rivals.join(', ')} ${rivals.length > 1 ? 'match' : 'matches'} the same note, so the plugin can't tell whose note it is and leaves it alone (no renaming or filling in).`)
+    }
+    report.push(`If that note is for something else, rename it (adding the year, say) or give it a Link to the right item; this one then gets its own note on the next sync. Or set "Match existing notes by" for ${lib.title} to "Link or file name", so a bare title no longer counts.`)
+    return report
   }
 
   private isIgnored(item: PlexItem): boolean {

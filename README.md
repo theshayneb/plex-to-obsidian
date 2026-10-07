@@ -73,6 +73,12 @@ When a note matches exactly one Plex item (and no other item could be it):
 
 With **Keep play counts up to date** on (it's off by default), every sync also updates properties set to "Play count" in existing notes, in all libraries; it's the only value in an existing note the plugin ever replaces. **Update play counts automatically** then does just that in the background, every hour, 6 hours, 12 hours or day, while Obsidian is open.
 
+## When something isn't imported
+
+Run **Explain why an item is or isn't imported** from the command palette and paste the item's Plex link (or a Steam Store link, or part of the title). It says what a sync does with that item and why, without changing anything.
+
+If a note's name matches more than one item (e.g. a plain `Black Sheep` note when Plex has both the 1996 and 2006 films), the sync asks which item the note is for; the others then get their own notes.
+
 ## Mobile
 
 The plugin works on mobile as long as the device can reach the Plex server. Otherwise, run it on a desktop and let Obsidian Sync carry the notes over.

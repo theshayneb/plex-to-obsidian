@@ -43,6 +43,15 @@ export interface ApprovalRequest {
 
 export type Approver = (request: ApprovalRequest) => Promise<Decision>
 
+/** An existing note whose name matches several items: which is it for? */
+export interface OwnerRequest {
+  path: string
+  candidates: { key: string, name: string, library: string }[]
+}
+
+/** The chosen item's key, 'none' for none of them, or null to leave the note alone this time. */
+export type OwnerChooser = (request: OwnerRequest) => Promise<string | null>
+
 /** Asks whether to create or change one note. Closing it without choosing skips the note. */
 export class ApprovalModal extends Modal {
   // "pmn" prefix: avoid clashing with undocumented members of Obsidian's own class.
@@ -212,4 +221,48 @@ export function describeValue(value: unknown): string | null {
   if (Array.isArray(value)) return value.length ? value.map(String).join(', ') : null
   const text = typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean)
   return text
+}
+
+/** Asks which of several items an existing note is for. Closing it leaves the note alone. */
+export class OwnerModal extends Modal {
+  private pmnDecided = false
+
+  constructor(app: App, private readonly pmnRequest: OwnerRequest, private readonly pmnResolve: (choice: string | null) => void) {
+    super(app)
+  }
+
+  onOpen(): void {
+    const { path, candidates } = this.pmnRequest
+    this.titleEl.setText('Which item is this note for?')
+    const { contentEl } = this
+    contentEl.createEl('p').createEl('code', { text: path })
+    contentEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: 'Its name matches more than one item, so the plugin can\'t tell which one it\'s for. The item you pick is treated as this note\'s (you\'ll still be asked before anything changes); the others get their own notes.',
+    })
+    for (const { key, name, library } of candidates) {
+      new Setting(contentEl)
+        .setName(name)
+        .setDesc(library)
+        .addButton(b => b.setButtonText('This one').setCta().onClick(() => this.pmnDecide(key)))
+    }
+    new Setting(contentEl)
+      .addButton(b => b.setButtonText('None of these').onClick(() => this.pmnDecide('none')))
+      .addButton(b => b.setButtonText('Skip').onClick(() => this.pmnDecide(null)))
+  }
+
+  onClose(): void {
+    this.contentEl.empty()
+    if (!this.pmnDecided) this.pmnResolve(null)
+  }
+
+  private pmnDecide(choice: string | null): void {
+    this.pmnDecided = true
+    this.pmnResolve(choice)
+    this.close()
+  }
+}
+
+export function askOwner(app: App, request: OwnerRequest): Promise<string | null> {
+  return new Promise(resolve => new OwnerModal(app, request, resolve).open())
 }

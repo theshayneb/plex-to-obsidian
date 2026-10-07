@@ -1,5 +1,6 @@
 import { Notice, Plugin } from 'obsidian'
-import { askApproval } from './approval-modal'
+import { askApproval, askOwner } from './approval-modal'
+import { ExplainModal } from './explain-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
 import { PlexSync } from './sync'
@@ -25,6 +26,15 @@ export default class PlexMediaNotesPlugin extends Plugin {
       },
     })
 
+    this.addCommand({
+      id: 'explain-item',
+      name: 'Explain why an item is or isn\'t imported',
+      callback: () => {
+        new ExplainModal(this.app, (query, progress) =>
+          new PlexSync(this.app, this.settings, () => this.saveSettings()).explain(query, progress)).open()
+      },
+    })
+
     this.addSettingTab(new PlexNotesSettingTab(this.app, this))
 
     // Background play count updates: check at startup and every 10 minutes whether one is due.
@@ -40,7 +50,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
     this.plexSyncRunning = true
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request)).run(() => {}, 'playCounts')
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request)).run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
       if (result.playCounts.length) console.log('Media import and sync: updated play counts', result.playCounts)
@@ -70,7 +80,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.plexSyncRunning = true
     const notice = new Notice('Starting…', 0)
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request))
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
         .run(message => notice.setMessage(message))
       notice.hide()
 

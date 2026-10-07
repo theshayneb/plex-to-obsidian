@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanOmdbKey, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { bookGenres, cleanOmdbKey, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
@@ -83,5 +83,14 @@ describe('links', () => {
 
   it('knows a Plex item by its IMDb ID too', () => {
     expect(itemKeys({ ratingKey: '5', type: 'movie', title: 'Inception', Guid: [{ id: 'imdb://tt1375666' }, { id: 'tmdb://27205' }] })).toEqual(['5', 'imdb-tt1375666'])
+  })
+})
+
+describe('book genres', () => {
+  it('drops the genre: prefix and other tags', () => {
+    expect(bookGenres(['genre:Fiction', 'Fantasy', 'nyt:hardcover-fiction=2009-10-04', 'Genre: Humor', 'fiction', 'History: 1900s']))
+      .toEqual(['Fiction', 'Fantasy', 'Humor', 'History: 1900s'])
+    expect(bookGenres(['A', 'B', 'C', 'D', 'E', 'F'])).toEqual(['A', 'B', 'C', 'D', 'E'])
+    expect(bookGenres(undefined)).toEqual([])
   })
 })

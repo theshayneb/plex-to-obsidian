@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.27] - 2026-10-07
+
+### Fixed
+- Book genres from Open Library no longer start with "genre:" (e.g. "genre:Fiction" is now "Fiction"). Open Library's other tags, such as New York Times list codes ("nyt:…"), are left out, as are repeated genres.
+
 ## [0.0.26] - 2026-10-07
 
 ### Added

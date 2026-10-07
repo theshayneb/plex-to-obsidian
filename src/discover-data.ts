@@ -133,6 +133,22 @@ export const OPEN_LIBRARY_FIELDS = 'key,title,author_name,first_publish_year,cov
 /** Open Library's subjects run long and loose; the first few are the useful ones. */
 const BOOK_GENRES = 5
 
+/**
+ * Open Library mixes tags into its subjects: "genre:Fiction" becomes "Fiction", and other tagged
+ * ones ("nyt:hardcover-fiction=2009-10-04", "series:…") are left out. Repeats are dropped.
+ */
+export function bookGenres(subjects: string[] | undefined): string[] {
+  const genres: string[] = []
+  for (const subject of subjects ?? []) {
+    const named = /^\s*genre\s*:\s*(.*)$/i.exec(subject)
+    // Other tags look like "nyt:…" (no space after the colon), unlike subjects such as "History: 1900s".
+    const genre = (named ? named[1] : /^\s*[a-z_]+:\S/i.test(subject) ? '' : subject).trim()
+    if (genre && !genres.some(g => g.toLowerCase() === genre.toLowerCase())) genres.push(genre)
+    if (genres.length === BOOK_GENRES) break
+  }
+  return genres
+}
+
 export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
   const work = /\/works\/(OL\d+W)/.exec(doc.key ?? '')?.[1]
   if (!work || !doc.title) return null
@@ -147,7 +163,7 @@ export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
       authors,
       pages: doc.number_of_pages_median,
       isbn: doc.isbn?.find(isbn => isbn.length === 13) ?? doc.isbn?.[0],
-      Genre: tags((doc.subject ?? []).slice(0, BOOK_GENRES)),
+      Genre: tags(bookGenres(doc.subject)),
       portrait: cover,
       webLink: `https://openlibrary.org/works/${work}`,
     },

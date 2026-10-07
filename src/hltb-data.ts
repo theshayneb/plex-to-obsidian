@@ -8,21 +8,16 @@ export interface HltbGame {
   game_alias?: string
   release_world?: number
   comp_main?: number
-  comp_plus?: number
-  comp_100?: number
-  comp_all?: number
   game_image?: string
   review_score?: number
 }
 
-/** A game's HowLongToBeat times, in hours. */
+/** A game's HowLongToBeat main story time, and its page. */
 export interface HltbTimes {
   id: number
   name: string
+  /** Main story, in hours. */
   main?: number
-  extra?: number
-  complete?: number
-  all?: number
   url: string
   image?: string
 }
@@ -85,9 +80,6 @@ export function hltbTimes(game: HltbGame): HltbTimes {
     id: game.game_id,
     name: game.game_name,
     main: hltbHours(game.comp_main),
-    extra: hltbHours(game.comp_plus),
-    complete: hltbHours(game.comp_100),
-    all: hltbHours(game.comp_all),
     url: `${HLTB}/game/${game.game_id}`,
     image: game.game_image ? `${HLTB}/games/${encodeURIComponent(game.game_image)}` : undefined,
   }

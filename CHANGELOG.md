@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.22] - 2026-10-07
+
+### Changed
+- HowLongToBeat: only the Main Story time is used. Main + Extras, Completionist and "all styles" are gone from the property sources and the game defaults, and properties using them are removed from your library settings. (Notes that already have them keep them.)
+
 ## [0.0.21] - 2026-10-07
 
 ### Added

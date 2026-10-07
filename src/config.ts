@@ -4,6 +4,7 @@ import {
   DEFAULT_TAGS,
   defaultProperties,
   defaultValues,
+  FIELD_SOURCES,
   oldGameProperties,
   type PropertyMapping,
   type PropertyValues,
@@ -259,6 +260,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       }
     }
     settings.libraries[key] = migrated
+  }
+  // Properties whose Plex/Steam/HowLongToBeat source no longer exists (Main + Extras and
+  // Completionist were dropped in 0.0.22) are removed.
+  for (const lib of Object.values(settings.libraries)) {
+    lib.properties = lib.properties.filter(m => m.source in FIELD_SOURCES)
   }
   // A Steam library still on the first game defaults gets the HowLongToBeat times added.
   const steamLib = settings.libraries[STEAM_LIBRARY]

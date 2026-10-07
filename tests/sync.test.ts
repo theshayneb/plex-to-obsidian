@@ -484,8 +484,6 @@ describe('PlexSync', () => {
       Image: 'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg',
       WideImage: 'https://cdn/620/header.jpg',
       'Main Story': 8.6,
-      'Main + Extras': 13.8,
-      Completionist: 22.9,
       tags: ['video_game'],
     })
     // The existing note was matched by title: it gets its Link filled in and nothing else.
@@ -644,6 +642,13 @@ describe('PlexSync', () => {
     })
     expect(settings.libraries['3']).toMatchObject({ target: 'skip' })
     expect(settings.serverUrl).toBe('x')
+    // Properties whose source was dropped (Main + Extras, Completionist) are removed.
+    const steam = loadSettings({ libraries: { steam: {
+      title: 'Steam', type: 'steam', target: 'game', folder: 'G', fileNameFormat: '{{title}}', matchBy: 'loose',
+      properties: [{ name: 'Main Story', source: 'hltbMain' }, { name: 'Main + Extras', source: 'hltbExtra' }, { name: 'Completionist', source: 'hltbComplete' }],
+      values: { watched: 'a', started: 'b', unwatched: 'c', tag: 'd' },
+    } } })
+    expect(steam.libraries.steam.properties).toEqual([{ name: 'Main Story', source: 'hltbMain' }])
     expect(loadSettings({ ignored: { 5: { name: 'X', library: 'Movies', since: 1 } } }).ignored).toEqual({ 5: { name: 'X', library: 'Movies', since: 1 } })
     expect(loadSettings({}).ignored).toEqual({})
   })

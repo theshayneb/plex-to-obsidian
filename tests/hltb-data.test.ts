@@ -3,7 +3,7 @@ import { hltbHours, hltbTimes, pickMatch, searchBody, searchTitle, type HltbGame
 
 const results: HltbGame[] = [
   { game_id: 2, game_name: 'Portal 2: Peer Review', release_world: 2011, comp_main: 11784 },
-  { game_id: 1, game_name: 'Portal 2', release_world: 2011, comp_main: 30885, comp_plus: 49567, comp_100: 82549, comp_all: 38269, game_image: 'Portal2cover.jpg' },
+  { game_id: 1, game_name: 'Portal 2', release_world: 2011, comp_main: 30885, game_image: 'Portal2cover.jpg' },
   { game_id: 3, game_name: 'DOOM', release_world: 1993 },
   { game_id: 4, game_name: 'DOOM', release_world: 2016, game_alias: 'Doom 4' },
 ]
@@ -26,7 +26,7 @@ describe('HowLongToBeat', () => {
     expect(hltbHours(30885)).toBe(8.6)
     expect(hltbHours(0)).toBeUndefined()
     expect(hltbTimes(results[1])).toEqual({
-      id: 1, name: 'Portal 2', main: 8.6, extra: 13.8, complete: 22.9, all: 10.6,
+      id: 1, name: 'Portal 2', main: 8.6,
       url: 'https://howlongtobeat.com/game/1', image: 'https://howlongtobeat.com/games/Portal2cover.jpg',
     })
   })

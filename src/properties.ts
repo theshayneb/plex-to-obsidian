@@ -12,7 +12,7 @@ export type FieldSource =
   | 'imdbId' | 'tmdbId' | 'tvdbId'
   | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
-  | 'hltbMain' | 'hltbExtra' | 'hltbComplete' | 'hltbAll' | 'hltbLink'
+  | 'hltbMain' | 'hltbLink'
   | 'text'
 
 export interface PropertyMapping {
@@ -77,9 +77,6 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   metacritic: 'Games: Metacritic score',
   wideImage: 'Games: wide image (landscape header)',
   hltbMain: 'Games: HowLongToBeat main story (hours)',
-  hltbExtra: 'Games: HowLongToBeat main + extras (hours)',
-  hltbComplete: 'Games: HowLongToBeat completionist (hours)',
-  hltbAll: 'Games: HowLongToBeat all styles (hours)',
   hltbLink: 'Games: HowLongToBeat page',
   text: 'Fixed text',
 }
@@ -116,8 +113,6 @@ export const DEFAULT_GAME_PROPERTIES: PropertyMapping[] = [
   { name: 'Image', source: 'poster' },
   { name: 'WideImage', source: 'wideImage' },
   { name: 'Main Story', source: 'hltbMain' },
-  { name: 'Main + Extras', source: 'hltbExtra' },
-  { name: 'Completionist', source: 'hltbComplete' },
   { name: 'tags', source: 'typeTag' },
 ]
 
@@ -214,7 +209,7 @@ function hours(minutes: number | undefined): number {
 }
 
 /** Sources that need a HowLongToBeat lookup. */
-export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbExtra', 'hltbComplete', 'hltbAll', 'hltbLink']
+export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbLink']
 
 /** Sources kept up to date by "Keep play counts up to date": plays, and a game's playtime. */
 export const PLAY_SOURCES: FieldSource[] = ['viewCount', 'playtime']
@@ -284,9 +279,6 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'metacritic': return item.metacritic
     case 'wideImage': return item.wideImage
     case 'hltbMain': return item.hltb?.main
-    case 'hltbExtra': return item.hltb?.extra
-    case 'hltbComplete': return item.hltb?.complete
-    case 'hltbAll': return item.hltb?.all
     case 'hltbLink': return item.hltb?.url
     case 'text': return text
   }

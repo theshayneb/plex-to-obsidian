@@ -50,7 +50,7 @@ The default music (track) note has Artist, Album, Track, Genre (from the album),
 
 Every game in your Steam library (plus free-to-play games you've played, unless switched off) gets a note in `Media/Video Games`, by default with Genre, Release Date, Total Playtime (hours), Status (`started` once played, otherwise `pending`; finished, abandoned and so on are yours to set), Link (the Steam Store page), Image (the portrait cover, linked), WideImage (the landscape header, linked) and tags (`video_game`). Other sources include playtime in the last two weeks, last played, developers, publishers, platforms, Metacritic score and description. With **Keep play counts up to date** on, Total Playtime is kept up to date too, also by the background schedule.
 
-Game notes also get **Main Story**, **Main + Extras** and **Completionist** times from HowLongToBeat (looked up by the game's exact name; no key needed). In the approval pop-up, a game's Image comes with covers to pick from: Steam's, HowLongToBeat's and, with an optional SteamGridDB API key (Steam section of the settings), SteamGridDB's.
+Game notes also get the **Main Story** time from HowLongToBeat (looked up by the game's exact name; no key needed). In the approval pop-up, a game's Image comes with covers to pick from: Steam's, HowLongToBeat's and, with an optional SteamGridDB API key (Steam section of the settings), SteamGridDB's.
 
 Store details come from the Steam Store, which allows about 200 requests every 5 minutes, so new games are read a little over one a second.
 

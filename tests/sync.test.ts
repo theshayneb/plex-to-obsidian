@@ -123,12 +123,12 @@ beforeEach(() => {
     { key: '4', title: 'Documentaries', type: 'movie' },
     { key: '5', title: 'Photos', type: 'photo' },
   ] } })
-  responses.set('/library/sections/1/all', { MediaContainer: { Metadata: movies } })
+  responses.set('/library/sections/1/all', { MediaContainer: { Metadata: movies.slice(0, 2) } })
   responses.set('/library/sections/2/all', { MediaContainer: { Metadata: [
     { ratingKey: '10', type: 'show', title: 'Severance', year: 2022 },
   ] } })
   responses.set('/library/sections/3/all', { MediaContainer: { Metadata: tracks } })
-  responses.set('/library/sections/4/all', { MediaContainer: { Metadata: [] } })
+  responses.set('/library/sections/4/all', { MediaContainer: { Metadata: [movies[2]] } })
   responses.set('/library/metadata/1', { MediaContainer: { Metadata: [{
     ...movies[0], summary: 'Linguist meets aliens.', originallyAvailableAt: '2016-11-11',
     duration: 6960000, viewCount: 2, thumb: '/library/metadata/1/thumb/9', Genre: [{ tag: 'Sci-Fi' }, { tag: 'Drama' }],
@@ -316,11 +316,11 @@ describe('PlexSync', () => {
     const settings = settingsWith()
     settings.libraries = {}
     const asked: string[] = []
-    // Skip the change to Heat; skip Arrival; create the rest of the movies; stop at the first TV show.
+    // Skip the change to Heat; skip Arrival; then create everything else.
     const answers: Record<string, string> = {
       'change Media/Movies/Heat.md': 'skip',
       'create Media/Movies/Arrival (2016).md': 'skip',
-      'create Media/Documentaries/Free Solo (2018).md': 'all',
+      'create Media/TV Shows/Severance (2022).md': 'all',
     }
     const approve = vi.fn((r: ApprovalRequest) => {
       asked.push(`${r.action} ${r.path}`)
@@ -340,14 +340,14 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({})
     expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
     expect(binaries).toEqual([])
-    expect(result.created).toEqual(['Media/Documentaries/Free Solo (2018).md', 'Media/TV Shows/Severance (2022).md'])
+    expect(result.created).toEqual(['Media/TV Shows/Severance (2022).md', 'Media/Documentaries/Free Solo (2018).md'])
     expect(result.declined).toBe(2)
     expect(result.stopped).toBe(false)
-    // "Create all the rest" covered the TV show too: no more questions after Free Solo.
+    // "Create all the rest" covered the documentary too: no more questions after Severance.
     expect(asked).toEqual([
       'change Media/Movies/Heat.md',
       'create Media/Movies/Arrival (2016).md',
-      'create Media/Documentaries/Free Solo (2018).md',
+      'create Media/TV Shows/Severance (2022).md',
     ])
   })
 

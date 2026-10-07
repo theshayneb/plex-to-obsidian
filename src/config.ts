@@ -62,7 +62,6 @@ export interface PlexNotesSettings {
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
   fileNameReplacements: Record<string, string>
-  useDocumentaryGenre: boolean
   /** Rename matching existing notes to their library's file name format. */
   renameExistingNotes: boolean
   /** Show what will happen and ask before creating or changing each note. */
@@ -115,7 +114,6 @@ export function defaultSettings(): PlexNotesSettings {
     omdbKey: '',
     imagesSubfolder: 'Images',
     fileNameReplacements: {},
-    useDocumentaryGenre: true,
     renameExistingNotes: true,
     askBeforeChanges: true,
     ignored: {},
@@ -211,11 +209,6 @@ export function hasSource(key: string): boolean {
   return key !== BOOKS_LIBRARY
 }
 
-/** The library documentary-genre items from other libraries are handled by, if there is one. */
-export function documentaryLibrary(settings: PlexNotesSettings): LibrarySetting | undefined {
-  return Object.values(settings.libraries).find(lib => lib.target === 'documentary')
-}
-
 /** Settings as saved by 0.0.9 and earlier, when folders, file name and properties were plugin-wide. */
 interface LegacySettings {
   moviesFolder?: string
@@ -233,7 +226,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'useDocumentaryGenre', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
     'updatePlayCounts', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

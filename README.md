@@ -42,7 +42,7 @@ tags:
 - **Status** is `completed` once a movie has been played, or once every episode of a show has been watched; `started` for a movie stopped part way or a show with some episodes watched; otherwise `pending`.
 - **Image** is the poster, downloaded into an `Images` subfolder of the library's folder. The Plex image URL itself would expose your token.
 - **Genre** leaves out "Documentary" for documentaries.
-- A movie or show with the Documentary genre gets its note from your Documentaries library's settings, whatever library it's in.
+- Documentaries are only the items in libraries whose Type is Documentaries (a movie or show elsewhere with the Documentary genre stays where it is).
 
 The default music (track) note has Artist, Album, Track, Genre (from the album), Date (the album's release date), Duration (`4:24`), Link, Image (the album cover, shared by its tracks) and tags (`music`).
 

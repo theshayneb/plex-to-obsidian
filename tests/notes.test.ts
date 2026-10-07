@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  classify,
   defaultLibraryTarget,
   addToIndex,
   emptyIndex,
@@ -38,16 +37,6 @@ const show: PlexItem = {
   viewedLeafCount: 4,
   Genre: [{ tag: 'Documentary' }],
 }
-
-describe('classify', () => {
-  it('uses the library target', () => {
-    expect(classify(movie, 'movie', true)).toBe('movie')
-  })
-  it('moves Documentary-genre items to documentaries when enabled', () => {
-    expect(classify(show, 'tv', true)).toBe('documentary')
-    expect(classify(show, 'tv', false)).toBe('tv')
-  })
-})
 
 describe('defaultLibraryTarget', () => {
   it('guesses from type and title', () => {

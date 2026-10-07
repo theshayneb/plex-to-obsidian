@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.29] - 2026-10-07
+
+### Removed
+- Documentary detection by genre. Documentaries are now only the items in libraries set to Documentaries (such as Documentaries and Documentary Series). A movie or show in another library gets its note from that library's settings, even with the Documentary genre. Documentaries still never list "Documentary" as a genre.
+
 ## [0.0.28] - 2026-10-07
 
 ### Changed

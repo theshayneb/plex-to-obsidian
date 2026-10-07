@@ -117,15 +117,6 @@ export function isDocumentaryGenre(genre: string): boolean {
   return genre.trim().toLowerCase() === 'documentary'
 }
 
-/** The library decides movie vs TV; a "Documentary" genre (when enabled) moves the item to documentaries. */
-export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentaryGenre: boolean): MediaKind {
-  if (libraryTarget === 'music' || libraryTarget === 'game' || libraryTarget === 'book') return libraryTarget
-  if (useDocumentaryGenre && genresOf(item).some(isDocumentaryGenre)) {
-    return 'documentary'
-  }
-  return libraryTarget
-}
-
 /**
  * Default target for a Plex library section, guessed from its type and title. Music libraries start
  * skipped: one note per track can be thousands of notes, so they're switched on by hand.

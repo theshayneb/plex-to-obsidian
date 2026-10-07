@@ -1,7 +1,6 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver, type OwnerChooser } from './approval-modal'
 import {
-  documentaryLibrary,
   ensureSteamLibrary,
   hasSource,
   mergeLibraries,
@@ -14,7 +13,6 @@ import {
 import {
   addToIndex,
   ambiguousNotes,
-  classify,
   emptyIndex,
   findNote,
   hasNote,
@@ -187,14 +185,9 @@ export class PlexSync {
     return { format: lib.fileNameFormat, replacements: this.settings.fileNameReplacements }
   }
 
-  /** The library whose settings make this item's note: its own, or the documentaries library for a documentary. */
-  private libraryFor(item: PlexItem, lib: ActiveLibrary): { lib: ActiveLibrary, kind: MediaKind } {
-    const kind = classify(item, lib.target, this.settings.useDocumentaryGenre)
-    if (kind === 'documentary' && lib.target !== 'documentary') {
-      const docs = documentaryLibrary(this.settings) as ActiveLibrary | undefined
-      return docs ? { lib: docs, kind } : { lib, kind: lib.target }
-    }
-    return { lib, kind }
+  /** The library whose settings make this item's note: always its own (documentaries only come from documentary libraries). */
+  private libraryFor(_item: PlexItem, lib: ActiveLibrary): { lib: ActiveLibrary, kind: MediaKind } {
+    return { lib, kind: lib.target }
   }
 
   /**

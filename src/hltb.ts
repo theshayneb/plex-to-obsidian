@@ -24,12 +24,13 @@ export class HltbClient {
 
   /** The game's times, or null when HowLongToBeat has no game with that exact name. */
   async times(title: string, year?: number): Promise<HltbTimes | null> {
-    const results = await this.search(title)
+    const results = await this.searchGames(title)
     const match = pickMatch(results, title, year)
     return match ? hltbTimes(match) : null
   }
 
-  private async search(title: string): Promise<HltbGame[]> {
+  /** HowLongToBeat's search results for a title (up to 20). */
+  async searchGames(title: string): Promise<HltbGame[]> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const token = this.token ?? await this.newToken()
       const res = await this.send('POST', '/api/search/site', JSON.stringify(searchBody(title)), {

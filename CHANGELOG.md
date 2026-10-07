@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.24] - 2026-10-07
+
+### Added
+- **Add something new** (command): make a note for something that isn't in Plex or Steam yet. Choose Movie, TV show, Video game or Book and the library to add it to, search, and pick a result; the approval pop-up shows the note (editable, with cover choices for games) before it's made, and the note opens. If a note for it already exists, that note opens instead.
+  - Movies and TV shows come from OMDb (needs a free OMDb API key: Settings → Adding things not in Plex or Steam), with genres, plot, release date, runtime (minutes), rating, directors, writers, cast, countries, the poster (linked) and the IMDb page as Link.
+  - Games come from the Steam Store (any Steam game, with the same details as your own games) and HowLongToBeat (games on other platforms, with platforms, year, Main Story and cover). No key needed.
+  - Books come from Open Library: authors, first published year, pages, a few subjects as Genre, description, ISBN, cover (linked) and the Open Library page as Link. No key needed. They go in a new **Books** library (`Media/Books`) with its own settings; book property sources: authors, number of pages, ISBN.
+- When a movie or show added from IMDb later appears in Plex, the sync recognises its note through the IMDb ID (even under another title) instead of making a second one. Plex is now asked for each item's IMDb ID when reading a library.
+
 ## [0.0.23] - 2026-10-07
 
 ### Changed

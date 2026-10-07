@@ -63,7 +63,8 @@ export class PlexClient {
     const pageSize = 500
     const items: PlexItem[] = []
     for (let start = 0; ; start += pageSize) {
-      const query = `${tracks ? 'type=10&' : ''}X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`
+      // includeGuids gives each item's IMDb ID, to recognise notes added from IMDb before it was in Plex.
+      const query = `${tracks ? 'type=10&' : 'includeGuids=1&'}X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`
       const page = await this.get(`/library/sections/${encodeURIComponent(libraryKey)}/all?${query}`)
       const batch = page.Metadata ?? []
       items.push(...batch)

@@ -54,6 +54,14 @@ Game notes also get the **Main Story** time (in minutes) from HowLongToBeat (loo
 
 Store details come from the Steam Store, which allows about 200 requests every 5 minutes, so new games are read a little over one a second.
 
+## Adding things not in Plex or Steam
+
+Run **Add something new** from the command palette. Choose what it is (movie, TV show, video game, book) and which library it goes in, search, and pick a result. The note is made like a synced one (you're asked first, with everything editable) in that library's folder, with its properties.
+
+- **Movies and TV shows**: from OMDb, which needs a free API key (omdbapi.com; enter it under Settings → Adding things not in Plex or Steam). The Link is the IMDb page; when the movie later shows up in Plex, the sync recognises the note by its IMDb ID.
+- **Video games**: from the Steam Store (any Steam game) and HowLongToBeat (games on other platforms). No key needed.
+- **Books**: from Open Library, into the **Books** library (`Media/Books`). No key needed.
+
 ## File names
 
 Characters that can't be in file names are dropped, unless you choose a replacement for them under **Characters in file names** (for all libraries); e.g. `:` → `-` gives `Mission- Impossible (1996)`.

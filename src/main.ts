@@ -1,8 +1,10 @@
-import { Notice, Plugin } from 'obsidian'
+import { Notice, Plugin, TFile } from 'obsidian'
+import { AddModal } from './add-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
+import type { PlexItem } from './notes'
 import { PlexSync } from './sync'
 
 export default class PlexMediaNotesPlugin extends Plugin {
@@ -23,6 +25,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
       name: 'Import and sync media',
       callback: () => {
         void this.syncFromPlex()
+      },
+    })
+
+    this.addCommand({
+      id: 'add-new',
+      name: 'Add something new (not in Plex or Steam)',
+      callback: () => {
+        new AddModal(this.app, this.settings, () => this.saveSettings(), (item, libraryKey) => this.addNew(item, libraryKey)).open()
       },
     })
 
@@ -70,6 +80,21 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings)
+  }
+
+  /** Makes a note for an item picked in "Add something new", or opens the one it already has. */
+  async addNew(item: PlexItem, libraryKey: string): Promise<void> {
+    try {
+      const sync = new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+      const { created, existing } = await sync.addNew(item, libraryKey)
+      const path = created ?? existing
+      if (existing) new Notice(`It already has a note: ${existing}`)
+      if (!path) return
+      const file = this.app.vault.getAbstractFileByPath(path)
+      if (file instanceof TFile) await this.app.workspace.getLeaf(false).openFile(file)
+    } catch (err) {
+      new Notice(`Couldn't add it: ${errorMessage(err)}`, 10000)
+    }
   }
 
   async syncFromPlex(): Promise<void> {

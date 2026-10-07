@@ -1,6 +1,6 @@
 // Pure helpers for turning Plex items into notes. No Obsidian imports, so they can be unit tested.
 
-export type MediaKind = 'movie' | 'tv' | 'documentary' | 'music' | 'game'
+export type MediaKind = 'movie' | 'tv' | 'documentary' | 'music' | 'game' | 'book'
 export type LibraryTarget = MediaKind | 'skip'
 
 export interface PlexTag {
@@ -76,6 +76,13 @@ export interface PlexItem {
   hltb?: import('./hltb-data').HltbTimes
   /** Other covers to choose from in the approval pop-up. */
   coverChoices?: import('./steamgriddb').CoverChoice[]
+  // Found with "Add something new" (not from Plex or Steam): ratingKey "imdb-…", "ol-…" or "hltb-…"
+  /** The item's page (IMDb, Open Library, HowLongToBeat), used as its Link. */
+  webLink?: string
+  // Books
+  authors?: string[]
+  pages?: number
+  isbn?: string
 }
 
 export function isMusic(kind: MediaKind): boolean {
@@ -112,7 +119,7 @@ export function isDocumentaryGenre(genre: string): boolean {
 
 /** The library decides movie vs TV; a "Documentary" genre (when enabled) moves the item to documentaries. */
 export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentaryGenre: boolean): MediaKind {
-  if (libraryTarget === 'music' || libraryTarget === 'game') return libraryTarget
+  if (libraryTarget === 'music' || libraryTarget === 'game' || libraryTarget === 'book') return libraryTarget
   if (useDocumentaryGenre && genresOf(item).some(isDocumentaryGenre)) {
     return 'documentary'
   }
@@ -125,6 +132,7 @@ export function classify(item: PlexItem, libraryTarget: MediaKind, useDocumentar
  */
 export function defaultLibraryTarget(type: string, title: string): LibraryTarget {
   if (type === 'steam') return 'game'
+  if (type === 'books') return 'book'
   if (type !== 'movie' && type !== 'show') return 'skip'
   if (/documentar/i.test(title)) return 'documentary'
   return type === 'movie' ? 'movie' : 'tv'
@@ -133,7 +141,7 @@ export function defaultLibraryTarget(type: string, title: string): LibraryTarget
 /** Movies count as watched once played; shows once every episode is played. */
 export function isWatched(item: PlexItem): boolean {
   // Steam can't tell when a game is finished; that's set by hand.
-  if (item.type === 'game') return false
+  if (item.type === 'game' || item.type === 'book') return false
   if (item.type === 'show') {
     const total = item.leafCount ?? 0
     return total > 0 && (item.viewedLeafCount ?? 0) >= total
@@ -158,11 +166,20 @@ export function steamStoreUrl(appId: number): string {
   return `https://store.steampowered.com/app/${appId}/`
 }
 
-/** Reads the item's key back out of a note's Link property: a Plex rating key, or "steam-<appid>". */
+/**
+ * Reads the item's key back out of a note's Link property: a Plex rating key, or "steam-<appid>",
+ * "imdb-<id>", "ol-<work id>" or "hltb-<id>" for Steam Store, IMDb, Open Library and HowLongToBeat pages.
+ */
 export function ratingKeyFromLink(link: unknown): string | null {
   if (typeof link !== 'string') return null
   const steam = /store\.steampowered\.com\/app\/(\d+)/i.exec(link)
   if (steam) return `steam-${steam[1]}`
+  const imdb = /imdb\.com\/title\/(tt\d+)/i.exec(link)
+  if (imdb) return `imdb-${imdb[1]}`
+  const openLibrary = /openlibrary\.org\/works\/(OL\d+W)/i.exec(link)
+  if (openLibrary) return `ol-${openLibrary[1]}`
+  const hltb = /howlongtobeat\.com\/game\/(\d+)/i.exec(link)
+  if (hltb) return `hltb-${hltb[1]}`
   const match = /library(?:\/|%2F)metadata(?:\/|%2F)(\d+)/i.exec(link)
   return match ? match[1] : null
 }
@@ -276,14 +293,30 @@ export interface NoteMatch {
   byRatingKey: boolean
 }
 
+/**
+ * Every key a note's Link can name this item by: its own, plus "imdb-<id>" when Plex knows its
+ * IMDb ID, so a note added from IMDb before the movie was in Plex is recognised once it is.
+ */
+export function itemKeys(item: PlexItem): string[] {
+  const keys = [item.ratingKey]
+  for (const guid of item.Guid ?? []) {
+    const imdb = /^imdb:\/\/(tt\d+)/.exec(guid.id)
+    if (imdb) keys.push(`imdb-${imdb[1]}`)
+  }
+  return keys
+}
+
 export function findNote(existing: ExistingNotes, item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): NoteMatch | null {
-  const keyed = existing.ratingKeys.get(item.ratingKey)
-  if (keyed) return { paths: [keyed], byRatingKey: true }
+  const keys = itemKeys(item)
+  for (const key of keys) {
+    const keyed = existing.ratingKeys.get(key)
+    if (keyed) return { paths: [keyed], byRatingKey: true }
+  }
   const paths = new Set<string>()
   for (const name of candidateNames(item, naming, matchBy)) {
     for (const path of existing.names.get(name) ?? []) {
       const linked = existing.keysByPath.get(path)
-      if (!linked || linked.includes(item.ratingKey)) paths.add(path)
+      if (!linked || linked.some(key => keys.includes(key))) paths.add(path)
     }
   }
   return paths.size ? { paths: [...paths], byRatingKey: false } : null

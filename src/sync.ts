@@ -3,6 +3,7 @@ import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalReq
 import {
   documentaryLibrary,
   ensureSteamLibrary,
+  hasSource,
   mergeLibraries,
   plexReady,
   STEAM_LIBRARY,
@@ -67,9 +68,10 @@ type ActiveLibrary = LibrarySetting & { target: MediaKind }
  * Movies, shows and documentaries can match each other's notes (an item may move by genre);
  * music only matches music, and games only games.
  */
-type Family = 'video' | 'music' | 'game'
-const FAMILIES: Family[] = ['video', 'music', 'game']
-const familyOf = (lib: ActiveLibrary): Family => (lib.target === 'music' || lib.target === 'game' ? lib.target : 'video')
+type Family = 'video' | 'music' | 'game' | 'book'
+const FAMILIES: Family[] = ['video', 'music', 'game', 'book']
+const familyOf = (lib: ActiveLibrary): Family =>
+  (lib.target === 'music' || lib.target === 'game' || lib.target === 'book' ? lib.target : 'video')
 
 /** What was approved: the lines unticked, and the new values edited. */
 interface Approval {
@@ -94,6 +96,11 @@ interface FillPlan {
   additions: [string, unknown][]
   /** The property the poster goes in, if it's wanted and Plex has one; downloaded only once approved. */
   imageProperty: string | null
+}
+
+/** Items from Plex have numeric keys; the rest (Steam, IMDb, Open Library, HowLongToBeat) link their covers. */
+function fromPlex(item: PlexItem): boolean {
+  return /^\d+$/.test(item.ratingKey)
 }
 
 /** Whether Plex has a poster to download for this item. Games link their cover instead. */
@@ -215,7 +222,7 @@ export class PlexSync {
 
     const active = Object.entries(this.settings.libraries)
       .filter((e): e is [string, ActiveLibrary] => e[1].target !== 'skip')
-      .filter(([key]) => (key === STEAM_LIBRARY ? useSteam : usePlex))
+      .filter(([key]) => hasSource(key) && (key === STEAM_LIBRARY ? useSteam : usePlex))
     const indexes = Object.fromEntries(FAMILIES.map(family =>
       [family, this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === family))])) as Record<Family, ExistingNotes>
 
@@ -491,6 +498,41 @@ export class PlexSync {
     return report
   }
 
+  /**
+   * Adds one item found with "Add something new" to a library: asks first (as for a sync) and
+   * makes the note, unless a note already matches it (then that note's path is returned).
+   */
+  async addNew(found: PlexItem, libKey: string): Promise<{ created?: string, existing?: string }> {
+    const chosen = this.settings.libraries[libKey] as LibrarySetting | undefined
+    if (!chosen || chosen.target === 'skip') throw new Error('Choose a library to add it to')
+    const lib = chosen as ActiveLibrary
+    const item = found.type === 'game' ? await this.gameDetails(found, lib) : found
+    const family = familyOf(lib)
+    const libs = Object.values(this.settings.libraries)
+      .filter((l): l is ActiveLibrary => l.target !== 'skip')
+      .filter(l => familyOf(l) === family)
+    const index = this.indexExistingNotes(libs)
+    const match = findNote(index, item, this.naming(lib), lib.matchBy)
+    if (match) return { existing: match.paths[0] }
+
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
+    const kind = lib.target
+    const preview = this.previewNote(item, lib, kind)
+    const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
+    if (!approval) {
+      await this.finish(result)
+      return {}
+    }
+    const { excluded, edits } = approval
+    const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
+    const overrides: Record<string, unknown> = {}
+    for (const [key, edited] of Object.entries(edits)) {
+      if (key.startsWith('prop:')) overrides[key.slice(5)] = parseEdit(edited, editKind(preview.values[key.slice(5)]))
+    }
+    const fileName = typeof edits.file === 'string' ? sanitizeFileName(edits.file, this.settings.fileNameReplacements) || undefined : undefined
+    return { created: await this.createNote(item, lib, kind, left, overrides, fileName) }
+  }
+
   private isIgnored(item: PlexItem): boolean {
     return item.ratingKey in this.settings.ignored
   }
@@ -525,11 +567,13 @@ export class PlexSync {
    * asking first, other covers to pick from. Lookups that fail leave those parts out.
    */
   private async gameDetails(listed: PlexItem, lib?: LibrarySetting): Promise<PlexItem> {
-    const item = this.steam ? await this.steam.details(listed) : listed
+    // Store details need no key, so games found by searching get them without Steam set up.
+    const steam = this.steam ?? new SteamClient('', '', false)
+    const item = listed.steamAppId ? await steam.details(listed) : { ...listed }
     const properties = lib?.properties ?? []
     const wantsCover = usesSource(properties, 'poster') && this.settings.askBeforeChanges
     const wantsHltb = properties.some(m => HLTB_SOURCES.includes(m.source) && m.name.trim())
-    if (wantsHltb || wantsCover) {
+    if ((wantsHltb || wantsCover) && !item.hltb) {
       try {
         this.hltb ??= new HltbClient()
         item.hltb = (await this.hltb.times(item.title, item.year)) ?? undefined
@@ -589,8 +633,9 @@ export class PlexSync {
     // The link needs nothing more; everything else may need the item's full metadata.
     const needsMore = wanted.some(m => m.source !== 'plexLink' && m.source !== 'text' && m.source !== 'typeTag')
     const item = needsMore ? await this.fullItem(listed, lib) : listed
-    // A game's cover is a link, filled in like any value; a Plex poster is downloaded once approved.
-    const game = item.type === 'game'
+    // A cover from Steam, IMDb or the like is a link, filled in like any value; a Plex poster is
+    // downloaded once approved.
+    const game = !fromPlex(item)
     const values = buildFrontmatter(item, wanted.filter(m => game || m.source !== 'poster'), {
       kind,
       link: this.linkFor(item),
@@ -639,9 +684,10 @@ export class PlexSync {
     return names.length ? { names, from, to } : null
   }
 
-  /** Where the item's Link points: its Plex page, or a game's Steam store page. */
+  /** Where the item's Link points: its Plex page, a game's Steam Store page, or its IMDb (or the like) page. */
   private linkFor(item: PlexItem): string {
     if (item.type === 'game' && item.steamAppId) return steamStoreUrl(item.steamAppId)
+    if (!fromPlex(item) && item.webLink) return item.webLink
     return plexWebLink(this.machineId, item.ratingKey)
   }
 
@@ -653,13 +699,13 @@ export class PlexSync {
     const frontmatter = buildFrontmatter(item, lib.properties, {
       kind,
       link: this.linkFor(item),
-      image: item.type === 'game' ? item.portrait ?? null : hasImage(item) ? POSTER_PREVIEW : null,
+      image: !fromPlex(item) ? item.portrait ?? null : hasImage(item) ? POSTER_PREVIEW : null,
       values: lib.values,
     })
     const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
     for (const [name, value] of Object.entries(frontmatter)) {
       const poster = value === POSTER_PREVIEW
-      const cover = item.type === 'game' && lib.properties.some(m => m.source === 'poster' && m.name.trim() === name)
+      const cover = !fromPlex(item) && lib.properties.some(m => m.source === 'poster' && m.name.trim() === name)
       lines.push(poster
         ? { key: `prop:${name}`, label: name, value: describeValue(value) }
         : { key: `prop:${name}`, label: name, ...editable(value), choices: cover ? item.coverChoices : undefined })
@@ -725,7 +771,7 @@ export class PlexSync {
    * linked. A game's portrait cover is linked where Steam keeps it.
    */
   private async imageFor(item: PlexItem, folder: string, baseName: string): Promise<string | null> {
-    if (item.type === 'game') return item.portrait ?? null
+    if (!fromPlex(item)) return item.portrait ?? null
     const plex = this.plex
     if (!plex) return null
     const track = item.type === 'track'

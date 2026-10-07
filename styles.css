@@ -229,3 +229,56 @@
   border-color: var(--interactive-accent);
   color: var(--text-normal);
 }
+
+/* "Add something new" pop-up. */
+.modal.pmn-add {
+  width: min(720px, 95vw);
+}
+
+.pmn-add .setting-item-control:has(.pmn-add-input) {
+  flex: 1;
+}
+
+.pmn-add-input {
+  width: 100%;
+}
+
+.pmn-add-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.pmn-add-result {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  width: 100%;
+  height: auto;
+  padding: var(--size-4-2);
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+}
+
+.pmn-add-thumb {
+  flex: 0 0 48px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pmn-add-thumb img {
+  max-width: 48px;
+  max-height: 64px;
+  object-fit: contain;
+  border-radius: var(--radius-s);
+}
+
+.pmn-add-detail {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}

@@ -49,10 +49,15 @@ export interface SteamSettings {
 /** The library key Steam games are listed under, next to the Plex libraries. */
 export const STEAM_LIBRARY = 'steam'
 
+/** Books, added with "Add something new" (there's no book source to sync from). */
+export const BOOKS_LIBRARY = 'books'
+
 export interface PlexNotesSettings {
   serverUrl: string
   token: string
   steam: SteamSettings
+  /** OMDb API key, for finding movies and shows with "Add something new". */
+  omdbKey: string
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -80,6 +85,7 @@ export const DEFAULT_FOLDERS: Record<MediaKind, string> = {
   documentary: 'Media/Documentaries',
   music: 'Media/Music',
   game: 'Media/Video Games',
+  book: 'Media/Books',
 }
 
 export const DEFAULT_FILE_NAMES: Record<MediaKind, string> = {
@@ -88,6 +94,7 @@ export const DEFAULT_FILE_NAMES: Record<MediaKind, string> = {
   documentary: '{{title}} ({{year}})',
   music: '{{artist}} - {{title}}',
   game: '{{title}} ({{year}})',
+  book: '{{title}} ({{year}})',
 }
 
 /** Track titles like "Intro" are too common to match on their own, so music only matches its full file name. */
@@ -97,6 +104,7 @@ export const DEFAULT_MATCH_BY: Record<MediaKind, MatchBy> = {
   documentary: 'loose',
   music: 'format',
   game: 'loose',
+  book: 'loose',
 }
 
 export function defaultSettings(): PlexNotesSettings {
@@ -104,6 +112,7 @@ export function defaultSettings(): PlexNotesSettings {
     serverUrl: '',
     token: '',
     steam: { apiKey: '', account: '', includeFreeGames: true, gridKey: '' },
+    omdbKey: '',
     imagesSubfolder: 'Images',
     fileNameReplacements: {},
     useDocumentaryGenre: true,
@@ -190,6 +199,18 @@ export function ensureSteamLibrary(settings: PlexNotesSettings): void {
   }
 }
 
+/** The library new games and books found with "Add something new" go in (created if needed). */
+export function addLibrary(settings: PlexNotesSettings, kind: 'game' | 'book'): LibrarySetting {
+  const key = kind === 'game' ? STEAM_LIBRARY : BOOKS_LIBRARY
+  settings.libraries[key] ??= kind === 'game' ? newLibrary('Steam', 'steam', 'game') : newLibrary('Books', 'books', 'book')
+  return settings.libraries[key]
+}
+
+/** Libraries that aren't read from Plex or Steam: books only come from "Add something new". */
+export function hasSource(key: string): boolean {
+  return key !== BOOKS_LIBRARY
+}
+
 /** The library documentary-genre items from other libraries are handled by, if there is one. */
 export function documentaryLibrary(settings: PlexNotesSettings): LibrarySetting | undefined {
   return Object.values(settings.libraries).find(lib => lib.target === 'documentary')
@@ -212,7 +233,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'useDocumentaryGenre', 'renameExistingNotes', 'askBeforeChanges',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'useDocumentaryGenre', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
     'updatePlayCounts', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -266,6 +287,8 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   for (const lib of Object.values(settings.libraries)) {
     lib.properties = lib.properties.filter(m => m.source in FIELD_SOURCES)
   }
+  // Books have no source to load them from, so their library is always there to set up.
+  settings.libraries[BOOKS_LIBRARY] ??= newLibrary('Books', 'books', 'book')
   // A Steam library still on the first game defaults gets the HowLongToBeat times added.
   const steamLib = settings.libraries[STEAM_LIBRARY]
   if (steamLib && JSON.stringify(steamLib.properties) === JSON.stringify(oldGameProperties())) {

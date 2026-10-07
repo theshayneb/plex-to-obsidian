@@ -10,6 +10,7 @@ export interface HltbGame {
   comp_main?: number
   game_image?: string
   review_score?: number
+  profile_platform?: string
 }
 
 /** A game's HowLongToBeat main story time, and its page. */

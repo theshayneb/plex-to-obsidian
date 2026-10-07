@@ -13,6 +13,7 @@ export type FieldSource =
   | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
   | 'hltbMain' | 'hltbLink'
+  | 'authors' | 'pages' | 'isbn'
   | 'text'
 
 export interface PropertyMapping {
@@ -38,7 +39,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   durationText: 'Duration as text (1h 52m)',
   durationClock: 'Duration as a clock (3:45)',
   status: 'Watched or played status',
-  plexLink: 'Link (to the item in Plex, or the Steam store page)',
+  plexLink: 'Link (Plex, Steam Store, IMDb, Open Library or HowLongToBeat page)',
   poster: 'Poster image (portrait cover for games)',
   typeTag: 'Type tag (set under property values)',
   contentRating: 'Content rating (PG-13, TV-MA…)',
@@ -78,6 +79,9 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   wideImage: 'Games: wide image (landscape header)',
   hltbMain: 'Games: HowLongToBeat main story (minutes)',
   hltbLink: 'Games: HowLongToBeat page',
+  authors: 'Books: authors',
+  pages: 'Books: number of pages',
+  isbn: 'Books: ISBN',
   text: 'Fixed text',
 }
 
@@ -116,6 +120,18 @@ export const DEFAULT_GAME_PROPERTIES: PropertyMapping[] = [
   { name: 'tags', source: 'typeTag' },
 ]
 
+export const DEFAULT_BOOK_PROPERTIES: PropertyMapping[] = [
+  { name: 'Author', source: 'authors' },
+  { name: 'Genre', source: 'genres' },
+  { name: 'Year', source: 'year' },
+  { name: 'Pages', source: 'pages' },
+  { name: 'Summary', source: 'summary' },
+  { name: 'Status', source: 'status' },
+  { name: 'Link', source: 'plexLink', fill: true },
+  { name: 'Image', source: 'poster' },
+  { name: 'tags', source: 'typeTag' },
+]
+
 /** The game defaults of 0.0.19, before HowLongToBeat; a Steam library still using them is moved on. */
 export function oldGameProperties(): PropertyMapping[] {
   return DEFAULT_GAME_PROPERTIES.filter(m => !HLTB_SOURCES.includes(m.source))
@@ -123,7 +139,10 @@ export function oldGameProperties(): PropertyMapping[] {
 
 /** Fresh copy of the default properties for a kind of library. */
 export function defaultProperties(kind: MediaKind): PropertyMapping[] {
-  const defaults = kind === 'music' ? DEFAULT_MUSIC_PROPERTIES : kind === 'game' ? DEFAULT_GAME_PROPERTIES : DEFAULT_PROPERTIES
+  const defaults = kind === 'music' ? DEFAULT_MUSIC_PROPERTIES
+    : kind === 'game' ? DEFAULT_GAME_PROPERTIES
+      : kind === 'book' ? DEFAULT_BOOK_PROPERTIES
+        : DEFAULT_PROPERTIES
   return structuredClone(defaults)
 }
 
@@ -141,6 +160,7 @@ export const DEFAULT_TAGS: Record<MediaKind, string> = {
   documentary: 'documentary',
   music: 'music',
   game: 'video_game',
+  book: 'book',
 }
 
 export function defaultValues(kind: MediaKind): PropertyValues {
@@ -280,13 +300,16 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'wideImage': return item.wideImage
     case 'hltbMain': return item.hltb?.main
     case 'hltbLink': return item.hltb?.url
+    case 'authors': return item.authors ?? []
+    case 'pages': return item.pages
+    case 'isbn': return item.isbn
     case 'text': return text
   }
 }
 
 const LIST_SOURCES = new Set<FieldSource>([
   'genres', 'typeTag', 'directors', 'writers', 'castTop5', 'castAll', 'countries', 'collections', 'labels',
-  'styles', 'moods', 'developers', 'publishers', 'platforms',
+  'styles', 'moods', 'developers', 'publishers', 'platforms', 'authors',
 ])
 
 /**

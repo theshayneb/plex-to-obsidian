@@ -576,6 +576,72 @@ describe('PlexSync', () => {
     expect((await sync.explain('Severance', () => {}))[0][0]).toBe('Severance (2022) (in TV Shows)')
   })
 
+  describe('adding something new', () => {
+    const asked: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest) => { asked.push(r); return Promise.resolve({ choice: 'apply' as const, excluded: [] }) }
+
+    it('makes a book note in the Books library, with a linked cover', async () => {
+      const { app, frontmatter } = makeApp({})
+      const settings = loadSettings({})
+      const item = { ratingKey: 'ol-OL893415W', type: 'book', title: 'Dune', year: 1965, authors: ['Frank Herbert'], pages: 604,
+        Genre: [{ tag: 'Science fiction' }], summary: 'A desert planet.', portrait: 'https://covers/x-L.jpg', webLink: 'https://openlibrary.org/works/OL893415W' }
+      const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).addNew(item, 'books')
+      expect(result.created).toBe('Media/Books/Dune (1965).md')
+      expect(frontmatter.get('Media/Books/Dune (1965).md')).toEqual({
+        Author: ['Frank Herbert'], Genre: ['Science fiction'], Year: 1965, Pages: 604, Summary: 'A desert planet.', Status: 'pending',
+        Link: 'https://openlibrary.org/works/OL893415W', Image: 'https://covers/x-L.jpg', tags: ['book'],
+      })
+    })
+
+    it('makes a movie note that Plex recognises once it has the movie', async () => {
+      const { app, frontmatter, files } = makeApp({})
+      const settings = settingsWith()
+      settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+      const inception = { ratingKey: 'imdb-tt1375666', type: 'movie', title: 'Inception', year: 2010, Guid: [{ id: 'imdb://tt1375666' }],
+        summary: 'A thief…', portrait: 'https://m/x_SX600.jpg', webLink: 'https://www.imdb.com/title/tt1375666/' }
+      const added = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).addNew(inception, '1')
+      expect(added.created).toBe('Media/Movies/Inception (2010).md')
+      expect(frontmatter.get('Media/Movies/Inception (2010).md')).toMatchObject({ Link: 'https://www.imdb.com/title/tt1375666/', Image: 'https://m/x_SX600.jpg', Status: 'pending' })
+
+      // Later Plex has it, under another title even: it's matched by its IMDb ID, not made again.
+      responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
+        { ratingKey: '900', type: 'movie', title: 'Inception: The Movie', year: 2010, Guid: [{ id: 'imdb://tt1375666' }] },
+      ] } })
+      const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+      expect(result.created.filter(p => p.startsWith('Media/Movies/'))).toEqual([])
+      // Matched through its IMDb link, so it's renamed to Plex's title; its IMDb Link stays (never overwritten).
+      expect(result.renamed).toEqual([{ from: 'Media/Movies/Inception (2010).md', to: 'Media/Movies/Inception The Movie (2010).md' }])
+      expect(files.has('Media/Movies/Inception The Movie (2010).md')).toBe(true)
+      expect(frontmatter.get('Media/Movies/Inception The Movie (2010).md')!.Link).toBe('https://www.imdb.com/title/tt1375666/')
+    })
+
+    it('says when a note already exists', async () => {
+      const { app } = makeApp({ 'Media/Books/Dune.md': {} })
+      const settings = loadSettings({})
+      const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve)
+        .addNew({ ratingKey: 'ol-OL1W', type: 'book', title: 'Dune', year: 1965 }, 'books')
+      expect(result).toEqual({ existing: 'Media/Books/Dune.md' })
+    })
+
+    it('fills in a game found on Steam from the store, without Steam set up', async () => {
+      steamResponses = {
+        'https://store.steampowered.com/api/appdetails?appids=367520': { 367520: { success: true, data: {
+          genres: [{ description: 'Action' }], release_date: { date: 'Feb 24, 2017' }, header_image: 'https://h.jpg' } } },
+        'https://api.steampowered.com/IStoreBrowseService/GetItems': { response: { store_items: [{}] } },
+      }
+      portraits.clear()
+      const { app, frontmatter } = makeApp({})
+      const settings = loadSettings({})
+      const { addLibrary } = await import('../src/config')
+      addLibrary(settings, 'game')
+      settings.libraries.steam.properties = settings.libraries.steam.properties.filter(m => m.source !== 'hltbMain')
+      const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve)
+        .addNew({ ratingKey: 'steam-367520', type: 'game', title: 'Hollow Knight', steamAppId: 367520 }, 'steam')
+      expect(result.created).toBe('Media/Video Games/Hollow Knight (2017).md')
+      expect(frontmatter.get(result.created!)).toMatchObject({ Genre: ['Action'], 'Release Date': '2017-02-24', Status: 'pending', Link: 'https://store.steampowered.com/app/367520/' })
+    })
+  })
+
   it('stops when told to', async () => {
     const { app, files } = makeApp({})
     const approve = vi.fn(() => Promise.resolve({ choice: 'stop' as const, excluded: [] }))

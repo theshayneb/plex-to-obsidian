@@ -4,6 +4,7 @@ import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
   DEFAULT_MATCH_BY,
+  BOOKS_LIBRARY,
   ensureSteamLibrary,
   mergeLibraries,
   retarget,
@@ -42,13 +43,15 @@ const TARGET_LABELS: Record<LibraryTarget, string> = {
   documentary: 'Documentaries',
   music: 'Music (one note per track)',
   game: 'Video games',
+  book: 'Books',
   skip: 'Skip',
 }
 
 /** Which types each kind of library can be: Steam only holds games, Plex never does. */
 function targetChoices(key: string): [string, string][] {
+  const only = key === STEAM_LIBRARY ? 'game' : key === BOOKS_LIBRARY ? 'book' : null
   return Object.entries(TARGET_LABELS).filter(([target]) =>
-    key === STEAM_LIBRARY ? target === 'game' || target === 'skip' : target !== 'game')
+    only ? target === only || target === 'skip' : target !== 'game' && target !== 'book')
 }
 
 export class PlexNotesSettingTab extends PluginSettingTab {
@@ -95,6 +98,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       })
 
     this.displaySteam()
+    this.displayOtherSources()
 
     new Setting(containerEl).setName('Libraries').setHeading()
 
@@ -147,6 +151,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const kind = lib.target
     const music = kind === 'music'
     const game = kind === 'game'
+    const book = kind === 'book'
 
     new Setting(el)
       .setName('Folder')
@@ -189,7 +194,10 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(el).setName('Property values').setHeading()
     const defaults = defaultValues(kind)
-    if (game) {
+    if (book) {
+      this.addValueSetting(el, 'New book', 'For "Watched or played status": the status a new book note starts with.',
+        () => lib.values.unwatched, v => { lib.values.unwatched = v || defaults.unwatched })
+    } else if (game) {
       this.addValueSetting(el, 'Played', 'For "Watched or played status": a game with any playtime. Steam can\'t tell when a game is finished, so set that by hand.',
         () => lib.values.started, v => { lib.values.started = v || defaults.started })
       this.addValueSetting(el, 'Not played', 'For "Watched or played status": a game never played.',
@@ -464,6 +472,27 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             this.refresh()
           }
         }))
+  }
+
+  /** Keys for the databases "Add something new" searches. */
+  private displayOtherSources(): void {
+    const { containerEl } = this
+    const settings = this.plugin.settings
+    new Setting(containerEl).setName('Adding things not in Plex or Steam').setHeading()
+    containerEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: 'The "Add something new" command finds movies and TV shows on OMDb, games on Steam and HowLongToBeat, and books on Open Library. The note goes in the library you choose, with its properties. Once the item is in Plex or Steam, syncing recognises the note.',
+    })
+    new Setting(containerEl)
+      .setName('OMDb API key')
+      .setDesc('Needed for movies and TV shows. Get a free key at omdbapi.com, good for 1,000 searches a day.')
+      .addText(text => {
+        text.inputEl.type = 'password'
+        text.setValue(settings.omdbKey ?? '').onChange(async value => {
+          settings.omdbKey = value.trim()
+          await this.save()
+        })
+      })
   }
 
   /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */

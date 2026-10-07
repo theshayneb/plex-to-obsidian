@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.28] - 2026-10-07
+
+### Changed
+- Settings page rearranged:
+  - **Setup** (collapsed until you open it) comes first, with the Plex server, Steam and OMDb keys and accounts.
+  - **All libraries** comes second. The "Replace …" choices are indented under "Characters in file names".
+  - **Libraries** comes third, with the libraries indented under it.
+  - **Skipped every time** is its own collapsible section at the bottom.
+- The "Detect documentaries by genre" setting is gone from the page. Syncs keep working as before: movies and shows with the documentary genre still use your documentaries library's settings.
+
 ## [0.0.27] - 2026-10-07
 
 ### Fixed

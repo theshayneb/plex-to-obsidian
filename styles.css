@@ -282,3 +282,53 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
+
+/* Settings page: collapsible sections (Setup, Skipped every time). */
+.pmn-section {
+  margin: var(--size-4-3) 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+}
+
+.pmn-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--size-4-2);
+  padding: var(--size-4-3) var(--size-4-4);
+  cursor: pointer;
+  font-size: var(--h3-size);
+  font-weight: var(--font-semibold);
+}
+
+.pmn-section-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-normal);
+}
+
+.pmn-section-body {
+  padding: 0 var(--size-4-4) var(--size-4-3);
+}
+
+/* Settings that belong to the one above them, or to a heading (Libraries). */
+.pmn-indent {
+  margin-left: var(--size-4-2);
+  padding-left: var(--size-4-4);
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+/* One library in the settings. */
+.pmn-library {
+  margin: var(--size-4-2) 0;
+}
+
+.pmn-library-title {
+  padding: var(--size-4-2) 0;
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+.pmn-library-body {
+  padding-left: var(--size-4-4);
+}

@@ -59,6 +59,8 @@ function targetChoices(key: string): [string, string][] {
 export class PlexNotesSettingTab extends PluginSettingTab {
   /** Library sections the user has expanded, kept open across redraws. */
   private readonly openLibraries = new Set<string>()
+  /** Collapsible sections the user has opened (Setup, Skipped every time). */
+  private readonly openSections = new Set<string>()
 
   constructor(app: App, private readonly plugin: PlexMediaNotesPlugin) {
     super(app, plugin)
@@ -70,12 +72,34 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
   display(): void {
     const { containerEl } = this
-    const settings = this.plugin.settings
     containerEl.empty()
 
-    new Setting(containerEl).setName('Plex server').setHeading()
+    this.displaySetup(this.section(containerEl, 'setup', 'Setup', 'Servers, accounts and API keys.'))
+    this.displayGeneral(containerEl)
+    this.displayLibraries(containerEl)
+    this.displayIgnored(this.section(containerEl, 'ignored', 'Skipped every time'))
+  }
 
-    new Setting(containerEl)
+  /** A collapsible section, closed until opened and kept as it was across redraws. */
+  private section(parent: HTMLElement, key: string, title: string, desc?: string): HTMLElement {
+    const details = parent.createEl('details', { cls: 'pmn-section' })
+    details.open = this.openSections.has(key)
+    details.addEventListener('toggle', () => {
+      if (details.open) this.openSections.add(key)
+      else this.openSections.delete(key)
+    })
+    const summary = details.createEl('summary', { cls: 'pmn-section-title' })
+    summary.createSpan({ text: title })
+    if (desc) summary.createSpan({ cls: 'pmn-section-desc', text: desc })
+    return details.createDiv('pmn-section-body')
+  }
+
+  /** Everything needed to reach Plex, Steam and the databases "Add something new" searches. */
+  private displaySetup(el: HTMLElement): void {
+    const settings = this.plugin.settings
+    new Setting(el).setName('Plex server').setHeading()
+
+    new Setting(el)
       .setName('Server address')
       .setDesc('For example http://192.168.1.10:32400')
       .addText(text => text
@@ -86,7 +110,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           await this.save()
         }))
 
-    new Setting(containerEl)
+    new Setting(el)
       .setName('Token')
       .setDesc('Your X-Plex-Token. In Plex Web, open any item, choose "Get info" and then "View XML", and copy the value after X-Plex-Token= in the address bar.')
       .addText(text => {
@@ -99,12 +123,15 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           })
       })
 
-    this.displaySteam()
-    this.displayOtherSources()
+    this.displaySteam(el)
+    this.displayOtherSources(el)
+  }
 
-    new Setting(containerEl).setName('Libraries').setHeading()
+  private displayLibraries(parent: HTMLElement): void {
+    new Setting(parent).setName('Libraries').setHeading()
+    const el = parent.createDiv('pmn-indent')
 
-    new Setting(containerEl)
+    new Setting(el)
       .setDesc('Load your Plex libraries, then open each one (and Steam, once it is set up) to choose its type, folder, file names and properties.')
       .addButton(button => button
         .setButtonText('Load libraries')
@@ -121,20 +148,18 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           }
         }))
 
-    for (const [key, lib] of Object.entries(settings.libraries)) this.displayLibrary(key, lib)
-
-    this.displayGeneral()
+    for (const [key, lib] of Object.entries(this.plugin.settings.libraries)) this.displayLibrary(el, key, lib)
   }
 
-  private displayLibrary(key: string, lib: LibrarySetting): void {
-    const details = this.containerEl.createEl('details')
+  private displayLibrary(parent: HTMLElement, key: string, lib: LibrarySetting): void {
+    const details = parent.createEl('details', { cls: 'pmn-library' })
     details.open = this.openLibraries.has(key)
     details.addEventListener('toggle', () => {
       if (details.open) this.openLibraries.add(key)
       else this.openLibraries.delete(key)
     })
-    details.createEl('summary', { text: `${lib.title} (${TARGET_LABELS[lib.target]})` })
-    const el = details.createDiv()
+    details.createEl('summary', { cls: 'pmn-library-title', text: `${lib.title} (${TARGET_LABELS[lib.target]})` })
+    const el = details.createDiv('pmn-library-body')
 
     new Setting(el)
       .setName('Type')
@@ -307,8 +332,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
   }
 
-  private displayGeneral(): void {
-    const { containerEl } = this
+  private displayGeneral(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
 
     new Setting(containerEl).setName('All libraries').setHeading()
@@ -336,8 +360,9 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       ...REPLACEABLE_CHARS.map(char => ({ key: char, label: `Replace ${char}` })),
       { key: 'other', label: `Replace ${OTHER_CHARS}` },
     ]
+    const charsEl = containerEl.createDiv('pmn-indent')
     for (const { key, label } of chars) {
-      new Setting(containerEl)
+      new Setting(charsEl)
         .setName(label)
         .addText(text => text
           .setPlaceholder('Dropped')
@@ -395,22 +420,9 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             })
         })
     }
-
-    this.displayIgnored()
-
-    new Setting(containerEl)
-      .setName('Detect documentaries by genre')
-      .setDesc('Movies and shows in the documentary genre get their notes from your documentaries library\'s settings (folder, file name and properties), whichever library they are in.')
-      .addToggle(toggle => toggle
-        .setValue(settings.useDocumentaryGenre)
-        .onChange(async value => {
-          settings.useDocumentaryGenre = value
-          await this.save()
-        }))
   }
 
-  private displaySteam(): void {
-    const { containerEl } = this
+  private displaySteam(containerEl: HTMLElement): void {
     const steam = this.plugin.settings.steam
     new Setting(containerEl).setName('Steam').setHeading()
 
@@ -459,7 +471,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       })
     new Setting(containerEl)
       .setName('Check Steam')
-      .setDesc('Reads your games list once, to check the key and account, and adds the Steam library below.')
+      .setDesc('Reads your games list once, to check the key and account, and adds the Steam library to the libraries below.')
       .addButton(button => button
         .setButtonText('Check')
         .onClick(async () => {
@@ -479,8 +491,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
   }
 
   /** Keys for the databases "Add something new" searches. */
-  private displayOtherSources(): void {
-    const { containerEl } = this
+  private displayOtherSources(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
     new Setting(containerEl).setName('Adding things not in Plex or Steam').setHeading()
     containerEl.createEl('p', {
@@ -504,13 +515,11 @@ export class PlexNotesSettingTab extends PluginSettingTab {
   }
 
   /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */
-  private displayIgnored(): void {
-    const { containerEl } = this
+  private displayIgnored(containerEl: HTMLElement): void {
     const ignored = this.plugin.settings.ignored
     const entries = Object.entries(ignored).sort((a, b) => a[1].name.localeCompare(b[1].name))
 
     const heading = new Setting(containerEl)
-      .setName('Skipped every time')
       .setDesc(entries.length
         ? 'Plex items you chose "Skip every time" for. Syncs pass over them completely: no new notes, renames, fill-ins or play counts. Un-ignore one to be asked about it again on the next sync.'
         : 'Nothing yet. Choose "Skip every time" in the approval pop-up to have syncs pass over an item.')

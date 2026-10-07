@@ -170,7 +170,9 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       .setName('File name')
       .setDesc(music
         ? 'Use {{artist}}, {{title}}, {{album}}, {{albumartist}}, {{track}}, {{disc}} and {{year}}. Empty brackets and dangling dashes are dropped.'
-        : 'Use {{title}} and {{year}}. Empty brackets are dropped when an item has no year.')
+        : book
+          ? 'Use {{title}}, {{author}} and {{year}}. Empty brackets are dropped when a book has no year, and a trailing "by" when it has no author.'
+          : 'Use {{title}} and {{year}}. Empty brackets are dropped when an item has no year.')
       .addText(text => text
         .setPlaceholder(DEFAULT_FILE_NAMES[kind])
         .setValue(lib.fileNameFormat)

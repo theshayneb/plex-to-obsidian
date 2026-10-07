@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.26] - 2026-10-07
+
+### Added
+- Book file names can use `{{author}}` (all the book's authors, separated by commas), e.g. `{{title}} by {{author}}`. A trailing "by" is dropped when a book has no author.
+
 ## [0.0.25] - 2026-10-07
 
 ### Fixed

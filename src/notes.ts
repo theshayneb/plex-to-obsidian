@@ -221,6 +221,7 @@ function placeholders(item: PlexItem): Record<string, string> {
     album: item.parentTitle ?? '',
     track: item.index ? String(item.index).padStart(2, '0') : '',
     disc: item.parentIndex ? String(item.parentIndex) : '',
+    author: (item.authors ?? []).join(', '),
   }
 }
 
@@ -229,8 +230,8 @@ export function renderFileName(naming: FileNaming, item: PlexItem): string {
   const raw = naming.format
     .replace(/\{\{\s*(\w+)\s*\}\}/g, (all: string, key: string) => values[key.toLowerCase()] ?? all)
     .replace(/\(\s*\)|\[\s*\]/g, '')
-    // Separators left dangling by an empty placeholder, e.g. " - " when there's no artist.
-    .replace(/^\s*[-–—]\s+|\s+[-–—]\s*$/g, '')
+    // Separators left dangling by an empty placeholder, e.g. " - " when there's no artist or " by " without an author.
+    .replace(/^\s*[-–—]\s+|\s+[-–—]\s*$|\s+by\s*$/gi, '')
   return sanitizeFileName(raw, naming.replacements)
     || sanitizeFileName(item.title, naming.replacements)
     || item.ratingKey

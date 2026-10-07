@@ -82,6 +82,12 @@ describe('links', () => {
 })
 
 describe('renderFileName', () => {
+  it('names books by author', () => {
+    const book = { ratingKey: 'ol-OL1W', title: 'Good Omens', type: 'book', authors: ['Terry Pratchett', 'Neil Gaiman'] } as PlexItem
+    expect(renderFileName({ format: '{{title}} by {{author}}', replacements: {} }, book)).toBe('Good Omens by Terry Pratchett, Neil Gaiman')
+    expect(renderFileName({ format: '{{title}} by {{author}}', replacements: {} }, { ...book, authors: [] })).toBe('Good Omens')
+  })
+
   it('fills the format and strips characters files cannot use', () => {
     expect(renderFileName({ format: '{{title}} ({{year}})', replacements: {} }, movie)).toBe('Spider-Man Into the Spider-Verse (2018)')
   })

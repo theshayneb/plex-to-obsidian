@@ -54,7 +54,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   criticRating: 'Critic rating (0–10)',
   audienceRating: 'Audience rating (0–10)',
   userRating: 'Your rating (stars, 0–5)',
-  userRatingEmoji: 'Your rating (💣 ⭐ ⭐⭐ ⭐⭐⭐ 🩷)',
+  userRatingEmoji: 'Your rating (💣 ⭐ 🩷)',
   addedAt: 'Date added to Plex',
   lastViewedAt: 'Date last watched or played',
   viewCount: 'Play count',

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.55] - 2026-10-08
+
+### Changed
+- The emoji rating source is now called "Your rating (💣 ⭐ 🩷)".
+
 ## [0.0.54] - 2026-10-08
 
 ### Changed

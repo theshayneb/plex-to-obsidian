@@ -615,6 +615,22 @@ describe('PlexSync', () => {
     expect(requests).toEqual([])
   })
 
+  it('offers an empty playtime property once, not as a fill-in and an update both', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 90 }] } },
+      'https://store.steampowered.com/api/appdetails?appids=620': { 620: { success: true, data: { name: 'Portal 2' } } },
+    }
+    const { app } = makeApp({ 'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/' } })
+    const settings = settingsWith({ serverUrl: '', token: '', updatePlayCounts: true, steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    settings.libraries.steam.properties = [{ name: 'Progress', source: 'playtime', fill: true }]
+    const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'skip' as const, excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(approve.mock.calls[0][0].lines.map(l => l.label)).toEqual(['Progress'])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

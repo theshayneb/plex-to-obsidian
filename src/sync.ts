@@ -304,7 +304,9 @@ export class PlexSync {
               result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
             }
           }
-          const plays = counting ? this.planUpdates(file, item, lib, updating) : null
+          // A property already being filled in (it's empty) isn't offered a second time as an update.
+          const beingFilled = new Set([...fill?.additions.map(([name]) => name) ?? [], ...fill?.imageProperty ? [fill.imageProperty] : []])
+          const plays = counting ? this.planUpdates(file, item, lib, updating, beingFilled) : null
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
           const links = full && this.settings.askBeforeChanges && this.approve ? this.planLinks(file, item, lib) : null
           if (!renameTo && !fill && !plays && !links) continue
@@ -782,8 +784,8 @@ export class PlexSync {
    * current values: the one case where a value already in a note is replaced. Nothing is cleared
    * when Plex has no value.
    */
-  private planUpdates(file: TFile, item: PlexItem, lib: ActiveLibrary, sources: FieldSource[]): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
-    const mappings = lib.properties.filter(m => sources.includes(m.source) && m.name.trim())
+  private planUpdates(file: TFile, item: PlexItem, lib: ActiveLibrary, sources: FieldSource[], skip: Set<string> = new Set()): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
+    const mappings = lib.properties.filter(m => sources.includes(m.source) && m.name.trim() && !skip.has(m.name.trim()))
     if (!mappings.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const to: Record<string, unknown> = {}

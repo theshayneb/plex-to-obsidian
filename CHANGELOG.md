@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.35] - 2026-10-08
+
+### Fixed
+- The "Change this note?" pop-up listed an empty playtime or play count property (such as Progress) twice when it was both marked to be filled in and kept up to date. It's now offered once.
+
 ## [0.0.34] - 2026-10-08
 
 ### Added

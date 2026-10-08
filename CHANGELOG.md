@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.43] - 2026-10-08
+
+### Changed
+- In the "Change this note?" pop-up, every offered replacement of a value already in a note (links, durations, and anything "Check existing notes against sources" finds) now starts ticked, so applying uses the source's value; untick the ones to keep. This is the new **Tick differences to start with** setting (Settings → All libraries, on). Turn it off to go back to ticking only clear-cut fixes (empty values, durations written in hours, search links, genres).
+
 ## [0.0.42] - 2026-10-08
 
 ### Added

@@ -611,7 +611,7 @@ describe('PlexSync', () => {
       'Media/Video Games/Hades.md': { Link: hltb },
       'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/Portal_2/' },
     })
-    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    const settings = settingsWith({ tickDifferences: false, serverUrl: '', token: '', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
     settings.libraries = {}
     const { ensureSteamLibrary } = await import('../src/config')
     ensureSteamLibrary(settings)
@@ -660,7 +660,7 @@ describe('PlexSync', () => {
       'Media/Movies/Arrival (2016).md': { Duration: 1.9 },
       'Media/Movies/Heat (1995).md': { Duration: 150 },
     })
-    const settings = settingsWith()
+    const settings = settingsWith({ tickDifferences: false })
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     settings.libraries['1'].properties = [{ name: 'Duration', source: 'durationMinutes' }]
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
@@ -751,7 +751,7 @@ describe('PlexSync', () => {
       'Media/Movies/Arrival (2016).md': { Summary: 'My own summary.', Date: '', Duration: 116, Status: 'revisit' },
       'Media/Movies/Old film I deleted.md': {},
     })
-    const settings = settingsWith()
+    const settings = settingsWith({ tickDifferences: false })
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
     const requests: ApprovalRequest[] = []
@@ -778,6 +778,16 @@ describe('PlexSync', () => {
     const settings = settingsWith({ askBeforeChanges: false, unmatchedIgnored: ['Media/Movies/Movies index.md'] })
     const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
+  })
+
+  it('starts every offered difference ticked by default', async () => {
+    const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Summary: 'My own summary.', Duration: 150 } })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'skip' as const, excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Duration'])
+    expect(approve.mock.calls[0][0].lines.map(l => [l.label, l.unticked])).toEqual([['Summary', false], ['Duration', false]])
   })
 
   describe('a note whose name matches two items', () => {

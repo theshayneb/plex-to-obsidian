@@ -398,6 +398,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
+      .setName('Tick differences to start with')
+      .setDesc('When a sync or a check offers to replace a value already in a note (a link, a duration, a summary…), the new value starts ticked, so applying uses it; untick any you want to keep. Off: only clear-cut fixes start ticked (empty values, durations written in hours, search links, genres) and other differences are kept unless you tick them.')
+      .addToggle(toggle => toggle
+        .setValue(settings.tickDifferences)
+        .onChange(async value => {
+          settings.tickDifferences = value
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Fix names of existing notes')
       .setDesc('Rename notes that already exist for a Plex item to their library\'s file name format, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
       .addToggle(toggle => toggle

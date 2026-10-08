@@ -92,6 +92,8 @@ export interface PlexNotesSettings {
   keptValues: Record<string, string>
   /** Notes that match nothing but are fine as they are ("Always ignore"): not pointed out again. */
   unmatchedIgnored: string[]
+  /** Start every offered change to a value already in a note ticked (off: only clear-cut fixes are). */
+  tickDifferences: boolean
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
@@ -151,6 +153,7 @@ export function defaultSettings(): PlexNotesSettings {
     keptLinks: {},
     keptValues: {},
     unmatchedIgnored: [],
+    tickDifferences: true,
     allowedGenres: [...DEFAULT_GENRES],
     checkProperties: null,
     updatePlayCounts: false,
@@ -265,7 +268,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
   for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
-    'updatePlayCounts', 'updateRatings', 'updateStatus', 'playCountHours', 'lastPlayCountUpdate'] as const) {
+    'updatePlayCounts', 'updateRatings', 'updateStatus', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }

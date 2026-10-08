@@ -95,13 +95,13 @@ export class ApprovalModal extends Modal {
     if (lines.some(line => line.key.startsWith('fix:'))) {
       contentEl.createEl('p', {
         cls: 'setting-item-description',
-        text: 'These values differ from the source\'s. Empty ones, durations written in hours, search links and genres (the note\'s own that are in "Genres to keep", plus the source\'s) are offered ticked; any other difference is unticked, so it\'s only changed if you tick it. A value you keep isn\'t offered again.',
+        text: 'These values differ from the source\'s. Untick any you want to keep as they are (you won\'t be asked about them again); genres offered are the note\'s own that are in "Genres to keep", plus the source\'s.',
       })
     }
     if (lines.some(line => line.key.startsWith('link:'))) {
       contentEl.createEl('p', {
         cls: 'setting-item-description',
-        text: 'The note has a link that doesn\'t point to this item, so its own link is offered. A search link is replaced unless you untick it; any other link is kept unless you tick it. A link you keep isn\'t offered for replacing again.',
+        text: 'The note has a link that doesn\'t point to this item, so its own link is offered. Untick it to keep yours (you won\'t be asked about it again).',
       })
     }
 

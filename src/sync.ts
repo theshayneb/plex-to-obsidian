@@ -372,13 +372,13 @@ export class PlexSync {
           }
           for (const name of links?.names ?? []) {
             // A search page is a stand-in, so replacing it starts ticked; any other link starts unticked.
-            lines.push({ key: `link:${name}`, label: name, current: describeValue(links!.from[name]), value: links!.to[name], edit: 'text', unticked: !links!.placeholders.has(name) })
+            lines.push({ key: `link:${name}`, label: name, current: describeValue(links!.from[name]), value: links!.to[name], edit: 'text', unticked: !this.settings.tickDifferences && !links!.placeholders.has(name) })
           }
           for (const name of checks?.names ?? []) {
             // The same length in hours or as text starts ticked; any other difference starts unticked.
             const to = checks!.to[name]
             const shown = typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
-            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !checks!.sameLength.has(name) })
+            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !this.settings.tickDifferences && !checks!.sameLength.has(name) })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -995,12 +995,12 @@ export class PlexSync {
       for (const name of checks?.names ?? []) {
         const offer = checks!.to[name]
         const shown = typeof offer === 'number' ? { value: String(offer), edit: 'number' as const } : editable(offer)
-        lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !checks!.sameLength.has(name) })
+        lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !this.settings.tickDifferences && !checks!.sameLength.has(name) })
       }
       // A book found by searching also offers its link, whether or not the Link property is checked.
       const newLink = searched && linkProp && book.webLink && !checks?.names.includes(linkProp) ? book.webLink : null
       if (newLink && linkProp) {
-        lines.push({ key: `fix:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !isBlank(link) })
+        lines.push({ key: `fix:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !this.settings.tickDifferences && !isBlank(link) })
       }
       if (!lines.length) continue
 

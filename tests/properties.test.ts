@@ -233,6 +233,7 @@ describe('ratings both ways', () => {
     expect(noteStars('⭐')).toBe(2)
     expect(noteStars('💣')).toBe(1)
     expect(noteStars('⭐⭐⭐⭐')).toBe(4)
+    expect(noteStars('⭐⭐⭐⭐⭐')).toBe(5)
     expect(noteStars('🩷')).toBe(5)
     expect(noteStars('2')).toBe(2)
     expect(noteStars('')).toBeNull()

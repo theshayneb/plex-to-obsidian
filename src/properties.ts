@@ -295,8 +295,9 @@ export function noteStars(value: unknown): number | null {
   if (typeof value !== 'string' || !value.trim()) return null
   if (value.includes('🩷')) return 5
   if (value.includes('💣')) return 1
-  // ⭐ is level 2, ⭐⭐ 3, ⭐⭐⭐ 4 (four, from the old all-stars scale, is 4 too).
+  // ⭐ is level 2, ⭐⭐ 3, ⭐⭐⭐ 4. From the five-star scale (song notes): ⭐⭐⭐⭐ is 4 too, ⭐⭐⭐⭐⭐ 5.
   const stars = [...value].filter(c => c === '⭐').length
+  if (stars >= 5) return 5
   if (stars) return Math.min(4, stars + 1)
   const n = Number(value.trim())
   return Number.isFinite(n) && n > 0 ? Math.min(5, Math.round(n)) : null

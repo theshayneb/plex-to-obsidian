@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.56] - 2026-10-08
+
+### Changed
+- Ratings read from notes: ⭐⭐⭐⭐⭐ (as in song notes) now counts as 10 in Plex, like 🩷; ⭐⭐⭐⭐ counts as 8.
+
 ## [0.0.55] - 2026-10-08
 
 ### Changed

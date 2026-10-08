@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -172,5 +172,24 @@ describe('keepGenres', () => {
   it('keeps everything when the list is empty', () => {
     expect(keepGenres(['Drama', 'Family'], [])).toEqual(['Drama', 'Family'])
     expect(keepGenres(['Drama'], undefined)).toEqual(['Drama'])
+  })
+})
+
+describe('durations in notes', () => {
+  it('reads minutes, hours and text', () => {
+    expect(noteMinutes(138)).toBe(138)
+    expect(noteMinutes('138')).toBe(138)
+    expect(noteMinutes('2h 18m')).toBe(138)
+    expect(noteMinutes('2 hours')).toBe(120)
+    expect(noteMinutes('2:18')).toBe(138)
+    expect(noteMinutes('long')).toBeNull()
+  })
+  it('knows the same length written as hours or text from a different length', () => {
+    expect(sameLengthOtherForm(2.3, 138)).toBe(true)
+    expect(sameLengthOtherForm('2.3', 138)).toBe(true)
+    expect(sameLengthOtherForm(2, 116)).toBe(true)
+    expect(sameLengthOtherForm('2h 18m', 138)).toBe(true)
+    expect(sameLengthOtherForm(150, 170)).toBe(false)
+    expect(sameLengthOtherForm(3, 116)).toBe(false)
   })
 })

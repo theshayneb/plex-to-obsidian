@@ -259,6 +259,39 @@ function hours(minutes: number | undefined): number {
   return Math.round((minutes ?? 0) / 6) / 10
 }
 
+/** Sources checked against existing notes, offering a fix when the note's value differs (minutes). */
+export const CHECKED_SOURCES: FieldSource[] = ['durationMinutes']
+
+/**
+ * A duration as written in a note, in minutes: a number (taken as minutes), or text such as
+ * "2h 18m", "2 hr", "138 min" or "2:18". Null when it can't be read.
+ */
+export function noteMinutes(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+  const text = value.trim().toLowerCase()
+  if (/^\d+(\.\d+)?$/.test(text)) return Number(text)
+  const clock = /^(\d+):(\d{2})$/.exec(text)
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2])
+  const h = /(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)\b/.exec(text)
+  const m = /(\d+)\s*(m|min|mins|minute|minutes)\b/.exec(text)
+  if (!h && !m) return null
+  return Math.round((h ? Number(h[1]) * 60 : 0) + (m ? Number(m[1]) : 0))
+}
+
+/**
+ * Whether a note's duration is plainly the same length in another form: hours (2.3 for 138
+ * minutes) or text ("2h 18m"), rather than a different length.
+ */
+export function sameLengthOtherForm(value: unknown, minutes: number): boolean {
+  if (typeof value === 'string' && !/^\s*\d+(\.\d+)?\s*$/.test(value)) {
+    const read = noteMinutes(value)
+    return read !== null && Math.abs(read - minutes) <= Math.max(2, minutes * 0.05)
+  }
+  const n = noteMinutes(value)
+  return n !== null && n < 24 && Math.abs(n * 60 - minutes) <= Math.max(6, minutes * 0.05)
+}
+
 /** Sources that need a HowLongToBeat lookup. */
 export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbLink']
 

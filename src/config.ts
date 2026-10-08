@@ -86,6 +86,8 @@ export interface PlexNotesSettings {
   allowedGenres: string[]
   /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
   keptLinks: Record<string, string>
+  /** Durations you chose to keep when a sync offered the source's, by "rating key|property": not offered again while unchanged. */
+  keptValues: Record<string, string>
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
@@ -141,6 +143,7 @@ export function defaultSettings(): PlexNotesSettings {
     ignored: {},
     merged: {},
     keptLinks: {},
+    keptValues: {},
     allowedGenres: [...DEFAULT_GENRES],
     updatePlayCounts: false,
     updateRatings: false,
@@ -260,6 +263,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.ignored = { ...saved.ignored }
   settings.merged = { ...saved.merged }
   settings.keptLinks = { ...saved.keptLinks }
+  settings.keptValues = { ...saved.keptValues }
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   settings.steam = { ...settings.steam, ...saved.steam }
 

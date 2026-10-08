@@ -89,6 +89,12 @@ export class ApprovalModal extends Modal {
         : 'Edit any new value (× removes an item from a list), or untick anything you don\'t want changed.',
     })
 
+    if (lines.some(line => line.key.startsWith('fix:'))) {
+      contentEl.createEl('p', {
+        cls: 'setting-item-description',
+        text: 'The note\'s duration differs from the source\'s minutes. If it\'s the same length in hours or as text, the fix is ticked; any other difference is unticked. A value you keep isn\'t offered for fixing again.',
+      })
+    }
     if (lines.some(line => line.key.startsWith('link:'))) {
       contentEl.createEl('p', {
         cls: 'setting-item-description',

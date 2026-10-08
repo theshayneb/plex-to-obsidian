@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.36] - 2026-10-08
+
+### Added
+- Fixing durations in existing notes: when a note's Duration (a property set to "Duration in minutes") differs from Plex's, syncs show the "Change this note?" pop-up with both. Only when "Ask before every change" is on.
+  - The same length written as hours (2.3 for 138 minutes) or as text ("2h 18m") is offered ticked, so "Apply to all the rest" fixes them all at once.
+  - Any other difference is offered unticked. Keep your value and it isn't offered again, unless it changes.
+
 ## [0.0.35] - 2026-10-08
 
 ### Fixed

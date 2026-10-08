@@ -34,7 +34,7 @@ import {
 } from './notes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, HLTB_SOURCES, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -57,7 +57,9 @@ export interface SyncResult {
   merged: string[]
   /** Existing notes whose link was replaced with the item's own (when you ticked it). */
   links: string[]
-  /** Links you chose to keep in this sync. */
+  /** Existing notes whose duration was corrected to the source's. */
+  corrected: string[]
+  /** Links and values you chose to keep in this sync. */
   keptLinks: number
   skipped: number
   failed: { title: string, error: string }[]
@@ -249,7 +251,7 @@ export class PlexSync {
 
   async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], keptLinks: 0 }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0 }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -308,8 +310,10 @@ export class PlexSync {
           const beingFilled = new Set([...fill?.additions.map(([name]) => name) ?? [], ...fill?.imageProperty ? [fill.imageProperty] : []])
           const plays = counting ? this.planUpdates(file, item, lib, updating, beingFilled) : null
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
-          const links = full && this.settings.askBeforeChanges && this.approve ? this.planLinks(file, item, lib) : null
-          if (!renameTo && !fill && !plays && !links) continue
+          const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
+          const links = asking ? this.planLinks(file, item, lib) : null
+          const checks = asking ? this.planChecks(file, item, lib) : null
+          if (!renameTo && !fill && !plays && !links && !checks) continue
 
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -332,9 +336,19 @@ export class PlexSync {
             // A search page is a stand-in, so replacing it starts ticked; any other link starts unticked.
             lines.push({ key: `link:${name}`, label: name, current: describeValue(links!.from[name]), value: links!.to[name], edit: 'text', unticked: !links!.placeholders.has(name) })
           }
+          for (const name of checks?.names ?? []) {
+            // The same length in hours or as text starts ticked; any other difference starts unticked.
+            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), value: String(checks!.to[name]), edit: 'number', unticked: !checks!.sameLength.has(name) })
+          }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
           const { excluded, edits } = approval
+          const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
+          // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
+          for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
+            this.settings.keptValues[`${item.ratingKey}|${name}`] = String(checks!.from[name])
+            result.keptLinks++
+          }
           const linkNames = (links?.names ?? []).filter(name => !excluded.has(`link:${name}`))
           // A link left unticked is yours to keep: don't offer to replace it again while it stays the same.
           const keptLink = (links?.names ?? []).find(name => excluded.has(`link:${name}`))
@@ -370,7 +384,7 @@ export class PlexSync {
             const edited = edits[`update:${name}`]
             return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
           }
-          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length) {
+          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length) {
             result.declined++
             continue
           }
@@ -382,6 +396,15 @@ export class PlexSync {
               addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
             }
             if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
+            if (fixNames.length) {
+              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                for (const name of fixNames) {
+                  const edited = edits[`fix:${name}`]
+                  fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, 'number')
+                }
+              })
+              result.corrected.push(file.path)
+            }
             if (linkNames.length) {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
                 for (const name of linkNames) {
@@ -559,7 +582,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], keptLinks: 0 }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0 }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
@@ -796,6 +819,31 @@ export class PlexSync {
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to } : null
+  }
+
+  /**
+   * Properties checked against the source (`CHECKED_SOURCES`: durations in minutes) whose value
+   * in the note is a different number, to offer the source's. Values you chose to keep before are
+   * left alone. `sameLength` names those that are the same length in another form (hours, text).
+   */
+  private planChecks(file: TFile, item: PlexItem, lib: ActiveLibrary): { names: string[], from: Record<string, unknown>, to: Record<string, number>, sameLength: Set<string> } | null {
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
+    const to: Record<string, number> = {}
+    const sameLength = new Set<string>()
+    for (const m of lib.properties) {
+      const name = m.name.trim()
+      const current: unknown = from[name]
+      if (!CHECKED_SOURCES.includes(m.source) || !name || isBlank(current)) continue
+      const value = sourceValue(m.source, item, ctx)
+      if (typeof value !== 'number') continue
+      if (current === value || (typeof current === 'string' && current.trim() === String(value))) continue
+      if (this.settings.keptValues[`${item.ratingKey}|${name}`] === String(current)) continue
+      to[name] = value
+      if (sameLengthOtherForm(current, value)) sameLength.add(name)
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to, sameLength } : null
   }
 
   /**

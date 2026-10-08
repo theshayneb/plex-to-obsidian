@@ -631,6 +631,38 @@ describe('PlexSync', () => {
     expect(approve.mock.calls[0][0].lines.map(l => l.label)).toEqual(['Progress'])
   })
 
+  it('offers to fix durations that differ: hours ticked, other differences unticked and remembered', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Duration: 1.9 },
+      'Media/Movies/Heat (1995).md': { Duration: 150 },
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Duration', source: 'durationMinutes' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
+      { ...movies[0], duration: 116 * 60_000 }, { ...movies[1], duration: 170 * 60_000 },
+    ] } })
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+
+    expect(requests.filter(r => r.action === 'change').map(r => r.lines)).toEqual([
+      [{ key: 'fix:Duration', label: 'Duration', current: '1.9', value: '116', edit: 'number', unticked: false }],
+      [{ key: 'fix:Duration', label: 'Duration', current: '150', value: '170', edit: 'number', unticked: true }],
+    ])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Duration).toBe(116)
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Duration).toBe(150)
+    expect(result.corrected).toEqual(['Media/Movies/Arrival (2016).md'])
+
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.filter(r => r.action === 'change')).toEqual([])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

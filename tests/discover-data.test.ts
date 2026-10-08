@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bookGenres, cleanOmdbKey, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { bookGenres, cleanOmdbKey, googleDescription, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
@@ -92,5 +92,24 @@ describe('book genres', () => {
       .toEqual(['Fiction', 'Fantasy', 'Humor', 'History: 1900s'])
     expect(bookGenres(['A', 'B', 'C', 'D', 'E', 'F'])).toEqual(['A', 'B', 'C', 'D', 'E'])
     expect(bookGenres(undefined)).toEqual([])
+  })
+})
+
+describe('Google Books summaries', () => {
+  const volume = (title: string, description?: string) => ({ volumeInfo: { title, description } })
+  it('takes the blurb of the same book, as plain text', () => {
+    const found = googleDescription([
+      volume('The Hobbit Coloring Book', 'Colour it in.'),
+      volume('The Hobbit', '<p>Bilbo Baggins is a <b>hobbit</b>.</p><p>He goes on an adventure.</p>'),
+    ], 'The Hobbit', false)
+    expect(found).toBe('Bilbo Baggins is a hobbit.\n\nHe goes on an adventure.')
+  })
+  it('never uses another book\'s blurb found by title', () => {
+    expect(googleDescription([volume('Something Else', 'Nope.')], 'The Hobbit', false)).toBeUndefined()
+    expect(googleDescription([volume('The Hobbit')], 'The Hobbit', false)).toBeUndefined()
+  })
+  it('accepts a subtitle, and any result found by ISBN', () => {
+    expect(googleDescription([volume('Dune: Deluxe Edition', 'Desert.')], 'Dune', false)).toBe('Desert.')
+    expect(googleDescription([volume('Dune (Movie Tie-In)', 'Desert.')], 'Something', true)).toBe('Desert.')
   })
 })

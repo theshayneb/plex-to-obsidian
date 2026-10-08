@@ -192,6 +192,12 @@ const GENRE_ALIASES: Record<string, string[]> = {
   'documentaries': ['Documentary'],
 }
 
+/** A book's "Fiction" only when it has no other kept genre: Fantasy or Mystery says it already. */
+export function fictionOnlyAlone(genres: string[]): string[] {
+  const others = genres.filter(g => g.trim().toLowerCase() !== 'fiction')
+  return others.length ? others : genres
+}
+
 /** Drops the genres a library leaves out (case ignored). */
 export function leaveOut(genres: string[], left: string[] | undefined): string[] {
   if (!left?.length) return genres
@@ -377,7 +383,8 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'genres': {
       // A game's store tags ("Mystery") count as genres too, but only those in "Genres to keep".
       const tagged = ctx.genres?.length ? item.steamTags ?? [] : []
-      const genres = leaveOut(keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres), ctx.leaveOut)
+      const kept = leaveOut(keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres), ctx.leaveOut)
+      const genres = ctx.kind === 'book' && ctx.genres?.length ? fictionOnlyAlone(kept) : kept
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres
     }
@@ -527,7 +534,8 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
     for (const genre of listOf(value)) {
       if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
     }
-    const wanted = leaveOut(kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed, leftOut)
+    const left = leaveOut(kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed, leftOut)
+    const wanted = kind === 'book' && allowedGenres.length ? fictionOnlyAlone(left) : left
     if (!wanted.length || sameList(own, wanted)) return null
     return { to: wanted, ticked: true }
   }

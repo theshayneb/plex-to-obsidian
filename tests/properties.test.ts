@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -245,5 +245,13 @@ describe('ratings both ways', () => {
     // Removed in Plex: the note's is left alone.
     expect(ratingDirection(4, 0, 4)).toBeNull()
     expect(ratingDirection(null, 4, undefined)).toBe('toNote')
+  })
+})
+
+describe('fictionOnlyAlone', () => {
+  it('drops Fiction when a book has another genre', () => {
+    expect(fictionOnlyAlone(['Fiction', 'Fantasy'])).toEqual(['Fantasy'])
+    expect(fictionOnlyAlone(['fiction'])).toEqual(['fiction'])
+    expect(fictionOnlyAlone([])).toEqual([])
   })
 })

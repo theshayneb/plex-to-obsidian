@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.48] - 2026-10-08
+
+### Changed
+- Book summaries now come from **Google Books** (the publisher's description), found by ISBN or by title and author; Open Library's description is only used when Google Books has none. This applies to "Add something new" and to "Check existing notes against sources", which offers the Google Books summary where a note's differs (ticked, with "Tick differences to start with" on). Everything else about books still comes from Open Library. A Google Books API key is optional (Setup → Adding things not in Plex or Steam); without one there's a daily limit.
+- Books: "Fiction" is left out of a book's genres when it has any other genre from your **Genres to keep** (it stays when it's the only one).
+
 ## [0.0.47] - 2026-10-08
 
 ### Added

@@ -2,7 +2,7 @@
 // "Add something new". No Obsidian imports, so it can be unit tested.
 import { hltbTimes, type HltbGame } from './hltb-data'
 import type { PlexItem } from './notes'
-import { parseSteamDate } from './steam-data'
+import { parseSteamDate, plainText } from './steam-data'
 
 /** One search result to pick from. */
 export interface Found {
@@ -217,4 +217,29 @@ export function hltbFound(game: HltbGame): Found {
     thumb: times.image,
     source: 'HowLongToBeat',
   }
+}
+
+/** One result of a Google Books search (only what's used). */
+export interface GoogleVolume {
+  volumeInfo?: { title?: string, subtitle?: string, authors?: string[], description?: string }
+}
+
+const titleKey = (title: string): string => title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+/**
+ * The description (the publisher's blurb) of the Google Books result for this book, as plain
+ * text. Found by ISBN, the first result with one is taken; found by title, only a result whose
+ * title is the same (or starts the same, as with a subtitle), so another book's blurb is never used.
+ */
+export function googleDescription(volumes: GoogleVolume[] | undefined, title: string, byIsbn: boolean): string | undefined {
+  const want = titleKey(title)
+  const described = (volumes ?? []).filter(v => v.volumeInfo?.description?.trim())
+  const same = (v: GoogleVolume) => {
+    const got = titleKey(v.volumeInfo?.title ?? '')
+    return Boolean(got && want) && (got === want || got.startsWith(want) || want.startsWith(got))
+  }
+  const best = described.find(v => titleKey(v.volumeInfo?.title ?? '') === want) ?? described.find(same) ?? (byIsbn ? described[0] : undefined)
+  const html = best?.volumeInfo?.description
+  if (!html) return undefined
+  return plainText(html.replace(/<\/p>\s*/gi, '\n\n'))?.replace(/\n{3,}/g, '\n\n').trim()
 }

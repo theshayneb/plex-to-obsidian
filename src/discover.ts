@@ -1,6 +1,7 @@
 import { requestUrl } from 'obsidian'
 import {
   bookGenres,
+  googleDescription,
   cleanOmdbKey,
   hltbFound,
   omdbFound,
@@ -10,6 +11,7 @@ import {
   openLibraryFound,
   steamFound,
   type Found,
+  type GoogleVolume,
   type OmdbDetails,
   type OmdbSearchResult,
   type OpenLibraryDoc,
@@ -75,7 +77,7 @@ export async function findItems(kind: FindKind, query: string, omdbKey: string):
 }
 
 /** The full details of a picked result (OMDb and Open Library need a second request). */
-export async function itemDetails(found: Found, omdbKey: string): Promise<PlexItem> {
+export async function itemDetails(found: Found, omdbKey: string, googleKey = ''): Promise<PlexItem> {
   const { item } = found
   if (item.ratingKey.startsWith('imdb-')) {
     const id = item.ratingKey.slice(5)
@@ -87,7 +89,7 @@ export async function itemDetails(found: Found, omdbKey: string): Promise<PlexIt
     const work = item.ratingKey.slice(3)
     const body = await getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS).catch(() => null) as
       { description?: string | { value?: string } } | null
-    return { ...item, summary: openLibraryDescription(body) }
+    return { ...item, summary: (await googleBooksSummary(item, googleKey)) ?? openLibraryDescription(body) }
   }
   return item
 }
@@ -115,7 +117,7 @@ async function searchBooks(query: string): Promise<OpenLibraryDoc[]> {
  * the work's subjects (cleaned of tags) and its summary the work's description. Null when nothing
  * is found.
  */
-export async function lookUpBook(by: { work?: string | null, title?: string, author?: string }): Promise<PlexItem | null> {
+export async function lookUpBook(by: { work?: string | null, title?: string, author?: string }, googleKey = ''): Promise<PlexItem | null> {
   type Work = { title?: string, subjects?: string[], description?: string | { value?: string } }
   const workJson = (work: string) => getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as Promise<Work>
   if (by.work) {
@@ -126,10 +128,11 @@ export async function lookUpBook(by: { work?: string | null, title?: string, aut
     const found = doc ? openLibraryFound(doc) : null
     const body = await workJson(by.work).catch(() => null)
     if (!found && !body) return null
+    const book: PlexItem = found?.item ?? { ratingKey: `ol-${by.work}`, type: 'book', title: body?.title ?? '', webLink: `https://openlibrary.org/works/${by.work}` }
     return {
-      ...(found?.item ?? { ratingKey: `ol-${by.work}`, type: 'book', title: body?.title ?? '', webLink: `https://openlibrary.org/works/${by.work}` }),
+      ...book,
       Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
-      summary: openLibraryDescription(body) ?? found?.item.summary,
+      summary: (await googleBooksSummary(book, googleKey)) ?? openLibraryDescription(body) ?? found?.item.summary,
     }
   }
   if (!by.title) return null
@@ -142,6 +145,32 @@ export async function lookUpBook(by: { work?: string | null, title?: string, aut
   return {
     ...found.item,
     Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
-    summary: openLibraryDescription(body) ?? found.item.summary,
+    summary: (await googleBooksSummary(found.item, googleKey)) ?? openLibraryDescription(body) ?? found.item.summary,
+  }
+}
+
+/**
+ * A book's summary from Google Books (the publisher's blurb, far better than Open Library's
+ * descriptions): looked up by ISBN, then by title and author. Undefined when Google Books has none
+ * or can't be reached, so Open Library's is used instead. `key` (optional) raises Google's daily limit.
+ */
+export async function googleBooksSummary(book: PlexItem, key = ''): Promise<string | undefined> {
+  const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
+  const search = async (q: string, byIsbn: boolean) => {
+    const body = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books${withKey}`) as { items?: GoogleVolume[] }
+    return googleDescription(body.items, book.title, byIsbn)
+  }
+  try {
+    const isbn = book.isbn?.replace(/[^0-9X]/gi, '')
+    if (isbn) {
+      const found = await search(`isbn:${isbn}`, true)
+      if (found) return found
+    }
+    if (!book.title) return undefined
+    const author = book.authors?.[0]
+    return await search(`intitle:"${book.title}"${author ? ` inauthor:"${author}"` : ''}`, false)
+  } catch (err) {
+    console.warn('Media import and sync: Google Books lookup failed', err)
+    return undefined
   }
 }

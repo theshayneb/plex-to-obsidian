@@ -132,7 +132,7 @@ export class AddModal extends Modal {
       return
     }
     try {
-      const item = await itemDetails(result, this.pmnSettings.omdbKey ?? '')
+      const item = await itemDetails(result, this.pmnSettings.omdbKey ?? '', this.pmnSettings.googleBooksKey ?? '')
       await this.pmnSave()
       this.close()
       await this.pmnPick(item, this.pmnLibrary)

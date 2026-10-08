@@ -791,7 +791,7 @@ describe('PlexSync', () => {
     expect(requests[0].note).toBeUndefined()
     expect(requests[1].note).toBe('Found on Open Library: The Hobbit by J.R.R. Tolkien, 1937. Make sure it\'s the same book; if it isn\'t, press Skip.')
     expect(requested.some(u => u.includes('search.json?title=The%20Hobbit&author=J.R.R.%20Tolkien'))).toBe(true)
-    expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Genre).toEqual(['Sci-Fi', 'Fiction'])
+    expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Genre).toEqual(['Sci-Fi'])
     expect(frontmatter.get('Media/Books/The Hobbit by J.R.R. Tolkien.md')).toMatchObject({ Genre: ['Fantasy'], Link: 'https://openlibrary.org/works/OL27448W' })
     expect(result.links).toEqual(['Media/Books/The Hobbit by J.R.R. Tolkien.md'])
   })
@@ -891,6 +891,23 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Collections).toEqual(['Cozy', 'Favorites'])
     expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])
     expect(vi.mocked(readSteamCollections)).toHaveBeenLastCalledWith('76561197960287930', '')
+  })
+
+  it('takes a book\'s summary from Google Books, else Open Library\'s', async () => {
+    steamResponses = {
+      'https://openlibrary.org/search.json?q=': { docs: [{ key: '/works/OL893415W', title: 'Dune', author_name: ['Frank Herbert'], first_publish_year: 1965, isbn: ['9780441172719'] }] },
+      'https://openlibrary.org/works/OL893415W.json': { description: 'A bad summary.' },
+      'https://www.googleapis.com/books/v1/volumes?q=isbn': { items: [{ volumeInfo: { title: 'Dune', description: 'Set on the desert planet Arrakis…' } }] },
+    }
+    const { app, frontmatter } = makeApp({ 'Media/Books/Dune by Frank Herbert.md': { Author: ['Frank Herbert'], Summary: 'A bad summary.', Link: 'https://openlibrary.org/works/OL893415W' } })
+    const settings = settingsWith()
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'apply' as const, excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Summary).toBe('Set on the desert planet Arrakis…')
+    expect(requested.some(u => u.startsWith('https://www.googleapis.com/books/v1/volumes?q=isbn%3A9780441172719'))).toBe(true)
   })
 
   describe('a note whose name matches two items', () => {

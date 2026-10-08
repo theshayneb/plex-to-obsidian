@@ -577,7 +577,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Adding things not in Plex or Steam').setHeading()
     containerEl.createEl('p', {
       cls: 'setting-item-description',
-      text: 'The "Add something new" command finds movies and TV shows on OMDb, games on Steam and HowLongToBeat, and books on Open Library. The note goes in the library you choose, with its properties. Once the item is in Plex or Steam, syncing recognises the note.',
+      text: 'The "Add something new" command finds movies and TV shows on OMDb, games on Steam and HowLongToBeat, and books on Open Library (with summaries from Google Books). The note goes in the library you choose, with its properties. Once the item is in Plex or Steam, syncing recognises the note.',
     })
     new Setting(containerEl)
       .setName('OMDb API key')
@@ -593,6 +593,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         new Notice(await testOmdbKey(settings.omdbKey ?? ''), 10_000)
         button.setDisabled(false)
       }))
+    new Setting(containerEl)
+      .setName('Google Books API key')
+      .setDesc('Optional. Book summaries come from Google Books (the publisher\'s description), with Open Library\'s when Google Books has none. It works without a key; one (free, from the Google Cloud console, with the Books API enabled) only raises the daily limit.')
+      .addText(text => text
+        .setPlaceholder('Optional')
+        .setValue(settings.googleBooksKey ?? '')
+        .onChange(async value => {
+          settings.googleBooksKey = value.trim()
+          await this.save()
+        }))
   }
 
   /** Items tied to existing notes with "Use an existing note", each with a button to undo it. */

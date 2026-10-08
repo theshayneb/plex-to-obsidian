@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.59] - 2026-10-08
+
+### Changed
+- One rating scale for everything, matching Plex's stars: 💣 (1 star), ⭐⭐ (2), ⭐⭐⭐ (3), ⭐⭐⭐⭐ (4), 🩷 (5), empty for none. Music uses it too.
+- Converting your ratings: whenever a pop-up opens for a note whose rating is still in the earlier scale (any sync with "Ask before every change" on, "Check existing notes against sources", or "Use an existing note"), it shows the rating with the same rating in the new scale, ticked: say ⭐⭐⭐ (the earlier 7–8) → ⭐⭐⭐⭐, or a song's ⭐⭐⭐⭐⭐ → 🩷. Accept it, edit it, or untick it to keep yours; either way that note isn't asked about again (Skip asks again next time). Until then its rating is read the earlier way, so it's never misread or sent to Plex wrong. New notes are written in the new scale.
+
 ## [0.0.58] - 2026-10-08
 
 ### Changed

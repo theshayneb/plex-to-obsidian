@@ -392,8 +392,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
-      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐ (4 stars in Plex)', unticked: false }]],
-      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐ (4 stars in Plex)', value: '⭐ (2 stars in Plex)', unticked: false }]],
+      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐⭐ (4 stars in Plex)', unticked: false }]],
+      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐⭐ (4 stars in Plex)', value: '⭐⭐ (2 stars in Plex)', unticked: false }]],
     ])
     expect(requested.filter(u => u.includes('/:/rate'))).toEqual([
       'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=8',
@@ -417,6 +417,32 @@ describe('PlexSync', () => {
     await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
     expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')).toEqual({ Mood: ['Brooding'] })
     expect(frontmatter.get('Media/Music/Radiohead - Airbag.md')).toEqual({ Mood: ['Melancholy'] })
+  })
+
+  it('offers a rating written in an older scale in the star scale, once per note', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Rating: '⭐⭐⭐' },
+      'Media/Movies/Heat (1995).md': { Rating: '🩷' },
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[0], userRating: 8 }, { ...movies[1], userRating: 10 }] } })
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    // ⭐⭐⭐ was 4 stars in the old scale: offered as ⭐⭐⭐⭐. 🩷 is the same in both: just marked reviewed.
+    expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
+      ['Media/Movies/Arrival (2016).md', [{ key: 'rescale:Rating', label: 'Rating', current: '⭐⭐⭐', value: '⭐⭐⭐⭐', edit: 'text', unticked: false }]],
+    ])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Rating).toBe('⭐⭐⭐⭐')
+    expect(settings.ratingsReviewed).toEqual({ 1: true, 2: true })
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.filter(r => r.action === 'change')).toEqual([])
   })
 
   it('shows the play count now and after', async () => {
@@ -955,7 +981,7 @@ describe('PlexSync', () => {
       ['fix:Rating', '4', true],
       ['fix:tags', 'favourites, movie', false],
       ['fix:Image', 'poster downloaded from Plex', false],
-      ['plexRating', '⭐ (2 stars in Plex)', true],
+      ['plexRating', '⭐⭐ (2 stars in Plex)', true],
     ])
     expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Rating: 2, tags: ['favourites', 'movie'], Image: '[[Media/Movies/Images/Heat (1995).jpg]]' })
     expect(binaries).toContain('Media/Movies/Images/Heat (1995).jpg')

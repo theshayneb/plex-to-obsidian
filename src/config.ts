@@ -112,6 +112,8 @@ export interface PlexNotesSettings {
   sendRatings: boolean
   /** The rating (stars, 0 for none) a note and Plex last agreed on, by rating key: which side changed since. */
   ratingsSeen: Record<string, number>
+  /** Notes (by rating key) whose rating has been reviewed in the star scale (💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷), so it's read that way. */
+  ratingsReviewed: Record<string, true>
   /** Also refresh play counts in the background every this many hours; 0 is off. */
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
@@ -175,6 +177,7 @@ export function defaultSettings(): PlexNotesSettings {
     updateStatus: false,
     sendRatings: false,
     ratingsSeen: {},
+    ratingsReviewed: {},
     playCountHours: 0,
     lastPlayCountUpdate: 0,
     libraries: {},
@@ -295,6 +298,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.keptLinks = { ...saved.keptLinks }
   settings.keptValues = { ...saved.keptValues }
   settings.ratingsSeen = { ...saved.ratingsSeen }
+  settings.ratingsReviewed = { ...saved.ratingsReviewed }
   if (Array.isArray(saved.unmatchedIgnored)) settings.unmatchedIgnored = saved.unmatchedIgnored.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)

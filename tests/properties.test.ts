@@ -126,15 +126,16 @@ describe('sourceValue', () => {
     expect(value('userRating', rated(5))).toBe(3)
     expect(value('userRating', rated(10))).toBe(5)
     expect(value('userRating', rated(undefined))).toBeUndefined()
+    // The star scale: 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷, one per Plex star.
     expect(value('userRatingEmoji', rated(2))).toBe('💣')
-    expect(value('userRatingEmoji', rated(5))).toBe('⭐⭐')
-    expect(value('userRatingEmoji', rated(8))).toBe('⭐⭐⭐')
-    expect(value('userRatingEmoji', rated(9))).toBe('🩷')
+    expect(value('userRatingEmoji', rated(3))).toBe('⭐⭐')
+    expect(value('userRatingEmoji', rated(6))).toBe('⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(8))).toBe('⭐⭐⭐⭐')
     expect(value('userRatingEmoji', rated(10))).toBe('🩷')
-    expect(value('userRatingEmoji', rated(3))).toBe('⭐')
     expect(value('userRatingEmoji', rated(0))).toBeUndefined()
-    expect(value('userRatingEmoji', rated(6), { ...ctx, kind: 'music' })).toBe('⭐⭐⭐')
-    expect(value('userRatingEmoji', rated(10), { ...ctx, kind: 'music' })).toBe('⭐⭐⭐⭐⭐')
+    // The earlier scales, still known for reading notes written in them.
+    expect(value('userRatingEmoji', rated(8), { ...ctx, ratingScale: 'emoji' })).toBe('⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(10), { ...ctx, ratingScale: 'plain' })).toBe('⭐⭐⭐⭐⭐')
     expect(value('userRatingEmoji', rated(undefined))).toBeUndefined()
   })
 
@@ -231,16 +232,18 @@ describe('statusMovesForward', () => {
 describe('ratings both ways', () => {
   it('reads a note\'s stars', () => {
     expect(noteStars(4)).toBe(4)
-    expect(noteStars('⭐⭐⭐')).toBe(4)
-    expect(noteStars('⭐')).toBe(2)
+    // The star scale.
     expect(noteStars('💣')).toBe(1)
+    expect(noteStars('⭐⭐')).toBe(2)
     expect(noteStars('⭐⭐⭐⭐')).toBe(4)
-    expect(noteStars('⭐⭐⭐⭐⭐')).toBe(5)
-    // Music: plain stars, one per two points in Plex.
-    expect(noteStars('⭐', true)).toBe(1)
-    expect(noteStars('⭐⭐⭐', true)).toBe(3)
-    expect(noteStars('⭐⭐⭐⭐⭐', true)).toBe(5)
     expect(noteStars('🩷')).toBe(5)
+    // The earlier emoji scale: ⭐ is 2, ⭐⭐⭐ 4, five stars 5.
+    expect(noteStars('⭐', 'emoji')).toBe(2)
+    expect(noteStars('⭐⭐⭐', 'emoji')).toBe(4)
+    expect(noteStars('⭐⭐⭐⭐⭐', 'emoji')).toBe(5)
+    // The earlier music scale: plain stars.
+    expect(noteStars('⭐', 'plain')).toBe(1)
+    expect(noteStars('⭐⭐⭐', 'plain')).toBe(3)
     expect(noteStars('2')).toBe(2)
     expect(noteStars('')).toBeNull()
     expect(noteStars(0)).toBeNull()
@@ -271,8 +274,8 @@ describe('fictionOnlyAlone', () => {
 describe('ratingLabel', () => {
   it('says how many stars Plex shows', () => {
     expect(ratingLabel(1)).toBe('💣 (1 star in Plex)')
-    expect(ratingLabel(4)).toBe('⭐⭐⭐ (4 stars in Plex)')
-    expect(ratingLabel(4, false, 3.5)).toBe('⭐⭐⭐ (3.5 stars in Plex)')
-    expect(ratingLabel(3, true)).toBe('⭐⭐⭐ (3 stars in Plex)')
+    expect(ratingLabel(4)).toBe('⭐⭐⭐⭐ (4 stars in Plex)')
+    expect(ratingLabel(4, 'stars', 3.5)).toBe('⭐⭐⭐⭐ (3.5 stars in Plex)')
+    expect(ratingLabel(5)).toBe('🩷 (5 stars in Plex)')
   })
 })

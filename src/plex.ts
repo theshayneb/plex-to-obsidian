@@ -73,6 +73,21 @@ export class PlexClient {
     }
   }
 
+  /**
+   * Sets your rating of an item in Plex: 0–10 (two per star), or -1 to remove it. Plex answers
+   * with no content.
+   */
+  async rate(ratingKey: string, rating: number): Promise<void> {
+    const res = await requestUrl({
+      url: `${this.baseUrl}/:/rate?key=${encodeURIComponent(ratingKey)}&identifier=com.plexapp.plugins.library&rating=${rating}`,
+      method: 'PUT',
+      headers: this.headers('application/json'),
+      throw: false,
+    })
+    if (res.status === 401) throw new Error('Plex rejected the token (401)')
+    if (res.status >= 400) throw new Error(`Plex returned ${res.status} when rating`)
+  }
+
   /** Full metadata; the library listing can leave out some genres. */
   async item(ratingKey: string): Promise<PlexItem | null> {
     return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}?includeGuids=1`)).Metadata?.[0] ?? null

@@ -440,6 +440,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
+      .setName('Send ratings to Plex')
+      .setDesc('When you rate something in a note (a property set to "Your rating", stars or emoji) and Plex has no rating or the one you had before, a sync offers to send your rating to Plex, in the approval pop-up (so only with "Ask before every change" on). Syncs also stop replacing a rating you changed in a note with Plex\'s old one; one changed in Plex still comes into the note, with "Keep ratings up to date" on.')
+      .addToggle(toggle => toggle
+        .setValue(settings.sendRatings)
+        .onChange(async value => {
+          settings.sendRatings = value
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Keep status up to date')
       .setDesc('Every sync also moves properties set to "Watched or played status" forward in existing notes: from not watched to started to watched (for games, from not played to played), as set under each library\'s property values. A status never moves back, and one of your own (such as revisit or abandoned) is never changed.')
       .addToggle(toggle => toggle

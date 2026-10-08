@@ -368,6 +368,53 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Free Solo (2018).md')!.Status).toBe('completed')
   })
 
+  it('offers to send a rating made in a note to Plex, and stops overwriting it with Plex\'s', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Rating: 4 },
+      'Media/Movies/Heat (1995).md': { Rating: 2 },
+    })
+    const settings = settingsWith({ sendRatings: true, updateRatings: true, ratingsSeen: { 2: 4 } })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRating' }]
+    // Arrival isn't rated in Plex; Heat was 4 stars in both, then changed to 2 in the note.
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], { ...movies[1], userRating: 8 }] } })
+    responses.set('/:/rate', {})
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+
+    expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
+      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '4 stars', unticked: false }]],
+      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '4 stars', value: '2 stars', unticked: false }]],
+    ])
+    expect(requested.filter(u => u.includes('/:/rate'))).toEqual([
+      'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=8',
+      'http://plex:32400/:/rate?key=2&identifier=com.plexapp.plugins.library&rating=4',
+    ])
+    // The note's rating was kept, not overwritten with Plex's.
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Rating).toBe(2)
+    expect(result.sentRatings).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md'])
+    expect(settings.ratingsSeen).toMatchObject({ 1: 4, 2: 2 })
+  })
+
+  it('gives a track its own moods when it has them, else its album\'s', async () => {
+    const { app, frontmatter } = makeApp({})
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary("Shayne's Music", 'artist', 'music') }
+    settings.libraries['3'].target = 'music'
+    settings.libraries['3'].properties = [{ name: 'Mood', source: 'moods' }]
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: tracks.slice(0, 2) } })
+    responses.set('/library/metadata/100', { MediaContainer: { Metadata: [{ ...tracks[0], Mood: [{ tag: 'Brooding' }] }] } })
+    responses.set('/library/metadata/90', { MediaContainer: { Metadata: [{ ratingKey: '90', type: 'album', title: 'OK Computer', Mood: [{ tag: 'Melancholy' }] }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')).toEqual({ Mood: ['Brooding'] })
+    expect(frontmatter.get('Media/Music/Radiohead - Airbag.md')).toEqual({ Mood: ['Melancholy'] })
+  })
+
   it('shows the play count now and after', async () => {
     const { app } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1 } })
     const settings = settingsWith({ updatePlayCounts: true })

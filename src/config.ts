@@ -102,6 +102,10 @@ export interface PlexNotesSettings {
   updateRatings: boolean
   /** Also move "Watched or played status" properties forward (never back, never from your own statuses) on every sync. */
   updateStatus: boolean
+  /** Offer to send a rating changed in a note to Plex (in the approval pop-up, so only with asking on). */
+  sendRatings: boolean
+  /** The rating (stars, 0 for none) a note and Plex last agreed on, by rating key: which side changed since. */
+  ratingsSeen: Record<string, number>
   /** Also refresh play counts in the background every this many hours; 0 is off. */
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
@@ -162,6 +166,8 @@ export function defaultSettings(): PlexNotesSettings {
     updatePlayCounts: false,
     updateRatings: false,
     updateStatus: false,
+    sendRatings: false,
+    ratingsSeen: {},
     playCountHours: 0,
     lastPlayCountUpdate: 0,
     libraries: {},
@@ -271,7 +277,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
   for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
-    'updatePlayCounts', 'updateRatings', 'updateStatus', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
+    'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }
@@ -279,6 +285,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.merged = { ...saved.merged }
   settings.keptLinks = { ...saved.keptLinks }
   settings.keptValues = { ...saved.keptValues }
+  settings.ratingsSeen = { ...saved.ratingsSeen }
   if (Array.isArray(saved.unmatchedIgnored)) settings.unmatchedIgnored = saved.unmatchedIgnored.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.45] - 2026-10-08
+
+### Added
+- **Send ratings to Plex** (Settings → All libraries, off to start): when you rate something in a note (a "Your rating" property, stars or emoji) and Plex has no rating, or still has the one the two last agreed on, a sync offers a "Your rating in Plex" line in the approval pop-up; applying it sets that rating in Plex. Only with "Ask before every change" on, so nothing is sent without you seeing it. Untick it to keep Plex's as it is (not offered again while your note's rating stays the same).
+- Music: a track's own moods (Plex's "Mood") are read when a music library has a property set to "Music: moods". The library listing leaves them out, so each track is fetched when its note is made or filled in; a track without moods of its own gets its album's.
+
+### Changed
+- Ratings: the plugin now remembers the rating each note and Plex last agreed on, so a rating you change in a note is no longer replaced with Plex's old one by "Keep ratings up to date". A rating changed in Plex still comes into the note.
+
 ## [0.0.44] - 2026-10-08
 
 ### Changed

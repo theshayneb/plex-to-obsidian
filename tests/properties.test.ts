@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -215,5 +215,29 @@ describe('statusMovesForward', () => {
     expect(statusMovesForward('', 'started', values)).toBe(true)
     expect(statusMovesForward('revisit', 'completed', values)).toBe(false)
     expect(statusMovesForward('abandoned', 'started', values)).toBe(false)
+  })
+})
+
+describe('ratings both ways', () => {
+  it('reads a note\'s stars', () => {
+    expect(noteStars(4)).toBe(4)
+    expect(noteStars('⭐⭐⭐')).toBe(3)
+    expect(noteStars('🩷')).toBe(5)
+    expect(noteStars('2')).toBe(2)
+    expect(noteStars('')).toBeNull()
+    expect(noteStars(0)).toBeNull()
+  })
+  it('sends the side that changed', () => {
+    expect(ratingDirection(4, 4, 4)).toBeNull()
+    // Never agreed: Plex's wins if it has one, else the note's goes to Plex.
+    expect(ratingDirection(3, 5, undefined)).toBe('toNote')
+    expect(ratingDirection(3, 0, undefined)).toBe('toPlex')
+    // Changed in the note since they last agreed.
+    expect(ratingDirection(2, 4, 4)).toBe('toPlex')
+    // Changed in Plex since.
+    expect(ratingDirection(4, 5, 4)).toBe('toNote')
+    // Removed in Plex: the note's is left alone.
+    expect(ratingDirection(4, 0, 4)).toBeNull()
+    expect(ratingDirection(null, 4, undefined)).toBe('toNote')
   })
 })

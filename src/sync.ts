@@ -36,7 +36,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, RATING_SOURCES, sourceValue, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, noteStars, ratingDirection, RATING_SOURCES, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -63,6 +63,8 @@ export interface SyncResult {
   corrected: string[]
   /** Notes in the libraries' folders that no item matched (full syncs and checks). */
   unmatched: string[]
+  /** Notes whose rating was sent to Plex. */
+  sentRatings: string[]
   /** Links and values you chose to keep in this sync. */
   keptLinks: number
   skipped: number
@@ -102,6 +104,11 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
     edit,
     items: edit === 'list' ? (value as unknown[]).map(String) : undefined,
   }
+}
+
+/** A rating in words, for the approval pop-up. */
+function stars(n: number): string {
+  return `${n} star${n === 1 ? '' : 's'}`
 }
 
 /** Values in a note that differ from the source's, offered to fix; `sameLength` names those offered ticked. */
@@ -270,7 +277,7 @@ export class PlexSync {
    */
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = []): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0, unmatched: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [] }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -302,7 +309,8 @@ export class PlexSync {
       ...this.settings.updateStatus ? STATUS_SOURCES : [],
     ]
     const counting = updating.length > 0
-    if (renaming || filling || counting || genreCheck) {
+    const sendingRatings = full && this.settings.sendRatings
+    if (renaming || filling || counting || genreCheck || sendingRatings) {
       progress('Checking existing notes…')
       for (const family of FAMILIES) {
         const index = indexes[family]
@@ -341,9 +349,18 @@ export class PlexSync {
           }
           // A property already being filled in (it's empty) isn't offered a second time as an update.
           const beingFilled = new Set([...fill?.additions.map(([name]) => name) ?? [], ...fill?.imageProperty ? [fill.imageProperty] : []])
-          const plays = counting ? this.planUpdates(file, item, lib, updating, beingFilled) : null
+          // Ratings: which side changed since the last sync decides which way a difference goes, so a
+          // rating changed in the note isn't overwritten with Plex's old one.
+          const rating = genreCheck ? null : this.ratingPlan(file, item, lib)
+          const notOverwritten = new Set(beingFilled)
+          if (rating && rating.direction !== 'toNote') rating.names.forEach(name => notOverwritten.add(name))
+          const plays = counting ? this.planUpdates(file, item, lib, updating, notOverwritten) : null
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
           const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
+          const toPlex = asking && this.settings.sendRatings && this.plex && rating?.direction === 'toPlex' && rating.note
+            && this.settings.keptValues[`${item.ratingKey}|plexRating`] !== String(rating.note) ? rating.note : null
+          // Remembered only when the note and Plex agree (or one was just made to match the other).
+          if (rating && (rating.note ?? 0) === rating.plex) this.seeRating(item.ratingKey, rating.plex)
           const links = asking ? this.planLinks(file, item, lib) : null
           let checks: Checks | null = null
           try {
@@ -351,7 +368,7 @@ export class PlexSync {
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
-          if (!renameTo && !fill && !plays && !links && !checks) continue
+          if (!renameTo && !fill && !plays && !links && !checks && !toPlex) continue
 
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -380,9 +397,18 @@ export class PlexSync {
             const shown = typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
             lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !this.settings.tickDifferences && !checks!.sameLength.has(name) })
           }
+          if (toPlex) {
+            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? stars(rating!.plex) : null, value: stars(toPlex), unticked: !this.settings.tickDifferences })
+          }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
           const { excluded, edits } = approval
+          const sending = Boolean(toPlex) && !excluded.has('plexRating')
+          if (toPlex && !sending) {
+            // Plex's rating is to stay as it is: don't offer this note's rating again while it's the same.
+            this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
+            result.keptLinks++
+          }
           const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
           // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
           for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
@@ -424,7 +450,7 @@ export class PlexSync {
             const edited = edits[`update:${name}`]
             return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
           }
-          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length) {
+          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending) {
             result.declined++
             continue
           }
@@ -459,6 +485,12 @@ export class PlexSync {
                 for (const name of playNames) fm[name] = playValue(name)
               })
               result.playCounts.push(file.path)
+              if (rating && playNames.some(name => rating.names.includes(name))) this.seeRating(item.ratingKey, rating.plex)
+            }
+            if (sending && toPlex) {
+              await this.plex!.rate(item.ratingKey, toPlex * 2)
+              this.seeRating(item.ratingKey, toPlex)
+              result.sentRatings.push(file.path)
             }
           } catch (err) {
             result.failed.push({ title: item.title, error: errorText(err) })
@@ -623,7 +655,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0, unmatched: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [] }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
@@ -648,6 +680,30 @@ export class PlexSync {
 
   private isIgnored(item: PlexItem): boolean {
     return item.ratingKey in this.settings.ignored
+  }
+
+  /** Whether a Plex rating was seen (or sent) that differs from the last one recorded. */
+  private ratingsChanged = false
+
+  private seeRating(ratingKey: string, stars: number): void {
+    if (this.settings.ratingsSeen[ratingKey] === stars) return
+    this.settings.ratingsSeen[ratingKey] = stars
+    this.ratingsChanged = true
+  }
+
+  /**
+   * An item's rating properties, the note's rating (stars, from the first that has one), Plex's and
+   * which way a difference goes (`ratingDirection`). Null for items not from Plex, or libraries
+   * without a rating property.
+   */
+  private ratingPlan(file: TFile, item: PlexItem, lib: LibrarySetting): { names: string[], note: number | null, plex: number, direction: 'toNote' | 'toPlex' | null } | null {
+    if (!fromPlex(item)) return null
+    const names = lib.properties.filter(m => RATING_SOURCES.includes(m.source) && m.name.trim()).map(m => m.name.trim())
+    if (!names.length) return null
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const note = names.map(name => noteStars(from[name])).find(value => value !== null) ?? null
+    const plex = userStars(item) ?? 0
+    return { names, note, plex, direction: ratingDirection(note, plex, this.settings.ratingsSeen[item.ratingKey]) }
   }
 
   private isMerged(item: PlexItem): boolean {
@@ -713,15 +769,17 @@ export class PlexSync {
     }
   }
 
-  /** Saves newly ignored and merged items, and links kept, before handing back the result. */
+  /** Saves newly ignored and merged items, links and values kept, and ratings seen, before handing back the result. */
   private async finish(result: SyncResult): Promise<SyncResult> {
-    if (result.newlyIgnored.length || result.merged.length || result.keptLinks) await this.saveSettings()
+    if (result.newlyIgnored.length || result.merged.length || result.keptLinks || this.ratingsChanged) await this.saveSettings()
+    this.ratingsChanged = false
     return result
   }
 
   /**
    * Movies and shows are fetched again for their full metadata (the listing can leave out genres).
-   * Tracks keep their listing, which is complete, plus their album, fetched once per album.
+   * Tracks keep their listing plus their album, fetched once per album, and the track itself only
+   * when its moods are wanted (the listing leaves them out).
    */
   private async fullItem(listed: PlexItem, lib?: LibrarySetting): Promise<PlexItem> {
     if (listed.type === 'game') return this.gameDetails(listed, lib)
@@ -735,7 +793,11 @@ export class PlexSync {
       album = plex.item(albumKey).catch(() => null)
       this.albums.set(albumKey, album)
     }
-    return { ...listed, album: (await album) ?? undefined }
+    // A library listing leaves out a track's own moods, so the track is fetched when they're wanted;
+    // one without moods of its own still gets its album's.
+    const wantsMoods = lib && usesSource(lib.properties, 'moods')
+    const own = wantsMoods ? await plex.item(listed.ratingKey).catch(() => null) : null
+    return { ...listed, ...own?.Mood?.length ? { Mood: own.Mood } : {}, album: (await album) ?? undefined }
   }
 
   /**

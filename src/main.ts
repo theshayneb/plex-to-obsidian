@@ -178,6 +178,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`filled in ${result.filled.length}`)
         console.log('Media import and sync: filled in', result.filled)
       }
+      if (result.sentRatings.length) {
+        parts.push(`sent ${result.sentRatings.length} rating${result.sentRatings.length === 1 ? '' : 's'} to Plex`)
+        console.log('Media import and sync: ratings sent to Plex', result.sentRatings)
+      }
       if (result.corrected.length) {
         parts.push(`corrected ${result.corrected.length} duration${result.corrected.length === 1 ? '' : 's'}`)
         console.log('Media import and sync: corrected durations', result.corrected)

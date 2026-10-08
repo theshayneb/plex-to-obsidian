@@ -244,7 +244,7 @@ function durationText(ms: number | undefined): string | undefined {
 }
 
 /** Plex stores your rating as 0–10 (2 per star); half stars round up to the next whole star. */
-function userStars(item: PlexItem): number | undefined {
+export function userStars(item: PlexItem): number | undefined {
   return item.userRating ? Math.min(5, Math.ceil(item.userRating / 2)) : undefined
 }
 
@@ -257,6 +257,34 @@ function starEmoji(stars: number | undefined): string | undefined {
 /** Minutes as hours, to one decimal place. */
 function hours(minutes: number | undefined): number {
   return Math.round((minutes ?? 0) / 6) / 10
+}
+
+/**
+ * A rating as written in a note, in stars (1–5): a number, or stars as emoji ("⭐⭐⭐", "🩷" for
+ * five). Null when there's none.
+ */
+export function noteStars(value: unknown): number | null {
+  if (typeof value === 'number') return value > 0 ? Math.min(5, Math.round(value)) : null
+  if (typeof value !== 'string' || !value.trim()) return null
+  if (value.includes('🩷')) return 5
+  const stars = [...value].filter(c => c === '⭐').length
+  if (stars) return Math.min(5, stars)
+  const n = Number(value.trim())
+  return Number.isFinite(n) && n > 0 ? Math.min(5, Math.round(n)) : null
+}
+
+/**
+ * Which way a rating should go, given the note's stars, Plex's (0: none) and the rating both last
+ * agreed on (undefined: never): 'toNote' when Plex's changed since (or, never having agreed, when
+ * Plex has one), 'toPlex' when only the note's did (or, never having agreed, when only the note
+ * has one), else null. A rating removed in Plex leaves the note's alone.
+ */
+export function ratingDirection(note: number | null, plex: number, lastSeen: number | undefined): 'toNote' | 'toPlex' | null {
+  if ((note ?? 0) === plex) return null
+  if (lastSeen === undefined) return plex > 0 ? 'toNote' : note ? 'toPlex' : null
+  // Plex's changed: it wins (a rating removed in Plex leaves the note's alone).
+  if (plex !== lastSeen) return plex > 0 ? 'toNote' : null
+  return note ? 'toPlex' : null
 }
 
 /** Sources kept up to date by "Keep status up to date", only ever moving forward. */

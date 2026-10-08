@@ -479,10 +479,10 @@ export function linkPropertyNames(mappings: PropertyMapping[]): string[] {
 }
 
 /**
- * Sources "Check existing notes against sources" never compares: your own (status, fixed text,
- * type tag) and those syncs keep up to date (plays, playtime, ratings, last played).
+ * Sources "Check existing notes against sources" never compares. Nothing, now: statuses, ratings
+ * and tags are compared too, with their own rules (in `checkValue` and `PlexSync.compareNote`).
  */
-export const UNCHECKED_SOURCES: FieldSource[] = ['text', 'typeTag', 'status', 'viewCount', 'playtime', 'recentPlaytime', 'userRating', 'userRatingEmoji', 'lastViewedAt', 'steamCollections']
+export const UNCHECKED_SOURCES: FieldSource[] = []
 
 /** A property's value as a list: a list, or text separated by commas. */
 export function listOf(value: unknown): string[] {
@@ -538,6 +538,12 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
     const wanted = kind === 'book' && allowedGenres.length ? fictionOnlyAlone(left) : left
     if (!wanted.length || sameList(own, wanted)) return null
     return { to: wanted, ticked: true }
+  }
+  if (source === 'typeTag') {
+    // The source's tag is added to yours; your own tags stay.
+    const own = listOf(current)
+    const missing = listOf(value).filter(tag => !own.some(t => t.toLowerCase() === tag.toLowerCase()))
+    return missing.length ? { to: [...own, ...missing], ticked: true } : null
   }
   if (blank(current)) return { to: value, ticked: true }
   if (sameValue(current, value)) return null

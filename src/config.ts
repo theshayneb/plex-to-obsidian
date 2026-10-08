@@ -368,6 +368,10 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       if (lib.target === 'music' && !lib.leaveOutGenres?.some(g => g.toLowerCase() === 'romance')) lib.leaveOutGenres = [...lib.leaveOutGenres ?? [], 'Romance']
     }
   })
+  migrateOnce(settings, saved, 'check-everything', () => {
+    // The check now compares every property: start from all of them ticked again.
+    settings.checkProperties = null
+  })
   migrateOnce(settings, saved, 'book-pages-duration', () => {
     // A book's page count goes in Duration, like other media's length.
     for (const lib of Object.values(settings.libraries)) {

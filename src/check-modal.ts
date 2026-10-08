@@ -2,8 +2,6 @@ import { App, Modal, Setting, TFile } from 'obsidian'
 import type { PlexNotesSettings } from './config'
 import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties'
 
-/** Sources left unticked to start with: covers, which you may have picked yourself. */
-const OFF_TO_START: FieldSource[] = ['poster', 'wideImage']
 
 /** The properties a check can compare, by name: which source fills them and which libraries have them. */
 export function checkableProperties(settings: PlexNotesSettings): { name: string, source: FieldSource, libraries: string[] }[] {
@@ -36,11 +34,11 @@ export class CheckModal extends Modal {
     const { contentEl } = this
     contentEl.createEl('p', {
       cls: 'setting-item-description',
-      text: 'Each note matched to a Plex item or Steam game, and each book note (via Open Library), is compared with its source for the properties ticked here. Where they differ you\'re asked, as in a sync: empty values, durations in hours and genres are offered ticked; any other difference unticked, so it\'s only changed if you tick it. Status, play counts, playtime and ratings aren\'t compared (syncs keep those up to date). It\'s slow: each item\'s details are fetched. Notes nothing matched are listed at the end.',
+      text: 'Each note matched to a Plex item or Steam game, and each book note (via Open Library), is compared with its source for the properties ticked here, and you choose what to keep in the usual pop-up. A property missing or empty in a note is filled in from the source (ticked). A status only starts ticked when it moves forward; a rating that differs from Plex\'s can go either way (use Plex\'s, or send yours to Plex), both unticked; the source\'s tag is added to your tags; an image you set yourself starts unticked. It\'s slow: each item\'s details are fetched. Notes nothing matched are listed at the end.',
     })
     const properties = checkableProperties(this.pmnSettings)
     const saved = this.pmnSettings.checkProperties
-    const chosen = new Set(saved ?? properties.filter(p => !OFF_TO_START.includes(p.source)).map(p => p.name))
+    const chosen = new Set(saved ?? properties.map(p => p.name))
     for (const { name, source, libraries } of properties) {
       new Setting(contentEl)
         .setName(name)

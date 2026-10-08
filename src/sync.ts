@@ -366,13 +366,16 @@ export class PlexSync {
           const beingFilled = new Set([...fill?.additions.map(([name]) => name) ?? [], ...fill?.imageProperty ? [fill.imageProperty] : []])
           // Ratings: which side changed since the last sync decides which way a difference goes, so a
           // rating changed in the note isn't overwritten with Plex's old one.
-          const rating = genreCheck ? null : this.ratingPlan(file, item, lib)
+          const rating = this.ratingPlan(file, item, lib)
           const notOverwritten = new Set(beingFilled)
           if (rating && rating.direction !== 'toNote') rating.names.forEach(name => notOverwritten.add(name))
           const plays = counting ? this.planUpdates(file, item, lib, updating, notOverwritten) : null
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
           const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
-          const toPlex = asking && this.settings.sendRatings && this.plex && rating?.direction === 'toPlex' && rating.note
+          // A check offers sending your rating to Plex whenever the two differ (you pick which wins);
+          // a sync only when the note's is the one that changed.
+          const offerToPlex = genreCheck ? Boolean(rating?.note && rating.note !== rating.plex) : asking && this.settings.sendRatings && rating?.direction === 'toPlex'
+          const toPlex = offerToPlex && this.plex && rating?.note
             && this.settings.keptValues[`${item.ratingKey}|plexRating`] !== String(rating.note) ? rating.note : null
           // Remembered only when the note and Plex agree (or one was just made to match the other).
           if (rating && (rating.note ?? 0) === rating.plex) this.seeRating(item.ratingKey, rating.plex)
@@ -409,11 +412,11 @@ export class PlexSync {
           for (const name of checks?.names ?? []) {
             // The same length in hours or as text starts ticked; any other difference starts unticked.
             const to = checks!.to[name]
-            const shown = typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
+            const shown = to === POSTER_PREVIEW ? { value: POSTER_PREVIEW } : typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
             lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
           }
           if (toPlex) {
-            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? stars(rating!.plex) : null, value: stars(toPlex), unticked: !this.settings.tickDifferences })
+            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? stars(rating!.plex) : null, value: stars(toPlex), unticked: genreCheck || !this.settings.tickDifferences })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -478,9 +481,19 @@ export class PlexSync {
             }
             if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
             if (fixNames.length) {
+              // A Plex poster offered for an empty image property is downloaded now that it's approved.
+              const posters = new Map<string, string | null>()
+              for (const name of fixNames.filter(n => checks!.to[n] === POSTER_PREVIEW)) {
+                posters.set(name, await this.imageFor(item, normalizePath(lib.folder), renderFileName(this.naming(lib), item)))
+              }
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
                 for (const name of fixNames) {
                   const edited = edits[`fix:${name}`]
+                  if (posters.has(name)) {
+                    const image = posters.get(name)
+                    if (image) fm[name] = image
+                    continue
+                  }
                   fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, editKind(checks!.to[name]))
                 }
               })
@@ -1014,10 +1027,30 @@ export class PlexSync {
         const pointsAt = ratingKeyFromLink(current)
         if (pointsAt && keys.includes(pointsAt)) continue
       }
+      if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
+      if (m.source === 'poster' && fromPlex(item)) {
+        // A Plex poster is downloaded, so it's only offered where the note has none.
+        if (isBlank(current) && hasImage(item)) {
+          to[name] = POSTER_PREVIEW
+          ticked.add(name)
+        }
+        continue
+      }
+      if (STATUS_SOURCES.includes(m.source)) {
+        // Open Library knows nothing of your reading; elsewhere, only a step forward starts ticked.
+        if (item.type === 'book') continue
+        const value = sourceValue(m.source, item, ctx)
+        if (isBlank(value) || sameValue(current, value)) continue
+        to[name] = value
+        if (statusMovesForward(current, value, lib.values)) ticked.add(name)
+        else yours.add(name)
+        continue
+      }
       const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx), this.settings.allowedGenres, kind, lib.leaveOutGenres)
       if (!offer) continue
-      if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
       to[name] = offer.to
+      // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).
+      if (RATING_SOURCES.includes(m.source) && !isBlank(current)) yours.add(name)
       if (offer.ticked || (m.source === 'plexLink' && isSearchLink(current))) ticked.add(name)
       // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
       if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)

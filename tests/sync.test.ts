@@ -812,9 +812,10 @@ describe('PlexSync', () => {
 
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date', 'Duration', 'Status'])
 
-    expect(requests.map(r => r.lines.map(l => [l.label, l.unticked]))).toEqual([[['Summary', true], ['Date', false]]])
+    // Status is compared too, but a status of your own ("revisit") is only replaced if you tick it.
+    expect(requests.map(r => r.lines.map(l => [l.label, l.unticked]))).toEqual([[['Summary', true], ['Date', false], ['Status', true]]])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Summary: 'My own summary.', Date: '2016-11-11', Duration: 116, Status: 'revisit' })
-    expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.' })
+    expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.', '1|Status': 'revisit' })
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
   })
 
@@ -929,6 +930,36 @@ describe('PlexSync', () => {
       ['Media/Books/Dune.md', [true]],
       ['Media/Books/Emma.md', [false]],
     ])
+  })
+
+  it('checks ratings both ways, adds missing tags and fills an empty poster in a check', async () => {
+    const { app, frontmatter, binaries } = makeApp({
+      'Media/Movies/Heat (1995).md': { Rating: 2, tags: ['favourites'], Image: '' },
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRating' }, { name: 'tags', source: 'typeTag' }, { name: 'Image', source: 'poster' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], userRating: 8, thumb: '/library/metadata/2/thumb/1' }] } })
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{ ...movies[1], userRating: 8, thumb: '/library/metadata/2/thumb/1' }] } })
+    responses.set('/:/rate', {})
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      // Tick sending the note's rating to Plex; keep the rest as offered.
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked && l.key !== 'plexRating').map(l => l.key) })
+    })
+
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Rating', 'tags', 'Image'])
+
+    expect(requests[0].lines.map(l => [l.key, l.value, l.unticked])).toEqual([
+      ['fix:Rating', '4', true],
+      ['fix:tags', 'favourites, movie', false],
+      ['fix:Image', 'poster downloaded from Plex', false],
+      ['plexRating', '2 stars', true],
+    ])
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Rating: 2, tags: ['favourites', 'movie'], Image: '[[Media/Movies/Images/Heat (1995).jpg]]' })
+    expect(binaries).toContain('Media/Movies/Images/Heat (1995).jpg')
+    expect(requested.some(u => u.includes('/:/rate?key=2') && u.endsWith('rating=4'))).toBe(true)
   })
 
   describe('a note whose name matches two items', () => {

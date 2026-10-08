@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.51] - 2026-10-08
+
+### Changed
+- **Check existing notes against sources** now compares every property set up in a library, and fills in any that a note is missing or has empty (offered ticked), including covers: a Plex poster is downloaded into Images when approved, and WideImage and game covers are linked. All properties start ticked in its list (your earlier choice is reset once).
+  - Status: compared too; a change only starts ticked when it moves forward (pending → started → completed). Not compared for books.
+  - Ratings: where your note's rating differs from Plex's, both ways are offered, unticked: use Plex's in the note, or send yours to Plex ("Your rating in Plex"). Tick the one you want.
+  - tags: the source's tag is added to the note's tags; your own tags stay.
+  - Play counts, playtime, last played, Steam collections and fixed text are compared like any other value.
+
 ## [0.0.50] - 2026-10-08
 
 ### Added

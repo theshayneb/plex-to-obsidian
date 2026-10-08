@@ -109,7 +109,7 @@ export class ApprovalModal extends Modal {
     const head = table.createEl('thead').createEl('tr')
     head.createEl('th')
     head.createEl('th', { text: 'Property' })
-    if (!create) head.createEl('th', { text: 'Now' })
+    if (!create) head.createEl('th', { text: 'Existing' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
     for (const { key, label, current, value, edit, items, required, choices, unticked } of lines) {
@@ -122,7 +122,7 @@ export class ApprovalModal extends Modal {
         row.addClass('pmn-approval-off')
       }
       row.createEl('td', { cls: 'pmn-approval-name', text: label })
-      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Now')
+      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing')
       const newLabel = create ? 'Value' : 'New'
       const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
       let input: HTMLTextAreaElement | HTMLInputElement | null = null

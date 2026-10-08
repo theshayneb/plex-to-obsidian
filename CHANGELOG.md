@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.52] - 2026-10-08
+
+### Changed
+- The "Change this note?" pop-up's columns are now **Existing** and **New** (was Now and New).
+
 ## [0.0.51] - 2026-10-08
 
 ### Changed

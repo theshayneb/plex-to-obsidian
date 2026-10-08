@@ -12,7 +12,7 @@ export type FieldSource =
   | 'imdbId' | 'tmdbId' | 'tvdbId'
   | 'artist' | 'albumArtist' | 'album' | 'trackNumber' | 'discNumber' | 'durationClock' | 'styles' | 'moods'
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
-  | 'hltbMain' | 'hltbLink'
+  | 'hltbMain' | 'hltbLink' | 'steamCollections'
   | 'authors' | 'pages' | 'isbn'
   | 'text'
 
@@ -78,6 +78,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   metacritic: 'Games: Metacritic score',
   wideImage: 'Games: wide image (landscape header)',
   hltbMain: 'Games: HowLongToBeat main story (minutes)',
+  steamCollections: 'Games: your Steam collections (desktop only)',
   hltbLink: 'Games: HowLongToBeat page',
   authors: 'Books: authors',
   pages: 'Books: number of pages',
@@ -296,6 +297,12 @@ export function ratingDirection(note: number | null, plex: number, lastSeen: num
   return note ? 'toPlex' : null
 }
 
+/**
+ * Sources every sync keeps up to date whenever they can be read, mirroring their source: your Steam
+ * collections (on the desktop).
+ */
+export const MIRRORED_SOURCES: FieldSource[] = ['steamCollections']
+
 /** Sources kept up to date by "Keep status up to date", only ever moving forward. */
 export const STATUS_SOURCES: FieldSource[] = ['status']
 
@@ -422,6 +429,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'platforms': return item.platforms ?? []
     case 'metacritic': return item.metacritic
     case 'wideImage': return item.wideImage
+    case 'steamCollections': return item.steamCollections
     case 'hltbMain': return item.hltb?.main
     case 'hltbLink': return item.hltb?.url
     case 'authors': return item.authors ?? []
@@ -433,7 +441,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
 
 const LIST_SOURCES = new Set<FieldSource>([
   'genres', 'typeTag', 'directors', 'writers', 'castTop5', 'castAll', 'countries', 'collections', 'labels',
-  'styles', 'moods', 'developers', 'publishers', 'platforms', 'authors',
+  'styles', 'moods', 'developers', 'publishers', 'platforms', 'authors', 'steamCollections',
 ])
 
 /**
@@ -467,7 +475,7 @@ export function linkPropertyNames(mappings: PropertyMapping[]): string[] {
  * Sources "Check existing notes against sources" never compares: your own (status, fixed text,
  * type tag) and those syncs keep up to date (plays, playtime, ratings, last played).
  */
-export const UNCHECKED_SOURCES: FieldSource[] = ['text', 'typeTag', 'status', 'viewCount', 'playtime', 'recentPlaytime', 'userRating', 'userRatingEmoji', 'lastViewedAt']
+export const UNCHECKED_SOURCES: FieldSource[] = ['text', 'typeTag', 'status', 'viewCount', 'playtime', 'recentPlaytime', 'userRating', 'userRatingEmoji', 'lastViewedAt', 'steamCollections']
 
 /** A property's value as a list: a list, or text separated by commas. */
 export function listOf(value: unknown): string[] {

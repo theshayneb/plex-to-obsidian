@@ -36,8 +36,9 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, noteStars, ratingDirection, RATING_SOURCES, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, RATING_SOURCES, sameValue, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
+import { readSteamCollections } from './steam-local'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -260,7 +261,15 @@ export class PlexSync {
     for (const [key, lib] of active) {
       progress(`Reading ${lib.title}…`)
       if (key === STEAM_LIBRARY) {
-        for (const item of await this.steam!.ownedGames()) entries.push({ item, lib })
+        const games = await this.steam!.ownedGames()
+        // Your collections are only on this computer's Steam files (desktop only), so a game gets
+        // them only when they could be read; otherwise its collections property is left alone.
+        const collections = usesSource(lib.properties, 'steamCollections')
+          ? readSteamCollections(await this.steam!.steamId(), this.settings.steam.folder ?? '')
+          : null
+        for (const item of games) {
+          entries.push({ item: collections ? { ...item, steamCollections: collections.get(item.steamAppId ?? 0) ?? [] } : item, lib })
+        }
         continue
       }
       const music = lib.target === 'music'
@@ -307,6 +316,7 @@ export class PlexSync {
       ...this.settings.updatePlayCounts ? PLAY_SOURCES : [],
       ...this.settings.updateRatings ? RATING_SOURCES : [],
       ...this.settings.updateStatus ? STATUS_SOURCES : [],
+      ...MIRRORED_SOURCES,
     ]
     const counting = updating.length > 0
     const sendingRatings = full && this.settings.sendRatings
@@ -920,7 +930,7 @@ export class PlexSync {
     for (const m of mappings) {
       const name = m.name.trim()
       const value = sourceValue(m.source, item, ctx)
-      if (value === undefined || from[name] === value) continue
+      if (value === undefined || from[name] === value || (Array.isArray(value) && sameValue(from[name], value))) continue
       // A status only ever moves forward, and one of your own is left alone.
       if (STATUS_SOURCES.includes(m.source) && !statusMovesForward(from[name], value, lib.values)) continue
       to[name] = value

@@ -48,10 +48,14 @@ vi.mock('obsidian', () => {
   }
 })
 
+// Steam's local files (desktop only) are read through this; each test says what it finds.
+vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
+
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
+const { readSteamCollections } = await import('../src/steam-local')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
 const { HltbClient } = await import('../src/hltb')
@@ -864,6 +868,29 @@ describe('PlexSync', () => {
     const again = loadSettings({ ...saved, migrations: once.migrations })
     expect(again.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Duration'])
     expect(again.libraries.books.properties.map(p => p.name)).toEqual(['Author', 'Pages'])
+  })
+
+  it('keeps a game\'s Steam collections in step, and leaves them alone when they can\'t be read', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 0 }] } },
+    }
+    const { app, frontmatter } = makeApp({ 'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/', Collections: ['Old one'] } })
+    const settings = settingsWith({ serverUrl: '', token: '', askBeforeChanges: false, steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    settings.libraries.steam.properties = [{ name: 'Link', source: 'plexLink' }, { name: 'Collections', source: 'steamCollections' }]
+
+    // On a phone (or with Steam's files not found): left alone.
+    vi.mocked(readSteamCollections).mockReturnValueOnce(null)
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Collections).toEqual(['Old one'])
+
+    vi.mocked(readSteamCollections).mockReturnValueOnce(new Map([[620, ['Cozy', 'Favorites']]]))
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Collections).toEqual(['Cozy', 'Favorites'])
+    expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])
+    expect(vi.mocked(readSteamCollections)).toHaveBeenLastCalledWith('76561197960287930', '')
   })
 
   describe('a note whose name matches two items', () => {

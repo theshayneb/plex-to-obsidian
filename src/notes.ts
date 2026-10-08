@@ -72,6 +72,8 @@ export interface PlexItem {
   portrait?: string
   /** The store's player tags ("Mystery", "Comedy"…), most voted first; used as genres only when they're in "Genres to keep". */
   steamTags?: string[]
+  /** Your Steam collections it's in (desktop only: undefined when they couldn't be read). */
+  steamCollections?: string[]
   /** Landscape header art URL. */
   wideImage?: string
   /** HowLongToBeat's times for the game, when looked up. */

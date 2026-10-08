@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.47] - 2026-10-08
+
+### Added
+- **Games: your Steam collections (desktop only)**, a new property source: the names of your own Steam collections a game is in (Favorites included; Hidden and dynamic, filter-built collections aren't). Add a property with this source to the Steam library (say "Collections"). Steam only keeps your collections in its own files on your computer, so they're read in the desktop app only, from Steam's folder (the usual place, or the new **Steam folder** setting under Setup → Steam). Every sync on the desktop keeps the property in step with your collections; on your phone it's left alone. **Check Steam** now also says how many collections it found. Collections are only read, never changed in Steam.
+
 ## [0.0.46] - 2026-10-08
 
 ### Added

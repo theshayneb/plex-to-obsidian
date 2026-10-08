@@ -126,3 +126,50 @@ export function portraitCandidates(appId: number, assetUrlFormat?: string, libra
   )
   return [...new Set(urls)]
 }
+
+/** The 32-bit account ID Steam's folders are named after, from a 64-bit Steam ID. */
+export function accountId(steamId: string): string {
+  return (BigInt(steamId) - BigInt('76561197960265728')).toString()
+}
+
+/** Where Steam is usually installed, by platform (`process.platform`), with `home` the user's home folder. */
+export function steamFolders(platform: string, home: string): string[] {
+  if (platform === 'win32') return ['C:\\Program Files (x86)\\Steam', 'C:\\Program Files\\Steam']
+  if (platform === 'darwin') return [`${home}/Library/Application Support/Steam`]
+  return [`${home}/.steam/steam`, `${home}/.local/share/Steam`, `${home}/.var/app/com.valvesoftware.Steam/.local/share/Steam`]
+}
+
+/** One entry of Steam's local cloud storage file: [key, { value (JSON text), is_deleted }]. */
+type CloudEntry = [string, { value?: string, is_deleted?: boolean }]
+
+/**
+ * Your Steam collections, by game: from the Steam client's local copy of its cloud storage
+ * (`userdata/<account>/config/cloudstorage/cloud-storage-namespace-1.json`). Collections you
+ * made by adding games are listed, and Favorites; Hidden and dynamic collections (built from
+ * filters, with no list of games) aren't.
+ */
+export function collectionsByGame(file: unknown): Map<number, string[]> {
+  const byGame = new Map<number, string[]>()
+  if (!Array.isArray(file)) return byGame
+  for (const entry of file as CloudEntry[]) {
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !entry[0].startsWith('user-collections.')) continue
+    const data = entry[1]
+    if (!data || data.is_deleted || !data.value) continue
+    let collection: { id?: string, name?: string, added?: number[], filterSpec?: unknown }
+    try {
+      collection = JSON.parse(data.value) as typeof collection
+    } catch {
+      continue
+    }
+    if (collection.id === 'hidden' || collection.filterSpec || !Array.isArray(collection.added)) continue
+    const name = collection.id === 'favorite' ? 'Favorites' : collection.name?.trim()
+    if (!name) continue
+    for (const appId of collection.added) {
+      const names = byGame.get(appId) ?? []
+      if (!names.includes(name)) names.push(name)
+      byGame.set(appId, names)
+    }
+  }
+  for (const names of byGame.values()) names.sort((a, b) => a.localeCompare(b))
+  return byGame
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gameItem, parseSteamAccount, parseSteamDate, plainText, portraitCandidates, withDetails } from '../src/steam-data'
+import { accountId, collectionsByGame, gameItem, parseSteamAccount, parseSteamDate, plainText, portraitCandidates, steamFolders, withDetails } from '../src/steam-data'
 
 describe('parseSteamAccount', () => {
   it('reads IDs, profile addresses and custom names', () => {
@@ -69,5 +69,30 @@ describe('games', () => {
     expect(portraitCandidates(620, 'steam/apps/620/${FILENAME}?t=1', 'abc/library_600x900.jpg')[0])
       .toBe('https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/abc/library_600x900.jpg?t=1')
     expect(portraitCandidates(620)).toHaveLength(2)
+  })
+})
+
+describe('Steam collections', () => {
+  const entry = (key: string, value: object, deleted = false) => [key, { key, timestamp: 1, value: JSON.stringify(value), version: '1', ...deleted ? { is_deleted: true } : {} }]
+  it('lists each game\'s collections from Steam\'s local cloud storage file', () => {
+    const file = [
+      entry('user-collections.uc-a', { id: 'uc-a', name: 'Cozy', added: [620, 1145360], removed: [] }),
+      entry('user-collections.uc-b', { id: 'uc-b', name: 'Couch co-op', added: [620], removed: [] }),
+      entry('user-collections.favorite', { id: 'favorite', added: [1145360], removed: [] }),
+      entry('user-collections.hidden', { id: 'hidden', added: [440], removed: [] }),
+      entry('user-collections.uc-c', { id: 'uc-c', name: 'Unplayed', filterSpec: { nFormatVersion: 2 } }),
+      entry('user-collections.uc-d', { id: 'uc-d', name: 'Gone', added: [620] }, true),
+      ['showcases.1', { value: '{}' }],
+    ]
+    const byGame = collectionsByGame(file)
+    expect(byGame.get(620)).toEqual(['Couch co-op', 'Cozy'])
+    expect(byGame.get(1145360)).toEqual(['Cozy', 'Favorites'])
+    expect(byGame.has(440)).toBe(false)
+    expect(collectionsByGame(null).size).toBe(0)
+  })
+  it('finds Steam\'s folders', () => {
+    expect(accountId('76561197960287930')).toBe('22202')
+    expect(steamFolders('win32', 'C:\\Users\\me')[0]).toBe('C:\\Program Files (x86)\\Steam')
+    expect(steamFolders('darwin', '/Users/me')).toEqual(['/Users/me/Library/Application Support/Steam'])
   })
 })

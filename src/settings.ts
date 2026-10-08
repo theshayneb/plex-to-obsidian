@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
+import { App, Notice, Platform, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import { cleanOmdbKey } from './discover-data'
 import { testOmdbKey } from './discover'
@@ -16,6 +16,7 @@ import {
 import { OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
 import { PlexClient } from './plex'
 import { SteamClient } from './steam'
+import { readSteamCollections } from './steam-local'
 import { PropertyNameSuggest } from './property-suggest'
 import { defaultProperties, defaultValues, FIELD_SOURCES, type FieldSource } from './properties'
 
@@ -537,6 +538,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         })
       })
     new Setting(containerEl)
+      .setName('Steam folder')
+      .setDesc('Desktop only, for the "Games: your Steam collections" source: where Steam is installed on this computer, if it isn\'t in the usual place (Program Files on Windows, Application Support on a Mac). Your collections are read from Steam\'s own files there.')
+      .addText(text => text
+        .setPlaceholder('Usual place')
+        .setValue(steam.folder ?? '')
+        .onChange(async value => {
+          steam.folder = value.trim()
+          await this.save()
+        }))
+    new Setting(containerEl)
       .setName('Check Steam')
       .setDesc('Reads your games list once, to check the key and account, and adds the Steam library to the libraries below.')
       .addButton(button => button
@@ -544,10 +555,13 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .onClick(async () => {
           button.setDisabled(true)
           try {
-            const games = await new SteamClient(steam.apiKey, steam.account, steam.includeFreeGames).ownedGames()
+            const client = new SteamClient(steam.apiKey, steam.account, steam.includeFreeGames)
+            const games = await client.ownedGames()
             ensureSteamLibrary(this.plugin.settings)
             await this.save()
-            new Notice(`Steam: found ${games.length} games`)
+            const collections = Platform.isDesktopApp ? readSteamCollections(await client.steamId(), steam.folder ?? '') : null
+            const names = collections ? new Set([...collections.values()].flat()).size : 0
+            new Notice(`Steam: found ${games.length} games${!Platform.isDesktopApp ? '' : collections ? `, and ${names} collection${names === 1 ? '' : 's'} on this computer` : '; your collections weren\'t found on this computer (check the Steam folder)'}`, 8000)
           } catch (err) {
             new Notice(`Steam: ${errorMessage(err)}`, 10000)
           } finally {

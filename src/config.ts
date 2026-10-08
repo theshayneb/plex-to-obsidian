@@ -58,6 +58,8 @@ export interface SteamSettings {
   includeFreeGames: boolean
   /** Optional SteamGridDB API key, for more covers to choose from in the approval pop-up. */
   gridKey: string
+  /** Where Steam is installed on this computer, for reading your collections; empty tries the usual places. */
+  folder?: string
 }
 
 /** The library key Steam games are listed under, next to the Plex libraries. */
@@ -150,7 +152,7 @@ export function defaultSettings(): PlexNotesSettings {
   return {
     serverUrl: '',
     token: '',
-    steam: { apiKey: '', account: '', includeFreeGames: true, gridKey: '' },
+    steam: { apiKey: '', account: '', includeFreeGames: true, gridKey: '', folder: '' },
     omdbKey: '',
     imagesSubfolder: 'Images',
     fileNameReplacements: {},

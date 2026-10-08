@@ -347,6 +347,28 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Genre).toEqual(['Sci-Fi'])
   })
 
+  it('moves statuses forward only when switched on, never back and never from your own', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Status: 'pending' },
+      'Media/Movies/Heat (1995).md': { Status: 'revisit' },
+      'Media/Movies/Free Solo (2018).md': { Status: 'completed' },
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Status', source: 'status' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
+      { ...movies[0], viewCount: 1 }, { ...movies[1], viewCount: 2 }, { ...movies[2], viewCount: 0, viewOffset: 60_000 },
+    ] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+
+    expect((await sync.run(() => {})).playCounts).toEqual([])
+    settings.updateStatus = true
+    expect((await sync.run(() => {})).playCounts).toEqual(['Media/Movies/Arrival (2016).md'])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Status).toBe('completed')
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Status).toBe('revisit')
+    expect(frontmatter.get('Media/Movies/Free Solo (2018).md')!.Status).toBe('completed')
+  })
+
   it('shows the play count now and after', async () => {
     const { app } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1 } })
     const settings = settingsWith({ updatePlayCounts: true })

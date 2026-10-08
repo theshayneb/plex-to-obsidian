@@ -70,8 +70,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   async updatePlayCountsIfDue(): Promise<void> {
-    const { updatePlayCounts, updateRatings, playCountHours, lastPlayCountUpdate } = this.settings
-    if (!(updatePlayCounts || updateRatings) || !playCountHours || this.plexSyncRunning) return
+    const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate } = this.settings
+    if (!(updatePlayCounts || updateRatings || updateStatus) || !playCountHours || this.plexSyncRunning) return
     const now = Date.now()
     if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
     this.plexSyncRunning = true
@@ -79,7 +79,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request)).run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
-      if (result.playCounts.length) console.log('Media import and sync: updated play counts or ratings', result.playCounts)
+      if (result.playCounts.length) console.log('Media import and sync: kept up to date (play counts, ratings, status)', result.playCounts)
       if (result.failed.length) console.error('Media import and sync: failed items', result.failed)
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
@@ -162,7 +162,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`renamed ${result.renamed.length}`)
         console.log('Media import and sync: renamed', result.renamed)
       }
-      if (result.playCounts.length) parts.push(`updated ${this.settings.updateRatings ? 'play counts or ratings in ' : 'play counts in '}${result.playCounts.length}`)
+      if (result.playCounts.length) parts.push(`kept ${result.playCounts.length} up to date`)
       if (result.filled.length) {
         parts.push(`filled in ${result.filled.length}`)
         console.log('Media import and sync: filled in', result.filled)

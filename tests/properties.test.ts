@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -197,5 +197,23 @@ describe('durations in notes', () => {
     expect(sameLengthOtherForm('2h 18m', 138)).toBe(true)
     expect(sameLengthOtherForm(150, 170)).toBe(false)
     expect(sameLengthOtherForm(3, 116)).toBe(false)
+  })
+})
+
+describe('statusMovesForward', () => {
+  const values = { watched: 'completed', started: 'started', unwatched: 'pending', tag: 'movie' }
+  it('moves forward only', () => {
+    expect(statusMovesForward('pending', 'started', values)).toBe(true)
+    expect(statusMovesForward('pending', 'completed', values)).toBe(true)
+    expect(statusMovesForward('started', 'completed', values)).toBe(true)
+    expect(statusMovesForward('completed', 'started', values)).toBe(false)
+    expect(statusMovesForward('started', 'pending', values)).toBe(false)
+    expect(statusMovesForward('Started', 'started', values)).toBe(false)
+  })
+  it('fills an empty status, and never touches your own', () => {
+    expect(statusMovesForward(undefined, 'pending', values)).toBe(true)
+    expect(statusMovesForward('', 'started', values)).toBe(true)
+    expect(statusMovesForward('revisit', 'completed', values)).toBe(false)
+    expect(statusMovesForward('abandoned', 'started', values)).toBe(false)
   })
 })

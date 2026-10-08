@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.40] - 2026-10-08
+
+### Added
+- **Keep status up to date** (Settings → All libraries, off to start): every sync also moves "Watched or played status" properties forward in existing notes, as Plex and Steam change: pending → started → completed for movies and shows, and pending → started once you've played a game (with the values set under each library's property values). A status never moves back, and one of your own, such as revisit or abandoned, is never changed. An empty status is filled in. With asking on, it's shown in the approval pop-up first, like everything else. The background schedule (**Update automatically**) does this too when it's on.
+
 ## [0.0.39] - 2026-10-08
 
 ### Added

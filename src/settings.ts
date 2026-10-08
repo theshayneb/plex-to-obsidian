@@ -409,7 +409,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Keep play counts up to date')
-      .setDesc('Every sync also updates properties set to "Play count" (and a game\'s playtime) in existing notes, in all libraries. Play counts and ratings are the only values in existing notes that are ever replaced.')
+      .setDesc('Every sync also updates properties set to "Play count" (and a game\'s playtime) in existing notes, in all libraries. Play counts, ratings and statuses (each when switched on) are the only values a sync ever replaces in existing notes.')
       .addToggle(toggle => toggle
         .setValue(settings.updatePlayCounts)
         .onChange(async value => {
@@ -429,10 +429,22 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           this.refresh()
         }))
 
-    if (settings.updatePlayCounts || settings.updateRatings) {
+    new Setting(containerEl)
+      .setName('Keep status up to date')
+      .setDesc('Every sync also moves properties set to "Watched or played status" forward in existing notes: from not watched to started to watched (for games, from not played to played), as set under each library\'s property values. A status never moves back, and one of your own (such as revisit or abandoned) is never changed.')
+      .addToggle(toggle => toggle
+        .setValue(settings.updateStatus)
+        .onChange(async value => {
+          settings.updateStatus = value
+          await this.save()
+          this.refresh()
+        }))
+
+    const kept = [settings.updatePlayCounts && 'play counts', settings.updateRatings && 'ratings', settings.updateStatus && 'statuses'].filter(Boolean)
+    if (kept.length) {
       new Setting(containerEl)
         .setName('Update automatically')
-        .setDesc(`Also update ${settings.updatePlayCounts && settings.updateRatings ? 'play counts and ratings' : settings.updatePlayCounts ? 'play counts' : 'ratings'} in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.`)
+        .setDesc(`Also update ${kept.join(' and ').replace(/ and (?=.* and )/, ', ')} in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.`)
         .addDropdown(dropdown => {
           for (const [value, label] of Object.entries(PLAY_COUNT_SCHEDULE)) dropdown.addOption(value, label)
           dropdown

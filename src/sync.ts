@@ -37,7 +37,7 @@ import {
 import { bookSubjects, findBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, keepGenres, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, keepGenres, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, STATUS_SOURCES, statusMovesForward, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -297,6 +297,7 @@ export class PlexSync {
     const updating: FieldSource[] = genreCheck ? [] : [
       ...this.settings.updatePlayCounts ? PLAY_SOURCES : [],
       ...this.settings.updateRatings ? RATING_SOURCES : [],
+      ...this.settings.updateStatus ? STATUS_SOURCES : [],
     ]
     const counting = updating.length > 0
     if (renaming || filling || counting || genreCheck) {
@@ -852,8 +853,12 @@ export class PlexSync {
     const to: Record<string, unknown> = {}
     const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
     for (const m of mappings) {
+      const name = m.name.trim()
       const value = sourceValue(m.source, item, ctx)
-      if (value !== undefined && from[m.name.trim()] !== value) to[m.name.trim()] = value
+      if (value === undefined || from[name] === value) continue
+      // A status only ever moves forward, and one of your own is left alone.
+      if (STATUS_SOURCES.includes(m.source) && !statusMovesForward(from[name], value, lib.values)) continue
+      to[name] = value
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to } : null

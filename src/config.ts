@@ -92,6 +92,8 @@ export interface PlexNotesSettings {
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
   updateRatings: boolean
+  /** Also move "Watched or played status" properties forward (never back, never from your own statuses) on every sync. */
+  updateStatus: boolean
   /** Also refresh play counts in the background every this many hours; 0 is off. */
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
@@ -147,6 +149,7 @@ export function defaultSettings(): PlexNotesSettings {
     allowedGenres: [...DEFAULT_GENRES],
     updatePlayCounts: false,
     updateRatings: false,
+    updateStatus: false,
     playCountHours: 0,
     lastPlayCountUpdate: 0,
     libraries: {},
@@ -256,7 +259,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
   for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey',
-    'updatePlayCounts', 'updateRatings', 'playCountHours', 'lastPlayCountUpdate'] as const) {
+    'updatePlayCounts', 'updateRatings', 'updateStatus', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }

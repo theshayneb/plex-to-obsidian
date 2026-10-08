@@ -259,6 +259,24 @@ function hours(minutes: number | undefined): number {
   return Math.round((minutes ?? 0) / 6) / 10
 }
 
+/** Sources kept up to date by "Keep status up to date", only ever moving forward. */
+export const STATUS_SOURCES: FieldSource[] = ['status']
+
+/**
+ * Whether a note's status may become `next`: only forward (not watched → started → watched, as
+ * set under the library's property values), from empty, and never from a status of your own
+ * ("revisit", "abandoned") that isn't one of those three.
+ */
+export function statusMovesForward(current: unknown, next: unknown, values: PropertyValues): boolean {
+  const order = [values.unwatched, values.started, values.watched].map(v => (v ?? '').trim().toLowerCase())
+  const rank = (v: unknown) => typeof v === 'string' && v.trim() ? order.indexOf(v.trim().toLowerCase()) : -1
+  const to = rank(next)
+  if (to < 0) return false
+  if (current === undefined || current === null || (typeof current === 'string' && !current.trim())) return true
+  const from = rank(current)
+  return from >= 0 && to > from
+}
+
 /** Sources checked against existing notes, offering a fix when the note's value differs (minutes). */
 export const CHECKED_SOURCES: FieldSource[] = ['durationMinutes']
 

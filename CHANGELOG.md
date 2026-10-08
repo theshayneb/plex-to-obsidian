@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.49] - 2026-10-08
+
+### Changed
+- "Check existing notes against sources": an image property (Image, WideImage) that already holds a link to an image in your vault (starting with `[[`) is an image you set yourself, so its replacement is offered unticked, whatever "Tick differences to start with" says. Tick it if you do want the source's.
+
 ## [0.0.48] - 2026-10-08
 
 ### Changed

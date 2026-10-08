@@ -107,6 +107,9 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
   }
 }
 
+/** Sources holding an image. */
+const IMAGE_SOURCES: FieldSource[] = ['poster', 'wideImage']
+
 /** A rating in words, for the approval pop-up. */
 function stars(n: number): string {
   return `${n} star${n === 1 ? '' : 's'}`
@@ -118,6 +121,8 @@ interface Checks {
   from: Record<string, unknown>
   to: Record<string, unknown>
   sameLength: Set<string>
+  /** Those always offered unticked: images you picked yourself (a link to a file in the vault). */
+  yours?: Set<string>
 }
 
 interface FillPlan {
@@ -405,7 +410,7 @@ export class PlexSync {
             // The same length in hours or as text starts ticked; any other difference starts unticked.
             const to = checks!.to[name]
             const shown = typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
-            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !this.settings.tickDifferences && !checks!.sameLength.has(name) })
+            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
           }
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? stars(rating!.plex) : null, value: stars(toPlex), unticked: !this.settings.tickDifferences })
@@ -1001,6 +1006,7 @@ export class PlexSync {
     const keys = itemKeys(item)
     const to: Record<string, unknown> = {}
     const ticked = new Set<string>()
+    const yours = new Set<string>()
     for (const m of mappings) {
       const name = m.name.trim()
       const current: unknown = from[name]
@@ -1013,9 +1019,11 @@ export class PlexSync {
       if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
       to[name] = offer.to
       if (offer.ticked || (m.source === 'plexLink' && isSearchLink(current))) ticked.add(name)
+      // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
+      if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)
     }
     const names = Object.keys(to)
-    return names.length ? { names, from, to, sameLength: ticked } : null
+    return names.length ? { names, from, to, sameLength: ticked, yours } : null
   }
 
   /**
@@ -1068,7 +1076,7 @@ export class PlexSync {
       for (const name of checks?.names ?? []) {
         const offer = checks!.to[name]
         const shown = typeof offer === 'number' ? { value: String(offer), edit: 'number' as const } : editable(offer)
-        lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !this.settings.tickDifferences && !checks!.sameLength.has(name) })
+        lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
       }
       // A book found by searching also offers its link, whether or not the Link property is checked.
       const newLink = searched && linkProp && book.webLink && !checks?.names.includes(linkProp) ? book.webLink : null

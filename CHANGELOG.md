@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.34] - 2026-10-08
+
+### Added
+- **Genres to keep** (Settings → All libraries): only these genres are written to notes, in every library, whether a note is new or being filled in. If an item has three genres and one is on the list, only that one is written. Other names count too: "Science fiction" becomes Sci-Fi, "Action & Adventure" becomes Action and Adventure, "Music" becomes Musical. Starts with your list: Action, Adventure, Biography, Collecting, Comedy, Crime, Documentary, Dystopian, Fantasy, Fiction, Fitness, History, Horror, Memoir, Musical, Mystery, Puzzle, Rhythm, Sci-Fi, Science, Self-Help, Simulation, Strategy, Thriller, Trivia, Western. Empty the box to keep every genre.
+
+### Fixed
+- With "Include free-to-play games" on, Steam is now also asked for free games you added to your library but haven't played, and for newer games Steam hasn't finished reviewing. Before, only free games you had played were listed.
+
 ## [0.0.33] - 2026-10-08
 
 ### Added

@@ -339,3 +339,8 @@
   justify-content: flex-end;
   gap: var(--size-4-2);
 }
+
+/* "Genres to keep" in the settings. */
+.pmn-genres {
+  min-width: 14em;
+}

@@ -42,7 +42,10 @@ export class SteamClient {
   /** Every game the account owns (and free games played, if wanted), with playtimes. */
   async ownedGames(): Promise<PlexItem[]> {
     const id = await this.steamId()
-    const query = `key=${encodeURIComponent(this.apiKey)}&steamid=${id}&include_appinfo=1&include_played_free_games=${this.includeFreeGames ? 1 : 0}&format=json`
+    // Free games: played ones, ones added to the library but never played (free licences), and
+    // newer ones Steam hasn't finished reviewing ("unvetted"), which are otherwise left out.
+    const free = this.includeFreeGames ? '&include_played_free_games=1&include_free_sub=1&skip_unvetted_apps=0' : '&include_played_free_games=0'
+    const query = `key=${encodeURIComponent(this.apiKey)}&steamid=${id}&include_appinfo=1${free}&format=json`
     const body = await this.getJson(`${API}/IPlayerService/GetOwnedGames/v1/?${query}`) as { response?: { games?: OwnedGame[] } }
     const games = body.response?.games
     if (!games) throw new Error('Steam listed no games. In your Steam profile\'s privacy settings, set "Game details" to Public')

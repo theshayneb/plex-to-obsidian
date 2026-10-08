@@ -173,6 +173,37 @@ export interface NoteContext {
   link: string
   image: string | null
   values: PropertyValues
+  /** The only genres to keep (the settings' "Genres to keep"); empty or missing keeps them all. */
+  genres?: string[]
+}
+
+/** Other names sources use for a kept genre, or genres that are two in one ("Action & Adventure"). */
+const GENRE_ALIASES: Record<string, string[]> = {
+  'science fiction': ['Sci-Fi'],
+  'science-fiction': ['Sci-Fi'],
+  'sci-fi & fantasy': ['Sci-Fi', 'Fantasy'],
+  'action & adventure': ['Action', 'Adventure'],
+  'action/adventure': ['Action', 'Adventure'],
+  'biographical': ['Biography'],
+  'music': ['Musical'],
+  'documentaries': ['Documentary'],
+}
+
+/**
+ * Keeps only the genres in `allowed` (case ignored), spelled as there, each once and in the
+ * source's order; other names for them (Plex's "Science Fiction" for "Sci-Fi") count too.
+ */
+export function keepGenres(genres: string[], allowed: string[] | undefined): string[] {
+  const wanted = (allowed ?? []).map(g => g.trim()).filter(Boolean)
+  if (!wanted.length) return genres
+  const byName = new Map(wanted.map(g => [g.toLowerCase(), g]))
+  const kept: string[] = []
+  for (const genre of genres) {
+    const name = genre.trim().toLowerCase()
+    const matches = byName.has(name) ? [byName.get(name)!] : (GENRE_ALIASES[name] ?? []).map(g => byName.get(g.toLowerCase())).filter((g): g is string => Boolean(g))
+    for (const match of matches) if (!kept.includes(match)) kept.push(match)
+  }
+  return kept
 }
 
 type Value = string | number | string[] | undefined
@@ -249,7 +280,7 @@ function externalId(item: PlexItem, scheme: string): string | undefined {
 export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContext, text?: string): Value {
   switch (source) {
     case 'genres': {
-      const genres = orAlbum(item, genresOf, noTags) ?? []
+      const genres = keepGenres(orAlbum(item, genresOf, noTags) ?? [], ctx.genres)
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres
     }

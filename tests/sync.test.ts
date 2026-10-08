@@ -148,6 +148,8 @@ beforeEach(() => {
 /** Music libraries start skipped, so the tests switch one on, as the owner would. */
 const settingsWith = (extra: object = {}): PlexNotesSettings => ({
   ...defaultSettings(),
+  // Keep every genre, unless a test is about "Genres to keep".
+  allowedGenres: [],
   serverUrl: 'plex:32400',
   token: 't',
   libraries: { 3: newLibrary("Shayne's Music", 'artist', 'music') },
@@ -336,6 +338,13 @@ describe('PlexSync', () => {
     await new PlexSync(app as never, settings, save, approve).run(() => {})
     expect(asked.filter(a => a.includes('Arrival') || a.includes('My favourite film'))).toEqual([])
     expect(files.has(mine)).toBe(true)
+  })
+
+  it('writes only the genres to keep', async () => {
+    const { app, frontmatter } = makeApp({})
+    const settings = settingsWith({ allowedGenres: ['Sci-Fi', 'Action'] })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Genre).toEqual(['Sci-Fi'])
   })
 
   it('shows the play count now and after', async () => {
@@ -542,7 +551,7 @@ describe('PlexSync', () => {
     })
     // The existing note was matched by title: it gets its Link filled in and nothing else.
     expect(frontmatter.get('Media/Video Games/Team Fortress 2.md')).toEqual({ Status: 'abandoned', Link: 'https://store.steampowered.com/app/440/' })
-    expect(requested.some(u => u.includes('include_played_free_games=1'))).toBe(true)
+    expect(requested.some(u => u.includes('include_played_free_games=1') && u.includes('include_free_sub=1') && u.includes('skip_unvetted_apps=0'))).toBe(true)
     expect(requested.some(u => u.startsWith('http://plex'))).toBe(false)
   })
 
@@ -685,7 +694,7 @@ describe('PlexSync', () => {
       const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).addNew(item, 'books')
       expect(result.created).toBe('Media/Books/Dune (1965).md')
       expect(frontmatter.get('Media/Books/Dune (1965).md')).toEqual({
-        Author: ['Frank Herbert'], Genre: ['Science fiction'], Year: 1965, Pages: 604, Summary: 'A desert planet.', Status: 'pending',
+        Author: ['Frank Herbert'], Genre: ['Sci-Fi'], Year: 1965, Pages: 604, Summary: 'A desert planet.', Status: 'pending',
         Link: 'https://openlibrary.org/works/OL893415W', Image: 'https://covers/x-L.jpg', tags: ['book'],
       })
     })

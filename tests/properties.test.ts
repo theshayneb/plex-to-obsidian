@@ -8,8 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext,
-} from '../src/properties'
+  type NoteContext, keepGenres } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -157,5 +156,21 @@ describe('linkPropertyNames', () => {
   it('includes renamed link properties and the original Link', () => {
     expect(linkPropertyNames([{ name: 'Plex', source: 'plexLink' }])).toEqual(['Plex', 'Link'])
     expect(linkPropertyNames(DEFAULT_PROPERTIES)).toEqual(['Link'])
+  })
+})
+
+describe('keepGenres', () => {
+  const mine = ['Action', 'Adventure', 'Sci-Fi', 'Fantasy', 'Documentary', 'Musical']
+  it('keeps only the listed genres, spelled as listed', () => {
+    expect(keepGenres(['Drama', 'sci-fi', 'Family'], mine)).toEqual(['Sci-Fi'])
+    expect(keepGenres(['Family'], mine)).toEqual([])
+  })
+  it('understands other names for them', () => {
+    expect(keepGenres(['Science Fiction', 'Action & Adventure'], mine)).toEqual(['Sci-Fi', 'Action', 'Adventure'])
+    expect(keepGenres(['Sci-Fi & Fantasy', 'Sci-Fi', 'Music'], mine)).toEqual(['Sci-Fi', 'Fantasy', 'Musical'])
+  })
+  it('keeps everything when the list is empty', () => {
+    expect(keepGenres(['Drama', 'Family'], [])).toEqual(['Drama', 'Family'])
+    expect(keepGenres(['Drama'], undefined)).toEqual(['Drama'])
   })
 })

@@ -82,6 +82,8 @@ export interface PlexNotesSettings {
   ignored: Record<string, IgnoredItem>
   /** Items tied to existing notes, by rating key: matched to that note, and never renamed. */
   merged: Record<string, MergedItem>
+  /** The only genres written to notes, in every library; empty keeps them all. */
+  allowedGenres: string[]
   /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
   keptLinks: Record<string, string>
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
@@ -124,6 +126,8 @@ export const DEFAULT_MATCH_BY: Record<MediaKind, MatchBy> = {
   book: 'loose',
 }
 
+/** The genres kept to start with: the owner's own list. */
+export const DEFAULT_GENRES = ['Action', 'Adventure', 'Biography', 'Collecting', 'Comedy', 'Crime', 'Documentary', 'Dystopian', 'Fantasy', 'Fiction', 'Fitness', 'History', 'Horror', 'Memoir', 'Musical', 'Mystery', 'Puzzle', 'Rhythm', 'Sci-Fi', 'Science', 'Self-Help', 'Simulation', 'Strategy', 'Thriller', 'Trivia', 'Western']
 export function defaultSettings(): PlexNotesSettings {
   return {
     serverUrl: '',
@@ -137,6 +141,7 @@ export function defaultSettings(): PlexNotesSettings {
     ignored: {},
     merged: {},
     keptLinks: {},
+    allowedGenres: [...DEFAULT_GENRES],
     updatePlayCounts: false,
     updateRatings: false,
     playCountHours: 0,
@@ -255,6 +260,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.ignored = { ...saved.ignored }
   settings.merged = { ...saved.merged }
   settings.keptLinks = { ...saved.keptLinks }
+  if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {

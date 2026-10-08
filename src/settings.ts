@@ -374,6 +374,20 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
+      .setName('Genres to keep')
+      .setDesc('Only these genres are written to notes, in every library; any others an item has are left out (a movie with Drama, Sci-Fi and Family gets just Sci-Fi). Other names for them count too, such as "Science fiction" for Sci-Fi. One per line, or separated by commas. Leave it empty to keep every genre.')
+      .addTextArea(text => {
+        text.inputEl.rows = 8
+        text.inputEl.addClass('pmn-genres')
+        text
+          .setValue(settings.allowedGenres.join('\n'))
+          .onChange(async value => {
+            settings.allowedGenres = [...new Set(value.split(/[\n,]/).map(g => g.trim()).filter(Boolean))]
+            await this.save()
+          })
+      })
+
+    new Setting(containerEl)
       .setName('Ask before every change')
       .setDesc('Before creating a note, or changing an existing one in any way (renaming it, filling in properties, updating play counts), show what will happen and ask. This includes background play count updates.')
       .addToggle(toggle => toggle
@@ -462,7 +476,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
     new Setting(containerEl)
       .setName('Include free-to-play games')
-      .setDesc('Also list free games you have played.')
+      .setDesc('Also list free games in your library, played or not.')
       .addToggle(toggle => toggle
         .setValue(steam.includeFreeGames)
         .onChange(async value => {

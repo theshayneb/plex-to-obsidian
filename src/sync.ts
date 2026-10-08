@@ -751,6 +751,7 @@ export class PlexSync {
       link: this.linkFor(item),
       image: game ? item.portrait ?? null : null,
       values: lib.values,
+      genres: this.settings.allowedGenres,
     })
     const additions = Object.entries(values).filter(([, value]) => !isBlank(value))
     const poster = game ? undefined : wanted.find(m => m.source === 'poster')
@@ -838,6 +839,7 @@ export class PlexSync {
       link: this.linkFor(item),
       image: !fromPlex(item) ? item.portrait ?? null : hasImage(item) ? POSTER_PREVIEW : null,
       values: lib.values,
+      genres: this.settings.allowedGenres,
     })
     const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
     for (const [name, value] of Object.entries(frontmatter)) {
@@ -888,6 +890,7 @@ export class PlexSync {
       link: this.linkFor(item),
       image,
       values,
+      genres: this.settings.allowedGenres,
     })
     for (const [name, value] of Object.entries(overrides)) {
       if (name in frontmatter) frontmatter[name] = value

@@ -700,7 +700,7 @@ describe('PlexSync', () => {
       return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
     })
 
-    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'genres')
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
 
     // Arrival: its own kept genres (Sci-Fi, Mystery) plus Plex's kept ones (Sci-Fi). Heat already matches.
     expect(requests.map(r => r.lines)).toEqual([[{
@@ -717,7 +717,8 @@ describe('PlexSync', () => {
   it('checks book genres against Open Library, finding books without a link by title and author', async () => {
     steamResponses = {
       'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction', 'genre:Fiction', 'Deserts'] },
-      'https://openlibrary.org/search.json': { docs: [{ key: '/works/OL27448W', title: 'The Hobbit', author_name: ['J.R.R. Tolkien'], first_publish_year: 1937 }] },
+      'https://openlibrary.org/search.json?q=': { docs: [{ key: '/works/OL893415W', title: 'Dune', author_name: ['Frank Herbert'], first_publish_year: 1965 }] },
+      'https://openlibrary.org/search.json?title=': { docs: [{ key: '/works/OL27448W', title: 'The Hobbit', author_name: ['J.R.R. Tolkien'], first_publish_year: 1937 }] },
       'https://openlibrary.org/works/OL27448W.json': { subjects: ['Fantasy fiction', 'Fantasy', 'Dragons'] },
     }
     const { app, frontmatter } = makeApp({
@@ -734,7 +735,7 @@ describe('PlexSync', () => {
       return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
     })
 
-    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'genres')
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
 
     expect(requests.map(r => r.path)).toEqual(['Media/Books/Dune by Frank Herbert.md', 'Media/Books/The Hobbit by J.R.R. Tolkien.md'])
     expect(requests[0].note).toBeUndefined()
@@ -743,6 +744,28 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Genre).toEqual(['Sci-Fi', 'Fiction'])
     expect(frontmatter.get('Media/Books/The Hobbit by J.R.R. Tolkien.md')).toMatchObject({ Genre: ['Fantasy'], Link: 'https://openlibrary.org/works/OL27448W' })
     expect(result.links).toEqual(['Media/Books/The Hobbit by J.R.R. Tolkien.md'])
+  })
+
+  it('checks existing notes against sources: empty values ticked, other differences unticked, unmatched notes listed', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Summary: 'My own summary.', Date: '', Duration: 116, Status: 'revisit' },
+      'Media/Movies/Old film I deleted.md': {},
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date', 'Duration', 'Status'])
+
+    expect(requests.map(r => r.lines.map(l => [l.label, l.unticked]))).toEqual([[['Summary', true], ['Date', false]]])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Summary: 'My own summary.', Date: '2016-11-11', Duration: 116, Status: 'revisit' })
+    expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.' })
+    expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
   })
 
   describe('a note whose name matches two items', () => {

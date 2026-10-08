@@ -1,5 +1,6 @@
 import { Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
+import { CheckModal, CheckReportModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
@@ -37,10 +38,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
-      id: 'check-genres',
-      name: 'Check genres of existing notes',
+      id: 'check-notes',
+      name: 'Check existing notes against sources',
       callback: () => {
-        void this.checkGenres()
+        new CheckModal(this.app, this.settings, properties => void this.checkNotes(properties)).open()
       },
     })
 
@@ -114,32 +115,34 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /**
-   * Compares the genres in every existing note with its source's (kept ones only) and asks about
-   * each difference. Slow: every item's full details are fetched, Steam's spaced out.
+   * "Check existing notes against sources": compares the chosen properties of every existing note
+   * with its source and asks about each difference, then lists the notes nothing matched. Slow:
+   * every item's full details are fetched, Steam's spaced out.
    */
-  async checkGenres(): Promise<void> {
+  async checkNotes(properties: string[]): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('Media sync is already running')
       return
     }
+    await this.saveSettings()
     this.plexSyncRunning = true
     const notice = new Notice('Starting…', 0)
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message), 'genres')
+        .run(message => notice.setMessage(message), 'check', properties)
       notice.hide()
-      const parts = [`Changed genres in ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
-      if (result.keptLinks) parts.push(`${result.keptLinks} kept as they were`)
+      const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
+      if (result.keptLinks) parts.push(`${result.keptLinks} value${result.keptLinks === 1 ? '' : 's'} kept as they were`)
       if (result.declined) parts.push(`${result.declined} skipped`)
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
-        parts.push(`${result.failed.length} failed`)
+        parts.push(`${result.failed.length} failed (see the developer console)`)
         console.error('Media import and sync: failed items', result.failed)
       }
-      new Notice(parts.join(', '), 8000)
+      new CheckReportModal(this.app, `${parts.join(', ')}.`, result.unmatched).open()
     } catch (err) {
       notice.hide()
-      new Notice(`Checking genres failed: ${errorMessage(err)}`, 10000)
+      new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
     }

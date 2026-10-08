@@ -21,7 +21,6 @@ import {
   isNamedAs,
   planRenames,
   plexWebLink,
-  isDocumentaryGenre,
   isSearchLink,
   itemKeys,
   ratingKeyFromLink,
@@ -34,10 +33,10 @@ import {
   type MediaKind,
   type PlexItem,
 } from './notes'
-import { bookSubjects, findBook } from './discover'
+import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, keepGenres, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, STATUS_SOURCES, statusMovesForward, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, RATING_SOURCES, sourceValue, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -60,8 +59,10 @@ export interface SyncResult {
   merged: string[]
   /** Existing notes whose link was replaced with the item's own (when you ticked it). */
   links: string[]
-  /** Existing notes whose duration was corrected to the source's. */
+  /** Existing notes with a value corrected to the source's (durations; anything in a check). */
   corrected: string[]
+  /** In a check: notes in the libraries' folders that no item matched. */
+  unmatched: string[]
   /** Links and values you chose to keep in this sync. */
   keptLinks: number
   skipped: number
@@ -71,7 +72,8 @@ export interface SyncResult {
 export type ProgressFn = (message: string) => void
 
 /** 'full' creates, renames and fills in notes; 'playCounts' only refreshes play counts (and ratings, if kept up to date) in existing notes. */
-export type SyncMode = 'full' | 'playCounts' | 'genres'
+/** 'check' is "Check existing notes against sources": it only compares the chosen properties, always asking. */
+export type SyncMode = 'full' | 'playCounts' | 'check'
 
 type ActiveLibrary = LibrarySetting & { target: MediaKind }
 
@@ -108,19 +110,6 @@ interface Checks {
   from: Record<string, unknown>
   to: Record<string, unknown>
   sameLength: Set<string>
-}
-
-/** A property's value as a list: a list, or text separated by commas. */
-function listOf(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean)
-  if (typeof value === 'string') return value.split(',').map(v => v.trim()).filter(Boolean)
-  return []
-}
-
-/** The same genres, whatever the order or case. */
-function sameGenres(a: string[], b: string[]): boolean {
-  const key = (list: string[]) => [...new Set(list.map(g => g.toLowerCase()))].sort().join('|')
-  return a.length === b.length && key(a) === key(b)
 }
 
 interface FillPlan {
@@ -196,7 +185,7 @@ export class PlexSync {
    * Whether to go ahead with one creation or change, and which of its lines were unticked
    * (those parts are left out). Null means no.
    */
-  /** Ask before every change even with asking switched off (for "Check genres of existing notes"). */
+  /** Ask before every change even with asking switched off (for "Check existing notes against sources"). */
   private alwaysAsk = false
 
   private async ask(request: ApprovalRequest, result: SyncResult, item: PlexItem, lib: LibrarySetting): Promise<Approval | null> {
@@ -276,15 +265,19 @@ export class PlexSync {
     return { active, indexes, entries }
   }
 
-  async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
+  /**
+   * @param checking for 'check': the property names to compare (in every library that has them).
+   */
+  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = []): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0 }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0, unmatched: [] }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
     const full = mode === 'full'
-    // "Check genres of existing notes": only genres, and always asked about, whatever the settings.
-    const genreCheck = mode === 'genres'
+    // "Check existing notes against sources": only the chosen properties, always asked about.
+    const genreCheck = mode === 'check'
+    const chosen = new Set(checking)
     this.alwaysAsk = genreCheck
     if (full) {
       for (const family of FAMILIES) {
@@ -308,6 +301,7 @@ export class PlexSync {
           .filter(e => familyOf(e.lib) === family)
           .map(({ item, lib }) => ({ item, lib, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
         const libOf = new Map(matches.map(m => [m.item, m.lib]))
+        if (genreCheck) this.listUnmatched(family, active, matches.flatMap(m => m.match?.paths ?? []), result)
         const plans = planRenames(matches)
         let position = 0
         for (const { item, path } of plans) {
@@ -345,7 +339,7 @@ export class PlexSync {
           const links = asking ? this.planLinks(file, item, lib) : null
           let checks: Checks | null = null
           try {
-            checks = genreCheck ? await this.planGenres(file, item, lib, kind, progress) : asking ? this.planChecks(file, item, lib) : null
+            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosen, progress) : asking ? this.planChecks(file, item, lib) : null
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
@@ -464,7 +458,7 @@ export class PlexSync {
         }
       }
     }
-    if (genreCheck && !result.stopped) await this.checkBookGenres(result, progress)
+    if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>
@@ -621,7 +615,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0 }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], keptLinks: 0, unmatched: [] }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
@@ -889,23 +883,70 @@ export class PlexSync {
     return names.length ? { names, from, to, sameLength } : null
   }
 
+  /** In a check: the notes in this family's folders that no item matched (nor "Use an existing note" tied). */
+  private listUnmatched(family: Family, active: [string, ActiveLibrary][], matched: string[], result: SyncResult): void {
+    const folders = [...new Set(active.filter(([, lib]) => familyOf(lib) === family).map(([, lib]) => normalizePath(lib.folder)))]
+    const taken = new Set([...matched, ...Object.values(this.settings.merged).map(m => m.path)])
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (folders.some(folder => file.path.startsWith(`${folder}/`)) && !taken.has(file.path)) result.unmatched.push(file.path)
+    }
+  }
+
   /**
-   * "Check genres of existing notes" for the Books library, which no sync lists: each note's
-   * genres are compared with its Open Library work's subjects (kept ones only). A note without an
-   * Open Library link is looked up by title and author; the pop-up says which book was found, and
-   * also offers its link. Leaving that link unticked means it's the wrong book: that note isn't
-   * looked up again.
+   * "Check existing notes against sources" for one note: the chosen properties whose value differs
+   * from the source's (`checkValue` says what's offered and whether it starts ticked), with the
+   * item's full details fetched. Values you chose to keep before are left alone, and so is a link
+   * that points to this item in any form.
    */
-  private async checkBookGenres(result: SyncResult, progress: ProgressFn): Promise<void> {
+  private async planFullCheck(file: TFile, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, chosen: Set<string>, progress: ProgressFn): Promise<Checks | null> {
+    const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
+    if (!mappings.length) return null
+    progress(`Checking ${displayName(item)}…`)
+    // A game's HowLongToBeat lookup (and cover choices) only when a property needs them.
+    const needsLib = mappings.some(m => HLTB_SOURCES.includes(m.source) || m.source === 'poster')
+    const full = await this.fullItem(item, needsLib ? lib : undefined)
+    return this.compareNote(file, full, lib, kind, mappings, item.ratingKey)
+  }
+
+  /** The differences between a note and an item's details, for the chosen properties. */
+  private compareNote(file: TFile, item: PlexItem, lib: LibrarySetting, kind: MediaKind, mappings: LibrarySetting['properties'], noteKey: string): Checks | null {
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const ctx = { kind, link: this.linkFor(item), image: fromPlex(item) ? null : item.portrait ?? null, values: lib.values, genres: this.settings.allowedGenres }
+    const keys = itemKeys(item)
+    const to: Record<string, unknown> = {}
+    const ticked = new Set<string>()
+    for (const m of mappings) {
+      const name = m.name.trim()
+      const current: unknown = from[name]
+      if (m.source === 'plexLink') {
+        const pointsAt = ratingKeyFromLink(current)
+        if (pointsAt && keys.includes(pointsAt)) continue
+      }
+      const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx), this.settings.allowedGenres, kind)
+      if (!offer) continue
+      if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
+      to[name] = offer.to
+      if (offer.ticked || (m.source === 'plexLink' && isSearchLink(current))) ticked.add(name)
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to, sameLength: ticked } : null
+  }
+
+  /**
+   * "Check existing notes against sources" for the Books library, which no sync lists: each note
+   * is compared with its Open Library work. A note without an Open Library link is looked up by
+   * title and author; the pop-up says which book was found. Leaving its link unticked means it's
+   * the wrong book: that note isn't looked up again. Books that can't be found count as unmatched.
+   */
+  private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn): Promise<void> {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
-    const genreProps = lib.properties.filter(m => m.source === 'genres' && m.name.trim()).map(m => m.name.trim())
-    if (!genreProps.length) return
+    const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
+    if (!mappings.length) return
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
     const folder = normalizePath(lib.folder)
     const files = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(`${folder}/`))
-    const allowed = this.settings.allowedGenres
     let position = 0
     for (const file of files) {
       position++
@@ -915,118 +956,79 @@ export class PlexSync {
       const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
       const link: unknown = linkProp ? from[linkProp] : undefined
       const linked = ratingKeyFromLink(link)
-      let work = linked?.startsWith('ol-') ? linked.slice(3) : null
-      let found: PlexItem | null = null
-      let subjects: string[]
-      try {
-        progress(`Checking genres: ${file.basename}…`)
-        if (!work) {
-          if (noteKey in this.settings.keptLinks) continue
-          const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
-          // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
-          const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
-          found = (await findBook(title, authors[0]))?.item ?? null
-          if (!found) continue
-          work = found.ratingKey.slice(3)
-        }
-        subjects = await bookSubjects(work)
-      } catch (err) {
-        result.failed.push({ title: file.basename, error: `checking genres failed: ${errorText(err)}` })
+      const work = linked?.startsWith('ol-') ? linked.slice(3) : null
+      if (!work && noteKey in this.settings.keptLinks) {
+        result.unmatched.push(file.path)
         continue
       }
-
-      const fromSource = keepGenres(subjects, allowed)
-      const lines: ApprovalLine[] = []
-      const to: Record<string, string[]> = {}
-      for (const name of genreProps) {
-        const current = listOf(from[name])
-        const proposed = allowed.length ? keepGenres(current, allowed) : [...current]
-        for (const genre of fromSource) {
-          if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
-        }
-        if (!proposed.length || sameGenres(current, proposed)) continue
-        if (this.settings.keptValues[`${noteKey}|${name}`] === String(from[name])) continue
-        to[name] = proposed
-        lines.push({ key: `fix:${name}`, label: name, current: describeValue(from[name]), ...editable(proposed) })
+      let book: PlexItem | null
+      try {
+        progress(`Checking ${file.basename}…`)
+        const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
+        // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
+        const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
+        book = await lookUpBook({ work, title, author: authors[0] })
+      } catch (err) {
+        result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
+        continue
       }
-      const newLink = found?.webLink
-      if (found && linkProp && newLink) {
-        lines.push({ key: `link:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !isBlank(link) })
+      if (!book) {
+        result.unmatched.push(file.path)
+        continue
+      }
+      const searched = !work
+      const checks = this.compareNote(file, book, lib, 'book', mappings, noteKey)
+      const lines: ApprovalLine[] = []
+      for (const name of checks?.names ?? []) {
+        const offer = checks!.to[name]
+        const shown = typeof offer === 'number' ? { value: String(offer), edit: 'number' as const } : editable(offer)
+        lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !checks!.sameLength.has(name) })
+      }
+      // A book found by searching also offers its link, whether or not the Link property is checked.
+      const newLink = searched && linkProp && book.webLink && !checks?.names.includes(linkProp) ? book.webLink : null
+      if (newLink && linkProp) {
+        lines.push({ key: `fix:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !isBlank(link) })
       }
       if (!lines.length) continue
 
-      const note = found
-        ? `Found on Open Library: ${found.title}${found.authors?.length ? ` by ${found.authors.join(', ')}` : ''}${found.year ? `, ${found.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
+      const note = searched
+        ? `Found on Open Library: ${book.title}${book.authors?.length ? ` by ${book.authors.join(', ')}` : ''}${book.year ? `, ${book.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
         : undefined
       const asItem: PlexItem = { ratingKey: noteKey, type: 'book', title: file.basename }
       const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total: files.length }, result, asItem, lib)
       if (!approval) continue
       const { excluded, edits } = approval
-      const fixNames = Object.keys(to).filter(name => !excluded.has(`fix:${name}`))
-      for (const name of Object.keys(to).filter(n => excluded.has(`fix:${n}`))) {
-        this.settings.keptValues[`${noteKey}|${name}`] = String(from[name])
+      const offered = new Map<string, unknown>([...(checks?.names ?? []).map((n): [string, unknown] => [n, checks!.to[n]]), ...(newLink && linkProp ? [[linkProp, newLink] as [string, unknown]] : [])])
+      const apply = [...offered.keys()].filter(name => !excluded.has(`fix:${name}`))
+      for (const name of [...offered.keys()].filter(n => excluded.has(`fix:${n}`))) {
+        if (searched && name === linkProp) {
+          // Not this book's link: don't look this note up again.
+          this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
+        } else {
+          this.settings.keptValues[`${noteKey}|${name}`] = String(from[name])
+        }
         result.keptLinks++
       }
-      const linkWanted = Boolean(found && linkProp && newLink) && !excluded.has(`link:${linkProp}`)
-      if (found && linkProp && newLink && !linkWanted) {
-        // Not this book's link: don't look this note up again.
-        this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
-        result.keptLinks++
-      }
-      if (!fixNames.length && !linkWanted) {
+      if (!apply.length) {
         result.declined++
         continue
       }
       try {
         await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-          for (const name of fixNames) {
+          for (const name of apply) {
             const edited = edits[`fix:${name}`]
-            fm[name] = edited === undefined ? to[name] : parseEdit(edited, 'list')
-          }
-          if (linkWanted) {
-            const edited = edits[`link:${linkProp!}`]
-            fm[linkProp!] = typeof edited === 'string' ? edited.trim() : newLink
+            const value = offered.get(name)
+            fm[name] = edited === undefined ? value : parseEdit(edited, editKind(value))
           }
         })
-        if (fixNames.length) result.corrected.push(file.path)
-        if (linkWanted) result.links.push(file.path)
+        result.corrected.push(file.path)
+        if (linkProp && apply.includes(linkProp) && searched) result.links.push(file.path)
       } catch (err) {
         result.failed.push({ title: file.basename, error: errorText(err) })
       }
     }
   }
 
-  /**
-   * "Check genres of existing notes": the genre properties whose value differs from the genres
-   * already there that are kept, plus the source's kept genres (its full details are fetched).
-   * Never offers to empty a property, and leaves alone values you chose to keep before.
-   */
-  private async planGenres(file: TFile, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, progress: ProgressFn): Promise<Checks | null> {
-    const mappings = lib.properties.filter(m => m.source === 'genres' && m.name.trim())
-    if (!mappings.length) return null
-    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    progress(`Checking genres: ${displayName(item)}…`)
-    // Without the library, a game's lookup skips HowLongToBeat and covers: only genres are wanted.
-    const full = await this.fullItem(item)
-    const allowed = this.settings.allowedGenres
-    const source = sourceValue('genres', full, { kind, link: '', image: null, values: lib.values, genres: allowed })
-    const fromSource = Array.isArray(source) ? source : []
-    const to: Record<string, unknown> = {}
-    for (const m of mappings) {
-      const name = m.name.trim()
-      const current = listOf(from[name])
-      const proposed = allowed.length ? keepGenres(current, allowed) : [...current]
-      for (const genre of fromSource) {
-        if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
-      }
-      const wanted = kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed
-      if (!wanted.length || sameGenres(current, wanted)) continue
-      if (this.settings.keptValues[`${item.ratingKey}|${name}`] === String(from[name])) continue
-      to[name] = wanted
-    }
-    const names = Object.keys(to)
-    return names.length ? { names, from, to, sameLength: new Set(names) } : null
-  }
 
   /**
    * Link properties that hold a link to somewhere other than this item (say, a game's HowLongToBeat

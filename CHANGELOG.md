@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.41] - 2026-10-08
+
+### Changed
+- **Check existing notes against sources** (command) replaces "Check genres of existing notes". It now compares every property you choose, not just Genre:
+  - First, a window lists the properties your libraries use (Genre, Summary, Date, Duration, Link, Author, Pages, Main Story…), each with the source that fills it and the libraries that have it. Tick the ones to compare; your choice is remembered. Covers start unticked; status, play counts, playtime and ratings aren't offered, since syncs keep those up to date.
+  - Each note matched to a Plex item or Steam game, and each book note (via Open Library, looked up by title and author when it has no Open Library link), is compared with its source, and you're asked about each difference in the usual pop-up, with yours and the source's side by side. Empty values, durations written in hours, search links and genres are offered ticked; any other difference starts unticked, so your value stays unless you tick it. A value you keep isn't offered again.
+  - At the end, a report says what changed and lists the notes in your libraries' folders that matched nothing; click one to open it.
+
 ## [0.0.40] - 2026-10-08
 
 ### Added

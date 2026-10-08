@@ -425,3 +425,69 @@ export function linkPropertyNames(mappings: PropertyMapping[]): string[] {
   const names = mappings.filter(m => m.source === 'plexLink').map(m => m.name.trim()).filter(Boolean)
   return names.includes('Link') ? names : [...names, 'Link']
 }
+
+/**
+ * Sources "Check existing notes against sources" never compares: your own (status, fixed text,
+ * type tag) and those syncs keep up to date (plays, playtime, ratings, last played).
+ */
+export const UNCHECKED_SOURCES: FieldSource[] = ['text', 'typeTag', 'status', 'viewCount', 'playtime', 'recentPlaytime', 'userRating', 'userRatingEmoji', 'lastViewedAt']
+
+/** A property's value as a list: a list, or text separated by commas. */
+export function listOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean)
+  if (typeof value === 'string') return value.split(',').map(v => v.trim()).filter(Boolean)
+  return []
+}
+
+/** Text compared loosely: links' brackets, case and spacing ignored ("[[Frank Herbert]]" is "frank herbert"). */
+function loose(value: unknown): string {
+  return String(value)
+    .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/** The same genres (or any list), whatever the order or case. */
+export function sameList(a: string[], b: string[]): boolean {
+  const key = (list: string[]) => [...new Set(list.map(loose))].sort().join('|')
+  return key(a) === key(b)
+}
+
+function blank(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && value.length === 0)
+}
+
+/** Whether a note's value and the source's say the same thing (lists in any order, numbers as numbers, text loosely). */
+export function sameValue(current: unknown, value: unknown): boolean {
+  if (Array.isArray(value) || Array.isArray(current)) return sameList(listOf(current), listOf(value))
+  if (typeof value === 'number') {
+    const n = typeof current === 'number' ? current : Number(String(current).trim())
+    return n === value
+  }
+  return loose(current) === loose(value)
+}
+
+/**
+ * What "Check existing notes against sources" offers for one property: the value to write and
+ * whether it starts ticked, or null when there's nothing to offer. Ticked: an empty value, the same
+ * duration in hours or text, a search link, or genres (the note's kept ones plus the source's).
+ * Any other difference starts unticked: it's yours unless you tick it.
+ */
+export function checkValue(source: FieldSource, current: unknown, value: unknown, allowedGenres: string[], kind: MediaKind): { to: unknown, ticked: boolean } | null {
+  if (blank(value)) return null
+  if (source === 'genres') {
+    const own = listOf(current)
+    const proposed = allowedGenres.length ? keepGenres(own, allowedGenres) : [...own]
+    for (const genre of listOf(value)) {
+      if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
+    }
+    const wanted = kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed
+    if (!wanted.length || sameList(own, wanted)) return null
+    return { to: wanted, ticked: true }
+  }
+  if (blank(current)) return { to: value, ticked: true }
+  if (sameValue(current, value)) return null
+  if (source === 'durationMinutes' && typeof value === 'number') return { to: value, ticked: sameLengthOtherForm(current, value) }
+  return { to: value, ticked: false }
+}

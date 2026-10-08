@@ -104,22 +104,44 @@ export async function testOmdbKey(pasted: string): Promise<string> {
   }
 }
 
-/**
- * The likeliest Open Library match for a book by its title (and author, when known), for books
- * whose note has no Open Library link. Null when nothing is found.
- */
-export async function findBook(title: string, author?: string): Promise<Found | null> {
-  const query = `title=${encodeURIComponent(title)}${author ? `&author=${encodeURIComponent(author)}` : ''}`
+async function searchBooks(query: string): Promise<OpenLibraryDoc[]> {
   const body = await getJson(`https://openlibrary.org/search.json?${query}&limit=5&fields=${OPEN_LIBRARY_FIELDS}`, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
-  for (const doc of body.docs ?? []) {
-    const found = openLibraryFound(doc)
-    if (found) return found
-  }
-  return null
+  return body.docs ?? []
 }
 
-/** All of an Open Library work's subjects, cleaned of tags ("genre:Fiction" becomes "Fiction"). */
-export async function bookSubjects(work: string): Promise<string[]> {
-  const body = await getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as { subjects?: string[] }
-  return bookGenres(body.subjects, Infinity)
+/**
+ * A book's Open Library details, for checking a book note: by its work (from the note's Open
+ * Library link) or, failing that, the likeliest match for its title and author. Its genres are all
+ * the work's subjects (cleaned of tags) and its summary the work's description. Null when nothing
+ * is found.
+ */
+export async function lookUpBook(by: { work?: string | null, title?: string, author?: string }): Promise<PlexItem | null> {
+  type Work = { title?: string, subjects?: string[], description?: string | { value?: string } }
+  const workJson = (work: string) => getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as Promise<Work>
+  if (by.work) {
+    // The note's own link decides the book: only that work's search entry counts, and failing
+    // that, the work's own page (which has no authors or pages).
+    const docs = await searchBooks(`q=${encodeURIComponent(`key:/works/${by.work}`)}`)
+    const doc = docs.find(d => d.key === `/works/${by.work}`)
+    const found = doc ? openLibraryFound(doc) : null
+    const body = await workJson(by.work).catch(() => null)
+    if (!found && !body) return null
+    return {
+      ...(found?.item ?? { ratingKey: `ol-${by.work}`, type: 'book', title: body?.title ?? '', webLink: `https://openlibrary.org/works/${by.work}` }),
+      Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
+      summary: openLibraryDescription(body) ?? found?.item.summary,
+    }
+  }
+  if (!by.title) return null
+  const docs = await searchBooks(`title=${encodeURIComponent(by.title)}${by.author ? `&author=${encodeURIComponent(by.author)}` : ''}`)
+  const found = docs.map(openLibraryFound).find((f): f is Found => f !== null)
+  if (!found) return null
+  const work = found.item.ratingKey.slice(3)
+  const body = await workJson(work).catch(() => null)
+  const doc = docs.find(d => d.key === `/works/${work}`)
+  return {
+    ...found.item,
+    Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
+    summary: openLibraryDescription(body) ?? found.item.summary,
+  }
 }

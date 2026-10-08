@@ -82,6 +82,8 @@ export interface PlexNotesSettings {
   ignored: Record<string, IgnoredItem>
   /** Items tied to existing notes, by rating key: matched to that note, and never renamed. */
   merged: Record<string, MergedItem>
+  /** The properties "Check existing notes against sources" compares, as last chosen (null: not chosen yet). */
+  checkProperties: string[] | null
   /** The only genres written to notes, in every library; empty keeps them all. */
   allowedGenres: string[]
   /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
@@ -147,6 +149,7 @@ export function defaultSettings(): PlexNotesSettings {
     keptLinks: {},
     keptValues: {},
     allowedGenres: [...DEFAULT_GENRES],
+    checkProperties: null,
     updatePlayCounts: false,
     updateRatings: false,
     updateStatus: false,
@@ -268,6 +271,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.keptLinks = { ...saved.keptLinks }
   settings.keptValues = { ...saved.keptValues }
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
+  if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)
   settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {

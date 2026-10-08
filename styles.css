@@ -351,3 +351,13 @@
   border-left: 3px solid var(--interactive-accent);
   background-color: var(--background-secondary);
 }
+
+/* "Check existing notes against sources": choosing properties, and the report. */
+.modal.pmn-check {
+  width: min(700px, 95vw);
+}
+
+.pmn-check-unmatched {
+  max-height: 40vh;
+  overflow-y: auto;
+}

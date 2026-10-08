@@ -234,6 +234,9 @@ export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbLink']
 /** Sources kept up to date by "Keep play counts up to date": plays, and a game's playtime. */
 export const PLAY_SOURCES: FieldSource[] = ['viewCount', 'playtime']
 
+/** Sources kept up to date by "Keep ratings up to date": your Plex rating, as stars or emoji. */
+export const RATING_SOURCES: FieldSource[] = ['userRating', 'userRatingEmoji']
+
 export function playCount(item: PlexItem): number {
   return item.viewCount ?? (item.type === 'show' ? item.viewedLeafCount : undefined) ?? 0
 }

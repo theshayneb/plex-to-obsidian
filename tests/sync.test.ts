@@ -284,6 +284,26 @@ describe('PlexSync', () => {
     expect((await sync.run(() => {})).playCounts).toEqual([])
   })
 
+  it('updates ratings on every sync only when switched on, and never clears them', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Heat (1995).md': { Rating: 3, Stars: '⭐⭐⭐', Plays: 1 },
+      'Media/Movies/Arrival (2016).md': { Rating: 4 },
+    })
+    const settings = settingsWith()
+    settings.libraries['1'] = newLibrary('Movies', 'movie', 'movie')
+    settings.libraries['1'].properties.push({ name: 'Rating', source: 'userRating' }, { name: 'Stars', source: 'userRatingEmoji' }, { name: 'Plays', source: 'viewCount' })
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], userRating: 10, viewCount: 4 }, movies[0]] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+
+    expect((await sync.run(() => {})).playCounts).toEqual([])
+    settings.updateRatings = true
+    expect((await sync.run(() => {})).playCounts).toEqual(['Media/Movies/Heat (1995).md'])
+    // Play counts stay as they were: only ratings are switched on.
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Rating: 5, Stars: '🩷', Plays: 1 })
+    // Arrival has no rating in Plex, so its note keeps the one it has.
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toMatchObject({ Rating: 4 })
+  })
+
   it('shows the play count now and after', async () => {
     const { app } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1 } })
     const settings = settingsWith({ updatePlayCounts: true })
@@ -297,7 +317,7 @@ describe('PlexSync', () => {
 
   it('only updates play counts in the background mode', async () => {
     const { app, files, frontmatter } = makeApp({ 'Media/Movies/Heat.md': { Plays: 0 } })
-    const settings = settingsWith()
+    const settings = settingsWith({ updatePlayCounts: true })
     settings.libraries['1'] = newLibrary('Movies', 'movie', 'movie')
     settings.libraries['1'].properties.push({ name: 'Plays', source: 'viewCount' })
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 2 }, movies[0]] } })
@@ -497,7 +517,7 @@ describe('PlexSync', () => {
       'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 120 }] } },
     }
     const { app, frontmatter } = makeApp({ 'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/', 'Total Playtime': 1 } })
-    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    const settings = settingsWith({ serverUrl: '', token: '', updatePlayCounts: true, steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
     settings.libraries = {}
     const { ensureSteamLibrary } = await import('../src/config')
     ensureSteamLibrary(settings)

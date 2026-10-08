@@ -394,7 +394,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Keep play counts up to date')
-      .setDesc('Every sync also updates properties set to "Play count" in existing notes, in all libraries. This is the only property whose value in an existing note is ever replaced.')
+      .setDesc('Every sync also updates properties set to "Play count" (and a game\'s playtime) in existing notes, in all libraries. Play counts and ratings are the only values in existing notes that are ever replaced.')
       .addToggle(toggle => toggle
         .setValue(settings.updatePlayCounts)
         .onChange(async value => {
@@ -403,10 +403,21 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           this.refresh()
         }))
 
-    if (settings.updatePlayCounts) {
+    new Setting(containerEl)
+      .setName('Keep ratings up to date')
+      .setDesc('Every sync also updates properties set to "Your rating" (stars or emoji) in existing notes when you change a rating in Plex. A note keeps its rating when the item has none in Plex.')
+      .addToggle(toggle => toggle
+        .setValue(settings.updateRatings)
+        .onChange(async value => {
+          settings.updateRatings = value
+          await this.save()
+          this.refresh()
+        }))
+
+    if (settings.updatePlayCounts || settings.updateRatings) {
       new Setting(containerEl)
-        .setName('Update play counts automatically')
-        .setDesc('Also update play counts in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.')
+        .setName('Update automatically')
+        .setDesc(`Also update ${settings.updatePlayCounts && settings.updateRatings ? 'play counts and ratings' : settings.updatePlayCounts ? 'play counts' : 'ratings'} in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.`)
         .addDropdown(dropdown => {
           for (const [value, label] of Object.entries(PLAY_COUNT_SCHEDULE)) dropdown.addOption(value, label)
           dropdown

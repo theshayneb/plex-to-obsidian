@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.31] - 2026-10-08
+
+### Added
+- **Keep ratings up to date** (Settings → All libraries, off to start): every sync also updates properties set to "Your rating" (stars or emoji) in existing notes when you've changed the rating in Plex. A note keeps its rating if the item has none in Plex. Like play counts, the change is shown in the approval pop-up first when asking is on.
+- The background schedule (now **Update automatically**) updates ratings too when that's on, and play counts only when "Keep play counts up to date" is on.
+
 ## [0.0.30] - 2026-10-07
 
 ### Changed

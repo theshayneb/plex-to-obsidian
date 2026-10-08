@@ -32,7 +32,7 @@ import {
 } from './notes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, HLTB_SOURCES, linkPropertyNames, PLAY_SOURCES, sourceValue, usesSource } from './properties'
+import { buildFrontmatter, HLTB_SOURCES, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -57,7 +57,7 @@ export interface SyncResult {
 
 export type ProgressFn = (message: string) => void
 
-/** 'full' creates, renames and fills in notes; 'playCounts' only refreshes play counts in existing notes. */
+/** 'full' creates, renames and fills in notes; 'playCounts' only refreshes play counts (and ratings, if kept up to date) in existing notes. */
 export type SyncMode = 'full' | 'playCounts'
 
 type ActiveLibrary = LibrarySetting & { target: MediaKind }
@@ -249,7 +249,12 @@ export class PlexSync {
     }
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
-    const counting = !full || this.settings.updatePlayCounts
+    // The only values ever replaced in existing notes: play counts and ratings, each when switched on.
+    const updating: FieldSource[] = [
+      ...this.settings.updatePlayCounts ? PLAY_SOURCES : [],
+      ...this.settings.updateRatings ? RATING_SOURCES : [],
+    ]
+    const counting = updating.length > 0
     if (renaming || filling || counting) {
       progress('Checking existing notes…')
       for (const family of FAMILIES) {
@@ -286,7 +291,7 @@ export class PlexSync {
               result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
             }
           }
-          const plays = counting ? this.planPlayCount(file, item, lib) : null
+          const plays = counting ? this.planUpdates(file, item, lib, updating) : null
           if (!renameTo && !fill && !plays) continue
 
           const lines: ApprovalLine[] = []
@@ -304,7 +309,7 @@ export class PlexSync {
             lines.push({ key: `add:${name}`, label: name, current: describeValue(now[name]), value: POSTER_PREVIEW })
           }
           for (const name of plays?.names ?? []) {
-            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.to[name]), edit: 'number' })
+            lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.to[name]), edit: editKind(plays!.to[name]) })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -335,7 +340,7 @@ export class PlexSync {
           const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
           const playValue = (name: string): unknown => {
             const edited = edits[`update:${name}`]
-            return edited === undefined ? plays!.to[name] : parseEdit(edited, 'number')
+            return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
           }
           if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length) {
             result.declined++
@@ -660,11 +665,12 @@ export class PlexSync {
   }
 
   /**
-   * The note's "Play count" and game playtime properties (as named in its library's settings) that
-   * differ from the current values: the one case where a value already in a note is replaced.
+   * The note's properties with these sources (play counts, playtime, ratings) that differ from the
+   * current values: the one case where a value already in a note is replaced. Nothing is cleared
+   * when Plex has no value.
    */
-  private planPlayCount(file: TFile, item: PlexItem, lib: ActiveLibrary): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
-    const mappings = lib.properties.filter(m => PLAY_SOURCES.includes(m.source) && m.name.trim())
+  private planUpdates(file: TFile, item: PlexItem, lib: ActiveLibrary, sources: FieldSource[]): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
+    const mappings = lib.properties.filter(m => sources.includes(m.source) && m.name.trim())
     if (!mappings.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const to: Record<string, unknown> = {}

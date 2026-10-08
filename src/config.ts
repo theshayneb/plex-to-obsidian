@@ -25,6 +25,18 @@ export interface LibrarySetting {
   values: PropertyValues
 }
 
+/** An item tied by hand ("Use an existing note") to a note that was already there. */
+export interface MergedItem {
+  /** How it's listed in settings, e.g. "Heat (1995)". */
+  name: string
+  library: string
+  /** The settings key of its library, for matching it within the right kind of notes. */
+  libraryKey: string
+  /** The note's path; kept up to date when the note is renamed or moved. */
+  path: string
+  since: number
+}
+
 /** A Plex item "Skip every time" was chosen for. */
 export interface IgnoredItem {
   /** How it's listed in settings, e.g. "Heat (1995)" or "Radiohead - Airbag". */
@@ -68,6 +80,8 @@ export interface PlexNotesSettings {
   askBeforeChanges: boolean
   /** Plex items every sync passes over, keyed by rating key. */
   ignored: Record<string, IgnoredItem>
+  /** Items tied to existing notes, by rating key: matched to that note, and never renamed. */
+  merged: Record<string, MergedItem>
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
@@ -119,6 +133,7 @@ export function defaultSettings(): PlexNotesSettings {
     renameExistingNotes: true,
     askBeforeChanges: true,
     ignored: {},
+    merged: {},
     updatePlayCounts: false,
     updateRatings: false,
     playCountHours: 0,
@@ -235,6 +250,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   }
   settings.fileNameReplacements = { ...saved.fileNameReplacements }
   settings.ignored = { ...saved.ignored }
+  settings.merged = { ...saved.merged }
   settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {

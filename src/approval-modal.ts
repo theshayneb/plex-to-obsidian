@@ -1,8 +1,11 @@
-import { App, Modal, Setting } from 'obsidian'
+import { App, FuzzySuggestModal, Modal, Setting, TFile } from 'obsidian'
 import type { CoverChoice } from './steamgriddb'
 
-/** 'ignore' is "Skip every time": this item is passed over by every sync until un-ignored in settings. */
-export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'stop'
+/**
+ * 'ignore' is "Skip every time": this item is passed over by every sync until un-ignored in settings.
+ * 'merge' ties a new item to a note that already exists (`mergeWith`) instead of creating one.
+ */
+export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'stop' | 'merge'
 
 export interface Decision {
   choice: Choice
@@ -10,6 +13,8 @@ export interface Decision {
   excluded: string[]
   /** Lines whose new value was edited, by key: the text as typed, or a list's remaining items. */
   edits?: Record<string, string | string[]>
+  /** For 'merge': the path of the existing note chosen. */
+  mergeWith?: string
 }
 
 /** How an editable value is typed: plain text, a comma-separated list, or a number. */
@@ -61,6 +66,7 @@ export class ApprovalModal extends Modal {
   private pmnDecided = false
   private readonly pmnExcluded = new Set<string>()
   private readonly pmnEdits: Record<string, string | string[]> = {}
+  private pmnMergeWith?: string
 
   constructor(app: App, private readonly pmnRequest: ApprovalRequest, private readonly pmnResolve: (d: Decision) => void) {
     super(app)
@@ -123,9 +129,18 @@ export class ApprovalModal extends Modal {
       })
     }
 
-    new Setting(contentEl)
+    const buttons = new Setting(contentEl)
       .addButton(b => b.setButtonText(create ? 'Create' : 'Apply').setCta().onClick(() => this.pmnDecide('apply')))
       .addButton(b => b.setButtonText('Skip').onClick(() => this.pmnDecide('skip')))
+    if (create) {
+      buttons.addButton(b => b.setButtonText('Use an existing note…')
+        .setTooltip('Fill in a note you already have for this instead, and match it from now on')
+        .onClick(() => new NotePickerModal(this.app, file => {
+          this.pmnMergeWith = file.path
+          this.pmnDecide('merge')
+        }).open()))
+    }
+    buttons
       .addButton(b => b.setButtonText('Skip every time')
         .setTooltip('Never create or change a note for this item; undo in settings')
         .onClick(() => this.pmnDecide('ignore')))
@@ -208,7 +223,7 @@ export class ApprovalModal extends Modal {
 
   private pmnDecide(choice: Choice): void {
     this.pmnDecided = true
-    this.pmnResolve({ choice, excluded: [...this.pmnExcluded], edits: { ...this.pmnEdits } })
+    this.pmnResolve({ choice, excluded: [...this.pmnExcluded], edits: { ...this.pmnEdits }, mergeWith: this.pmnMergeWith })
     this.close()
   }
 }
@@ -291,4 +306,24 @@ export class OwnerModal extends Modal {
 
 export function askOwner(app: App, request: OwnerRequest): Promise<string | null> {
   return new Promise(resolve => new OwnerModal(app, request, resolve).open())
+}
+
+/** Search for a note in the vault, for "Use an existing note". */
+export class NotePickerModal extends FuzzySuggestModal<TFile> {
+  constructor(app: App, private readonly pmnChosen: (file: TFile) => void) {
+    super(app)
+    this.setPlaceholder('Find the note this is for')
+  }
+
+  getItems(): TFile[] {
+    return this.app.vault.getMarkdownFiles()
+  }
+
+  getItemText(file: TFile): string {
+    return file.path.replace(/\.md$/, '')
+  }
+
+  onChooseItem(file: TFile): void {
+    this.pmnChosen(file)
+  }
 }

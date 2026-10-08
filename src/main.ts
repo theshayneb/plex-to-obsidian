@@ -16,6 +16,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings()
 
+    // Notes chosen with "Use an existing note" stay tied to their item when renamed or moved.
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+      const moved = Object.values(this.settings.merged).filter(m => m.path === oldPath)
+      if (!moved.length) return
+      for (const m of moved) m.path = file.path
+      void this.saveSettings()
+    }))
+
     this.addRibbonIcon('clapperboard', 'Import and sync media', () => {
       void this.syncFromPlex()
     })
@@ -118,6 +126,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.filled.length) {
         parts.push(`filled in ${result.filled.length}`)
         console.log('Media import and sync: filled in', result.filled)
+      }
+      if (result.merged.length) {
+        parts.push(`matched ${result.merged.length} to existing notes`)
+        console.log('Media import and sync: matched to existing notes', result.merged)
       }
       parts.push(`${result.skipped} already had one`)
       if (result.declined) parts.push(`${result.declined} skipped by you`)

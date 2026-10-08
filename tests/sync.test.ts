@@ -24,6 +24,7 @@ vi.mock('obsidian', () => {
     TFolder,
     Notice: Unused,
     Modal: Unused,
+    FuzzySuggestModal: Unused,
     Platform: { isDesktopApp: false },
     PluginSettingTab: Unused,
     Setting: Unused,
@@ -302,6 +303,39 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Rating: 5, Stars: '🩷', Plays: 1 })
     // Arrival has no rating in Plex, so its note keeps the one it has.
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toMatchObject({ Rating: 4 })
+  })
+
+  it('ties an item to a note you already have with "Use an existing note"', async () => {
+    const mine = 'Media/Movies/My favourite film.md'
+    const { app, files, frontmatter } = makeApp({ [mine]: { Status: 'revisit' } })
+    const settings = settingsWith()
+    const asked: string[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      asked.push(`${r.action} ${r.path}`)
+      if (r.action === 'create' && r.path === 'Media/Movies/Arrival (2016).md') return Promise.resolve({ choice: 'merge', excluded: [], mergeWith: mine })
+      if (r.action === 'change' && r.path === mine) return Promise.resolve({ choice: 'apply', excluded: ['add:Image'] })
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    })
+    const save = vi.fn(() => Promise.resolve())
+    const result = await new PlexSync(app as never, settings, save, approve).run(() => {})
+
+    expect(result.merged).toEqual([mine])
+    expect(result.filled).toEqual([mine])
+    expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
+    // Everything missing is filled in; what was there stays.
+    expect(frontmatter.get(mine)).toMatchObject({
+      Status: 'revisit', Genre: ['Sci-Fi', 'Drama'], Summary: 'Linguist meets aliens.', tags: ['movie'],
+      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F1',
+    })
+    expect(frontmatter.get(mine)!.Image).toBeUndefined()
+    expect(settings.merged['1']).toMatchObject({ path: mine, name: 'Arrival (2016)', library: 'Movies', libraryKey: '1' })
+    expect(save).toHaveBeenCalled()
+
+    // From now on it's Arrival's note: not offered again, and never renamed.
+    asked.length = 0
+    await new PlexSync(app as never, settings, save, approve).run(() => {})
+    expect(asked.filter(a => a.includes('Arrival') || a.includes('My favourite film'))).toEqual([])
+    expect(files.has(mine)).toBe(true)
   })
 
   it('shows the play count now and after', async () => {

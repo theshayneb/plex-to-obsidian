@@ -59,7 +59,7 @@ function targetChoices(key: string): [string, string][] {
 export class PlexNotesSettingTab extends PluginSettingTab {
   /** Library sections the user has expanded, kept open across redraws. */
   private readonly openLibraries = new Set<string>()
-  /** Collapsible sections the user has opened (Setup, All libraries, Skipped every time). */
+  /** Collapsible sections the user has opened (Setup, All libraries, Merged, Skipped every time). */
   private readonly openSections = new Set<string>()
 
   constructor(app: App, private readonly plugin: PlexMediaNotesPlugin) {
@@ -77,6 +77,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     this.displaySetup(this.section(containerEl, 'setup', 'Setup', 'Servers, accounts and API keys.'))
     this.displayGeneral(this.section(containerEl, 'general', 'All libraries', 'File names, images, approvals and play counts.'))
     this.displayLibraries(containerEl)
+    this.displayMerged(this.section(containerEl, 'merged', 'Merged with existing notes'))
     this.displayIgnored(this.section(containerEl, 'ignored', 'Skipped every time'))
   }
 
@@ -521,6 +522,28 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         new Notice(await testOmdbKey(settings.omdbKey ?? ''), 10_000)
         button.setDisabled(false)
       }))
+  }
+
+  /** Items tied to existing notes with "Use an existing note", each with a button to undo it. */
+  private displayMerged(containerEl: HTMLElement): void {
+    const merged = this.plugin.settings.merged
+    const entries = Object.entries(merged).sort((a, b) => a[1].name.localeCompare(b[1].name))
+    new Setting(containerEl).setDesc(entries.length
+      ? 'Items you chose "Use an existing note" for. Syncs treat that note as theirs (filling in, play counts and ratings as usual) and never rename it. Unmerge one to have syncs match it by name again, or offer to create it.'
+      : 'Nothing yet. Choose "Use an existing note" in the approval pop-up to tie an item to a note you already have, when their names differ.')
+    for (const [key, item] of entries) {
+      new Setting(containerEl)
+        .setClass('pmn-ignored-item')
+        .setName(item.name)
+        .setDesc(`${item.library} → ${item.path.replace(/\.md$/, '')}`)
+        .addButton(button => button
+          .setButtonText('Unmerge')
+          .onClick(async () => {
+            delete this.plugin.settings.merged[key]
+            await this.save()
+            this.refresh()
+          }))
+    }
   }
 
   /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */

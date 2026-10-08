@@ -51,6 +51,8 @@ export interface SyncResult {
   ignored: number
   /** Items "Skip every time" was chosen for in this sync. */
   newlyIgnored: string[]
+  /** Existing notes chosen with "Use an existing note" in this sync. */
+  merged: string[]
   skipped: number
   failed: { title: string, error: string }[]
 }
@@ -75,6 +77,8 @@ const familyOf = (lib: ActiveLibrary): Family =>
 interface Approval {
   excluded: Set<string>
   edits: Record<string, string | string[]>
+  /** "Use an existing note": the note chosen instead of creating one. */
+  mergeWith?: string
 }
 
 /** A value for the approval pop-up, editable as text, a number or a list. */
@@ -165,12 +169,13 @@ export class PlexSync {
     if (!this.settings.askBeforeChanges || !this.approve) return { excluded: new Set(), edits: {} }
     const remembered = this.approvedAll[request.action]
     if (remembered) return { excluded: remembered, edits: {} }
-    const { choice, excluded, edits } = await this.approve(request)
+    const { choice, excluded, edits, mergeWith } = await this.approve(request)
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
     if (choice === 'stop') result.stopped = true
     if (choice === 'apply' || choice === 'all') return { excluded: skipped, edits: edits ?? {} }
+    if (choice === 'merge' && mergeWith) return { excluded: new Set(), edits: {}, mergeWith }
     if (choice === 'ignore') {
       this.settings.ignored[item.ratingKey] = { name: displayName(item), library: lib.title, since: Date.now() }
       result.newlyIgnored.push(displayName(item))
@@ -218,6 +223,7 @@ export class PlexSync {
       .filter(([key]) => hasSource(key) && (key === STEAM_LIBRARY ? useSteam : usePlex))
     const indexes = Object.fromEntries(FAMILIES.map(family =>
       [family, this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === family))])) as Record<Family, ExistingNotes>
+    for (const family of FAMILIES) this.addMerged(indexes[family], family)
 
     const entries: Entry[] = []
     for (const [key, lib] of active) {
@@ -237,7 +243,7 @@ export class PlexSync {
 
   async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [] }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -276,7 +282,8 @@ export class PlexSync {
 
           // Work out every change first, so it can be shown before anything happens.
           let renameTo: string | null = null
-          if (renaming) {
+          // A note chosen with "Use an existing note" keeps the name you gave it.
+          if (renaming && !this.isMerged(item)) {
             try {
               renameTo = this.renameTarget(file, item, lib)
             } catch (err) {
@@ -388,6 +395,10 @@ export class PlexSync {
         const preview = this.previewNote(item, lib, kind)
         const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result, item, lib)
         if (!approval) continue
+        if (approval.mergeWith) {
+          await this.mergeInto(item, lib, kind, approval.mergeWith, index, result, position, toCreate.length)
+          continue
+        }
         const { excluded, edits } = approval
         const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
         const overrides: Record<string, unknown> = {}
@@ -469,7 +480,11 @@ export class PlexSync {
       return report
     }
     const { lib: noteLib } = this.libraryFor(item, lib)
-    if (noteLib !== lib) report.push(`It's in the Documentary genre, so its note uses the "${noteLib.title}" library's settings.`)
+    const merged = this.settings.merged[item.ratingKey]
+    if (merged) {
+      report.push(`You chose "Use an existing note" for it: ${merged.path}. Syncs treat that as its note and never rename it. Undo this under Settings → Merged with existing notes.`)
+      return report
+    }
     const index = indexes[familyOf(lib)]
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (!match) {
@@ -510,16 +525,22 @@ export class PlexSync {
       .filter((l): l is ActiveLibrary => l.target !== 'skip')
       .filter(l => familyOf(l) === family)
     const index = this.indexExistingNotes(libs)
+    this.addMerged(index, family)
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [] }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
     if (!approval) {
       await this.finish(result)
       return {}
+    }
+    if (approval.mergeWith) {
+      await this.mergeInto(item, lib, kind, approval.mergeWith, index, result, 1, 1)
+      await this.finish(result)
+      return { existing: approval.mergeWith }
     }
     const { excluded, edits } = approval
     const left = new Set([...excluded].filter(k => k.startsWith('prop:')).map(k => k.slice(5)))
@@ -535,9 +556,72 @@ export class PlexSync {
     return item.ratingKey in this.settings.ignored
   }
 
-  /** Saves newly ignored items before handing back the result. */
+  private isMerged(item: PlexItem): boolean {
+    return item.ratingKey in this.settings.merged
+  }
+
+  /** Ties items chosen with "Use an existing note" to their notes, wherever those notes are. */
+  private addMerged(index: ExistingNotes, family: Family): void {
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      const lib = this.settings.libraries[merged.libraryKey]
+      if (lib && lib.target !== 'skip' && familyOf(lib as ActiveLibrary) !== family) continue
+      if (!(this.app.vault.getAbstractFileByPath(merged.path) instanceof TFile)) continue
+      addToIndex(index, merged.path, '', [key])
+    }
+  }
+
+  /**
+   * "Use an existing note": ties the item to that note from now on (it's matched to it and never
+   * renamed), then offers to fill in the properties the note is missing or has empty, never
+   * replacing anything already there.
+   */
+  private async mergeInto(item: PlexItem, lib: ActiveLibrary, kind: MediaKind, path: string, index: ExistingNotes,
+    result: SyncResult, position: number, total: number): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (!(file instanceof TFile)) {
+      result.failed.push({ title: item.title, error: `couldn't find ${path}` })
+      return
+    }
+    const libraryKey = Object.entries(this.settings.libraries).find(([, l]) => l === lib)?.[0] ?? ''
+    this.settings.merged[item.ratingKey] = { name: displayName(item), library: lib.title, libraryKey, path, since: Date.now() }
+    addToIndex(index, path, '', [item.ratingKey])
+    result.merged.push(path)
+
+    const everything: ActiveLibrary = { ...lib, properties: lib.properties.map(m => ({ ...m, fill: true })) }
+    let fill = await this.planFill(file, item, everything, kind)
+    if (!fill) return
+    const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const lines: ApprovalLine[] = fill.additions.map(([name, value]) => {
+      const choices = name === fill!.coverProperty ? fill!.item.coverChoices : undefined
+      return { key: `add:${name}`, label: name, current: describeValue(now[name]), ...editable(value), choices }
+    })
+    if (fill.imageProperty) {
+      lines.push({ key: `add:${fill.imageProperty}`, label: fill.imageProperty, current: describeValue(now[fill.imageProperty]), value: POSTER_PREVIEW })
+    }
+    const approval = await this.ask({ action: 'change', path, lines, position, total }, result, item, lib)
+    if (!approval) return
+    const { excluded, edits } = approval
+    fill = {
+      ...fill,
+      additions: fill.additions
+        .filter(([name]) => !excluded.has(`add:${name}`))
+        .map(([name, value]): [string, unknown] => {
+          const edited = edits[`add:${name}`]
+          return [name, edited === undefined ? value : parseEdit(edited, editKind(value))]
+        })
+        .filter(([, value]) => !isBlank(value)),
+      imageProperty: fill.imageProperty && !excluded.has(`add:${fill.imageProperty}`) ? fill.imageProperty : null,
+    }
+    try {
+      if (await this.applyFill(file, fill, everything)) result.filled.push(path)
+    } catch (err) {
+      result.failed.push({ title: item.title, error: `filling in failed: ${errorText(err)}` })
+    }
+  }
+
+  /** Saves newly ignored and merged items before handing back the result. */
   private async finish(result: SyncResult): Promise<SyncResult> {
-    if (result.newlyIgnored.length) await this.saveSettings()
+    if (result.newlyIgnored.length || result.merged.length) await this.saveSettings()
     return result
   }
 

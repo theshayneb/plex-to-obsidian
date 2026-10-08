@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.32] - 2026-10-08
+
+### Added
+- **Use an existing note…** in the pop-up for a new note: for an item you already have a note for under a different name. Search your notes and pick it; the item is then tied to that note for good. Syncs never offer to create it again and never rename the note (it keeps your name for it, and stays tied if you rename or move it yourself). Next, a pop-up offers to fill in every property the note is missing or has empty; nothing already there is changed. Play counts and ratings are kept up to date there as usual, when switched on. Works in "Add something new" too.
+- **Merged with existing notes** (Settings, at the bottom): the items tied this way, each with an Unmerge button.
+
 ## [0.0.31] - 2026-10-08
 
 ### Added

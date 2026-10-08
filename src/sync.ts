@@ -36,7 +36,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, RATING_SOURCES, sameValue, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, sameValue, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
@@ -110,9 +110,9 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
 /** Sources holding an image. */
 const IMAGE_SOURCES: FieldSource[] = ['poster', 'wideImage']
 
-/** A rating in words, for the approval pop-up. */
+/** A rating for the approval pop-up, on your emoji scale. */
 function stars(n: number): string {
-  return `${n} star${n === 1 ? '' : 's'}`
+  return ratingLabel(n)
 }
 
 /** Values in a note that differ from the source's, offered to fix; `sameLength` names those offered ticked. */

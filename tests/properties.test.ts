@@ -126,11 +126,13 @@ describe('sourceValue', () => {
     expect(value('userRating', rated(5))).toBe(3)
     expect(value('userRating', rated(10))).toBe(5)
     expect(value('userRating', rated(undefined))).toBeUndefined()
-    expect(value('userRatingEmoji', rated(2))).toBe('⭐')
-    expect(value('userRatingEmoji', rated(5))).toBe('⭐⭐⭐')
-    expect(value('userRatingEmoji', rated(8))).toBe('⭐⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(2))).toBe('💣')
+    expect(value('userRatingEmoji', rated(5))).toBe('⭐⭐')
+    expect(value('userRatingEmoji', rated(8))).toBe('⭐⭐⭐')
     expect(value('userRatingEmoji', rated(9))).toBe('🩷')
     expect(value('userRatingEmoji', rated(10))).toBe('🩷')
+    expect(value('userRatingEmoji', rated(3))).toBe('⭐')
+    expect(value('userRatingEmoji', rated(0))).toBeUndefined()
     expect(value('userRatingEmoji', rated(undefined))).toBeUndefined()
   })
 
@@ -227,7 +229,10 @@ describe('statusMovesForward', () => {
 describe('ratings both ways', () => {
   it('reads a note\'s stars', () => {
     expect(noteStars(4)).toBe(4)
-    expect(noteStars('⭐⭐⭐')).toBe(3)
+    expect(noteStars('⭐⭐⭐')).toBe(4)
+    expect(noteStars('⭐')).toBe(2)
+    expect(noteStars('💣')).toBe(1)
+    expect(noteStars('⭐⭐⭐⭐')).toBe(4)
     expect(noteStars('🩷')).toBe(5)
     expect(noteStars('2')).toBe(2)
     expect(noteStars('')).toBeNull()

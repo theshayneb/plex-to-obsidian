@@ -368,6 +368,12 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       if (lib.target === 'music' && !lib.leaveOutGenres?.some(g => g.toLowerCase() === 'romance')) lib.leaveOutGenres = [...lib.leaveOutGenres ?? [], 'Romance']
     }
   })
+  migrateOnce(settings, saved, 'emoji-rating-scale', () => {
+    // Ratings in emoji changed scale (💣 ⭐ ⭐⭐ ⭐⭐⭐ 🩷): forget what notes and Plex last agreed on,
+    // so notes in the old emoji are brought into the new scale from Plex (asked first), never the
+    // other way round.
+    settings.ratingsSeen = {}
+  })
   migrateOnce(settings, saved, 'check-everything', () => {
     // The check now compares every property: start from all of them ticked again.
     settings.checkProperties = null

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.54] - 2026-10-08
+
+### Changed
+- Ratings in emoji use your scale: 💣 for Plex's 1–2, ⭐ for 3–4, ⭐⭐ for 5–6, ⭐⭐⭐ for 7–8, 🩷 for 9–10, and empty for no rating. Sending a rating to Plex uses the top of each pair (💣 2, ⭐ 4, ⭐⭐ 6, ⭐⭐⭐ 8, 🩷 10). The approval pop-up shows ratings this way too, with Plex's number.
+- Notes still in the old emoji (one ⭐ per star) are brought into the new scale from Plex's ratings on the next sync with "Keep ratings up to date" on, or by "Check existing notes against sources" (asked first, as always); they're never sent to Plex as they are.
+
 ## [0.0.53] - 2026-10-08
 
 ### Fixed

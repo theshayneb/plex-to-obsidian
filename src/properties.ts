@@ -54,7 +54,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   criticRating: 'Critic rating (0–10)',
   audienceRating: 'Audience rating (0–10)',
   userRating: 'Your rating (stars, 0–5)',
-  userRatingEmoji: 'Your rating (⭐ emoji, 🩷 for 5 stars)',
+  userRatingEmoji: 'Your rating (💣 ⭐ ⭐⭐ ⭐⭐⭐ 🩷)',
   addedAt: 'Date added to Plex',
   lastViewedAt: 'Date last watched or played',
   viewCount: 'Play count',
@@ -264,9 +264,20 @@ export function userStars(item: PlexItem): number | undefined {
   return item.userRating ? Math.min(5, Math.ceil(item.userRating / 2)) : undefined
 }
 
+/**
+ * Your rating scale, by level (Plex's 1–10 in pairs): 💣 (1–2), ⭐ (3–4), ⭐⭐ (5–6), ⭐⭐⭐ (7–8),
+ * 🩷 (9–10). No rating is left empty.
+ */
+const RATING_EMOJI = ['', '💣', '⭐', '⭐⭐', '⭐⭐⭐', '🩷']
+
+/** A rating level for the approval pop-up: the emoji, and what Plex stores for it (out of 10). */
+export function ratingLabel(level: number): string {
+  return `${RATING_EMOJI[Math.min(5, level)] ?? level} (${Math.min(5, level) * 2} in Plex)`
+}
+
 function starEmoji(stars: number | undefined): string | undefined {
   if (!stars) return undefined
-  return stars >= 5 ? '🩷' : '⭐'.repeat(stars)
+  return RATING_EMOJI[Math.min(5, stars)]
 }
 
 /** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
@@ -283,8 +294,10 @@ export function noteStars(value: unknown): number | null {
   if (typeof value === 'number') return value > 0 ? Math.min(5, Math.round(value)) : null
   if (typeof value !== 'string' || !value.trim()) return null
   if (value.includes('🩷')) return 5
+  if (value.includes('💣')) return 1
+  // ⭐ is level 2, ⭐⭐ 3, ⭐⭐⭐ 4 (four, from the old all-stars scale, is 4 too).
   const stars = [...value].filter(c => c === '⭐').length
-  if (stars) return Math.min(5, stars)
+  if (stars) return Math.min(4, stars + 1)
   const n = Number(value.trim())
   return Number.isFinite(n) && n > 0 ? Math.min(5, Math.round(n)) : null
 }

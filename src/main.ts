@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
-import { CheckModal, CheckReportModal } from './check-modal'
+import { CheckModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
@@ -18,11 +18,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
     await this.loadSettings()
 
     // Notes chosen with "Use an existing note" stay tied to their item when renamed or moved.
+    // So do notes you chose to always ignore when they match nothing.
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
       const moved = Object.values(this.settings.merged).filter(m => m.path === oldPath)
-      if (!moved.length) return
       for (const m of moved) m.path = file.path
-      void this.saveSettings()
+      const ignored = this.settings.unmatchedIgnored.indexOf(oldPath)
+      if (ignored >= 0) this.settings.unmatchedIgnored[ignored] = file.path
+      if (moved.length || ignored >= 0) void this.saveSettings()
     }))
 
     this.addRibbonIcon('clapperboard', 'Import and sync media', () => {
@@ -139,7 +141,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`${result.failed.length} failed (see the developer console)`)
         console.error('Media import and sync: failed items', result.failed)
       }
-      new CheckReportModal(this.app, `${parts.join(', ')}.`, result.unmatched).open()
+      new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path)).open()
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
@@ -148,7 +150,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
   }
 
-  async syncFromPlex(): Promise<void> {
+  /** "Always ignore" for a note that matches nothing: it isn't pointed out again. */
+  private async ignoreUnmatched(path: string): Promise<void> {
+    if (!this.settings.unmatchedIgnored.includes(path)) this.settings.unmatchedIgnored.push(path)
+    await this.saveSettings()
+  }
+
+    async syncFromPlex(): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('Media sync is already running')
       return
@@ -190,7 +198,9 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`${result.failed.length} failed`)
         console.error('Media import and sync: failed items', result.failed)
       }
+      if (result.unmatched.length) parts.push(`${result.unmatched.length} note${result.unmatched.length === 1 ? '' : 's'} ${result.unmatched.length === 1 ? 'matches' : 'match'} nothing`)
       new Notice(parts.join(', '), 8000)
+      if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path)).open()
     } catch (err) {
       notice.hide()
       new Notice(`Media sync failed: ${errorMessage(err)}`, 10000)

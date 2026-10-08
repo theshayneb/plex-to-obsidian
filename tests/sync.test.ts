@@ -768,6 +768,18 @@ describe('PlexSync', () => {
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
   })
 
+  it('points out notes in the libraries\' folders that match nothing, unless always ignored', async () => {
+    const { app } = makeApp({
+      'Media/Movies/Heat (1995).md': {},
+      'Media/Movies/Old film I deleted.md': {},
+      'Media/Movies/Movies index.md': {},
+      'Notes/Elsewhere.md': {},
+    })
+    const settings = settingsWith({ askBeforeChanges: false, unmatchedIgnored: ['Media/Movies/Movies index.md'] })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.42] - 2026-10-08
+
+### Added
+- Every sync now points out notes that match nothing: a note in a library's folder with nothing for it in that source (a note in Movies that isn't in your Plex movies, a note in Video Games that isn't in your Steam library). After the sync, a pop-up lists them, each with **Open** and **Always ignore** (for notes that are fine as they are, like something added with "Add something new" that isn't in Plex or Steam yet, or an index note). The sync's summary counts them too. Ignored notes are listed under Settings → Skipped every time, with **Stop ignoring**, and stay ignored if you rename or move them. "Check existing notes against sources" uses the same list.
+
 ## [0.0.41] - 2026-10-08
 
 ### Changed

@@ -67,33 +67,46 @@ export class CheckModal extends Modal {
   }
 }
 
-/** The end of a check: what changed, and the notes nothing matched, each opening on click. */
-export class CheckReportModal extends Modal {
-  constructor(app: App, private readonly pmnSummary: string, private readonly pmnUnmatched: string[]) {
+/**
+ * Notes in the libraries' folders that match nothing in Plex, Steam or Open Library, shown after
+ * a sync or a check (with its summary): each can be opened, or always ignored from then on.
+ */
+export class UnmatchedModal extends Modal {
+  constructor(app: App, private readonly pmnTitle: string, private readonly pmnSummary: string | null,
+    private readonly pmnUnmatched: string[], private readonly pmnIgnore: (path: string) => Promise<void>) {
     super(app)
   }
 
   onOpen(): void {
-    this.titleEl.setText('Check finished')
+    this.titleEl.setText(this.pmnTitle)
     this.modalEl.addClass('pmn-check')
     const { contentEl } = this
-    contentEl.createEl('p', { text: this.pmnSummary })
+    if (this.pmnSummary) contentEl.createEl('p', { text: this.pmnSummary })
     if (!this.pmnUnmatched.length) {
       contentEl.createEl('p', { cls: 'setting-item-description', text: 'Every note in the libraries\' folders matched something.' })
       return
     }
-    contentEl.createEl('p', {
-      cls: 'setting-item-description',
-      text: `${this.pmnUnmatched.length} note${this.pmnUnmatched.length === 1 ? '' : 's'} in the libraries' folders matched nothing in Plex, Steam or Open Library, so they weren't checked. Its name may differ from the source's (use "Use an existing note…" when a sync offers to create it, or fix its Link), or it's no longer in your library.`,
-    })
-    const list = contentEl.createEl('ul', { cls: 'pmn-check-unmatched' })
+    const count = contentEl.createEl('p', { cls: 'setting-item-description' })
+    let left = this.pmnUnmatched.length
+    const describe = () => count.setText(left
+      ? `${left} note${left === 1 ? '' : 's'} in your libraries' folders ${left === 1 ? 'matches' : 'match'} nothing in Plex, Steam or Open Library. Its name may differ from the source's (choose "Use an existing note…" when a sync offers to create it, or fix its Link), or it's no longer in your library. "Always ignore" stops pointing a note out (undo under Settings → Skipped every time).`
+      : 'All done.')
+    describe()
+    const list = contentEl.createDiv('pmn-check-unmatched')
     for (const path of this.pmnUnmatched) {
-      const link = list.createEl('li').createEl('a', { text: path.replace(/\.md$/, ''), href: '#' })
-      link.addEventListener('click', evt => {
-        evt.preventDefault()
-        const file = this.app.vault.getAbstractFileByPath(path)
-        if (file instanceof TFile) void this.app.workspace.getLeaf(true).openFile(file)
-      })
+      const row = new Setting(list)
+        .setName(path.split('/').pop()!.replace(/\.md$/, ''))
+        .setDesc(path.split('/').slice(0, -1).join('/'))
+        .addButton(b => b.setButtonText('Open').onClick(() => {
+          const file = this.app.vault.getAbstractFileByPath(path)
+          if (file instanceof TFile) void this.app.workspace.getLeaf(true).openFile(file)
+        }))
+        .addButton(b => b.setButtonText('Always ignore').onClick(async () => {
+          await this.pmnIgnore(path)
+          row.settingEl.remove()
+          left--
+          describe()
+        }))
     }
   }
 

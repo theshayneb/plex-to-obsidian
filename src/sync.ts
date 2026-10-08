@@ -61,7 +61,7 @@ export interface SyncResult {
   links: string[]
   /** Existing notes with a value corrected to the source's (durations; anything in a check). */
   corrected: string[]
-  /** In a check: notes in the libraries' folders that no item matched. */
+  /** Notes in the libraries' folders that no item matched (full syncs and checks). */
   unmatched: string[]
   /** Links and values you chose to keep in this sync. */
   keptLinks: number
@@ -284,6 +284,15 @@ export class PlexSync {
         await this.resolveAmbiguous(entries.filter(e => familyOf(e.lib) === family), indexes[family], result)
       }
     }
+    // Notes in the libraries' folders that nothing in Plex or Steam matches, to point out.
+    if (full || genreCheck) {
+      for (const family of FAMILIES) {
+        const matched = entries
+          .filter(e => familyOf(e.lib) === family)
+          .flatMap(({ item, lib }) => findNote(indexes[family], item, this.naming(lib), lib.matchBy)?.paths ?? [])
+        this.listUnmatched(family, active, matched, result)
+      }
+    }
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
     // The only values ever replaced in existing notes: play counts and ratings, each when switched on.
@@ -301,7 +310,6 @@ export class PlexSync {
           .filter(e => familyOf(e.lib) === family)
           .map(({ item, lib }) => ({ item, lib, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
         const libOf = new Map(matches.map(m => [m.item, m.lib]))
-        if (genreCheck) this.listUnmatched(family, active, matches.flatMap(m => m.match?.paths ?? []), result)
         const plans = planRenames(matches)
         let position = 0
         for (const { item, path } of plans) {
@@ -883,12 +891,17 @@ export class PlexSync {
     return names.length ? { names, from, to, sameLength } : null
   }
 
-  /** In a check: the notes in this family's folders that no item matched (nor "Use an existing note" tied). */
+  /**
+   * The notes in this family's folders that no item matched (nor "Use an existing note" tied),
+   * apart from those you chose to always ignore.
+   */
   private listUnmatched(family: Family, active: [string, ActiveLibrary][], matched: string[], result: SyncResult): void {
     const folders = [...new Set(active.filter(([, lib]) => familyOf(lib) === family).map(([, lib]) => normalizePath(lib.folder)))]
     const taken = new Set([...matched, ...Object.values(this.settings.merged).map(m => m.path)])
     for (const file of this.app.vault.getMarkdownFiles()) {
-      if (folders.some(folder => file.path.startsWith(`${folder}/`)) && !taken.has(file.path)) result.unmatched.push(file.path)
+      if (!folders.some(folder => file.path.startsWith(`${folder}/`)) || taken.has(file.path)) continue
+      if (this.settings.unmatchedIgnored.includes(file.path)) continue
+      result.unmatched.push(file.path)
     }
   }
 
@@ -958,7 +971,7 @@ export class PlexSync {
       const linked = ratingKeyFromLink(link)
       const work = linked?.startsWith('ol-') ? linked.slice(3) : null
       if (!work && noteKey in this.settings.keptLinks) {
-        result.unmatched.push(file.path)
+        if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
         continue
       }
       let book: PlexItem | null
@@ -973,7 +986,7 @@ export class PlexSync {
         continue
       }
       if (!book) {
-        result.unmatched.push(file.path)
+        if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
         continue
       }
       const searched = !work

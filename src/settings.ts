@@ -604,6 +604,25 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             this.refresh()
           }))
     }
+
+    const notes = [...this.plugin.settings.unmatchedIgnored].sort()
+    if (!notes.length) return
+    new Setting(containerEl)
+      .setName('Notes that match nothing')
+      .setDesc('Notes you chose "Always ignore" for when a sync pointed out that they match nothing in Plex, Steam or Open Library. Stop ignoring one to have it pointed out again.')
+    for (const path of notes) {
+      new Setting(containerEl)
+        .setClass('pmn-ignored-item')
+        .setName(path.split('/').pop()!.replace(/\.md$/, ''))
+        .setDesc(path.split('/').slice(0, -1).join('/'))
+        .addButton(button => button
+          .setButtonText('Stop ignoring')
+          .onClick(async () => {
+            this.plugin.settings.unmatchedIgnored = this.plugin.settings.unmatchedIgnored.filter(p => p !== path)
+            await this.save()
+            this.refresh()
+          }))
+    }
   }
 
   /** Redraws the page without losing the scroll position. */

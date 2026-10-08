@@ -87,6 +87,12 @@ describe('sourceValue', () => {
     expect(value('status', { ...show, viewedLeafCount: 0 })).toBe('pending')
   })
 
+  it('adds a game\'s store tags to its genres, only when they\'re kept', () => {
+    const game: PlexItem = { ratingKey: 'steam-1', type: 'game', title: 'Dinocop', Genre: [{ tag: 'Adventure' }, { tag: 'Indie' }], steamTags: ['Funny', 'Mystery', 'Comedy', 'Adventure'] }
+    expect(value('genres', game, { ...ctx, kind: 'game', genres: ['Adventure', 'Mystery', 'Comedy'] })).toEqual(['Adventure', 'Mystery', 'Comedy'])
+    expect(value('genres', game, { ...ctx, kind: 'game' })).toEqual(['Adventure', 'Indie'])
+  })
+
   it('removes the Documentary genre from documentaries only', () => {
     const doc = { ...movie, Genre: [{ tag: 'Documentary' }, { tag: 'History' }] }
     expect(value('genres', doc, { ...ctx, kind: 'documentary' })).toEqual(['History'])

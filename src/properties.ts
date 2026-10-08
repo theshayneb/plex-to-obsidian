@@ -313,7 +313,9 @@ function externalId(item: PlexItem, scheme: string): string | undefined {
 export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContext, text?: string): Value {
   switch (source) {
     case 'genres': {
-      const genres = keepGenres(orAlbum(item, genresOf, noTags) ?? [], ctx.genres)
+      // A game's store tags ("Mystery") count as genres too, but only those in "Genres to keep".
+      const tagged = ctx.genres?.length ? item.steamTags ?? [] : []
+      const genres = keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres)
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres
     }

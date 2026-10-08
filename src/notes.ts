@@ -70,6 +70,8 @@ export interface PlexItem {
   metacritic?: number
   /** Portrait cover art (600×900) URL. */
   portrait?: string
+  /** The store's player tags ("Mystery", "Comedy"…), most voted first; used as genres only when they're in "Genres to keep". */
+  steamTags?: string[]
   /** Landscape header art URL. */
   wideImage?: string
   /** HowLongToBeat's times for the game, when looked up. */

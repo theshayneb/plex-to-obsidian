@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.37] - 2026-10-08
+
+### Added
+- Game genres now include the Steam store's player tags (the "Mystery", "Comedy", "Detective"… shown on a game's store page) that are in your **Genres to keep**. Steam's official genres are few (DinoCop's are only Adventure, Casual and Indie), so this is how Mystery and Comedy get in. Tags not on your list are left out; with the list empty, tags aren't used at all.
+
 ## [0.0.36] - 2026-10-08
 
 ### Added

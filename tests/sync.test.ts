@@ -515,7 +515,8 @@ describe('PlexSync', () => {
         { appid: 620, name: 'Portal 2', playtime_forever: 754 },
         { appid: 440, name: 'Team Fortress 2', playtime_forever: 0 },
       ] } },
-      'https://api.steampowered.com/IStoreBrowseService/GetItems': { response: { store_items: [{}] } },
+      'https://api.steampowered.com/IStoreBrowseService/GetItems': { response: { store_items: [{ tagids: [1664, 5716, 19] }] } },
+      'https://api.steampowered.com/IStoreService/GetTagList': { response: { tags: [{ tagid: 19, name: 'Action' }, { tagid: 1664, name: 'Puzzle' }, { tagid: 5716, name: 'Mystery' }] } },
       'https://store.steampowered.com/api/appdetails?appids=620': { 620: { success: true, data: {
         short_description: 'Puzzles.', header_image: 'https://cdn/620/header.jpg',
         genres: [{ description: 'Action' }, { description: 'Adventure' }], release_date: { date: '18 Apr, 2011' },
@@ -530,7 +531,8 @@ describe('PlexSync', () => {
     portraits.clear()
     portraits.add('https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg')
     const { app, frontmatter } = makeApp({ 'Media/Video Games/Team Fortress 2.md': { Status: 'abandoned' } })
-    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: 'gabelogannewell', includeFreeGames: true } })
+    // Store tags count as genres when they're kept: Puzzle is, Mystery isn't.
+    const settings = settingsWith({ serverUrl: '', token: '', allowedGenres: ['Action', 'Adventure', 'Puzzle'], steam: { apiKey: 'k', account: 'gabelogannewell', includeFreeGames: true } })
     settings.libraries = {}
 
     const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
@@ -539,7 +541,7 @@ describe('PlexSync', () => {
     expect(settings.libraries.steam).toMatchObject({ title: 'Steam', target: 'game', folder: 'Media/Video Games' })
     expect(result.created).toEqual(['Media/Video Games/Portal 2 (2011).md'])
     expect(frontmatter.get('Media/Video Games/Portal 2 (2011).md')).toEqual({
-      Genre: ['Action', 'Adventure'],
+      Genre: ['Action', 'Adventure', 'Puzzle'],
       'Release Date': '2011-04-18',
       'Total Playtime': 12.6,
       Status: 'started',

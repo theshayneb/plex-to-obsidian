@@ -52,12 +52,26 @@ export class SteamClient {
     return games.map(gameItem)
   }
 
-  /** The game's store details (genres, release date, description, art) and portrait cover. */
+  /** Tag names by ID, fetched once. */
+  private static tagNames: Promise<Map<number, string>> | null = null
+
+  /** The game's store details (genres, release date, description, art), portrait cover and tags. */
   async details(item: PlexItem): Promise<PlexItem> {
     const appId = item.steamAppId
     if (!appId) return item
     const data = await this.appDetails(appId)
-    return { ...withDetails(item, data), portrait: await this.portrait(appId) }
+    const { portrait, tags } = await this.storeItem(appId)
+    return { ...withDetails(item, data), portrait, steamTags: tags }
+  }
+
+  private async tagNames(): Promise<Map<number, string>> {
+    SteamClient.tagNames ??= this.getJson(`${API}/IStoreService/GetTagList/v1/?language=english`)
+      .then(body => new Map(((body as { response?: { tags?: { tagid: number, name: string }[] } }).response?.tags ?? []).map(t => [t.tagid, t.name])))
+      .catch(() => {
+        SteamClient.tagNames = null
+        return new Map<number, string>()
+      })
+    return SteamClient.tagNames
   }
 
   private async appDetails(appId: number): Promise<AppDetails | null> {
@@ -78,24 +92,34 @@ export class SteamClient {
     throw new Error('the Steam Store is limiting requests; try again in a few minutes')
   }
 
-  /** The first portrait cover URL that exists, or undefined. */
-  private async portrait(appId: number): Promise<string | undefined> {
+  /** The first portrait cover URL that exists (or undefined), and the store's player tags. */
+  private async storeItem(appId: number): Promise<{ portrait?: string, tags?: string[] }> {
     let format: string | undefined
     let capsule: string | undefined
+    let tags: string[] | undefined
     try {
       const input = JSON.stringify({
         ids: [{ appid: appId }],
         context: { language: 'english', country_code: 'US' },
-        data_request: { include_assets: true },
+        data_request: { include_assets: true, include_tag_count: 20 },
       })
       const body = await this.getJson(`${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(input)}`) as
-        { response?: { store_items?: { assets?: { asset_url_format?: string, library_capsule?: string } }[] } }
-      const assets = body.response?.store_items?.[0]?.assets
-      format = assets?.asset_url_format
-      capsule = assets?.library_capsule
+        { response?: { store_items?: { assets?: { asset_url_format?: string, library_capsule?: string }, tagids?: number[] }[] } }
+      const found = body.response?.store_items?.[0]
+      format = found?.assets?.asset_url_format
+      capsule = found?.assets?.library_capsule
+      if (found?.tagids?.length) {
+        const names = await this.tagNames()
+        tags = found.tagids.map(id => names.get(id)).filter((name): name is string => Boolean(name))
+      }
     } catch {
       // fall back to the usual addresses
     }
+    return { portrait: await this.portraitAt(appId, format, capsule), tags }
+  }
+
+  /** The first portrait cover URL that exists, or undefined. */
+  private async portraitAt(appId: number, format: string | undefined, capsule: string | undefined): Promise<string | undefined> {
     for (const url of portraitCandidates(appId, format, capsule)) {
       try {
         const res = await requestUrl({ url, method: 'HEAD', throw: false })

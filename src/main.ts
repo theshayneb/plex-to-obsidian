@@ -37,6 +37,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
+      id: 'check-genres',
+      name: 'Check genres of existing notes',
+      callback: () => {
+        void this.checkGenres()
+      },
+    })
+
+    this.addCommand({
       id: 'add-new',
       name: 'Add something new (not in Plex or Steam)',
       callback: () => {
@@ -102,6 +110,38 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (file instanceof TFile) await this.app.workspace.getLeaf(false).openFile(file)
     } catch (err) {
       new Notice(`Couldn't add it: ${errorMessage(err)}`, 10000)
+    }
+  }
+
+  /**
+   * Compares the genres in every existing note with its source's (kept ones only) and asks about
+   * each difference. Slow: every item's full details are fetched, Steam's spaced out.
+   */
+  async checkGenres(): Promise<void> {
+    if (this.plexSyncRunning) {
+      new Notice('Media sync is already running')
+      return
+    }
+    this.plexSyncRunning = true
+    const notice = new Notice('Starting…', 0)
+    try {
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+        .run(message => notice.setMessage(message), 'genres')
+      notice.hide()
+      const parts = [`Changed genres in ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
+      if (result.keptLinks) parts.push(`${result.keptLinks} kept as they were`)
+      if (result.declined) parts.push(`${result.declined} skipped`)
+      if (result.stopped) parts.push('stopped')
+      if (result.failed.length) {
+        parts.push(`${result.failed.length} failed`)
+        console.error('Media import and sync: failed items', result.failed)
+      }
+      new Notice(parts.join(', '), 8000)
+    } catch (err) {
+      notice.hide()
+      new Notice(`Checking genres failed: ${errorMessage(err)}`, 10000)
+    } finally {
+      this.plexSyncRunning = false
     }
   }
 

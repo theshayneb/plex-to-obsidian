@@ -665,6 +665,33 @@ describe('PlexSync', () => {
     expect(requests.filter(r => r.action === 'change')).toEqual([])
   })
 
+  it('checks the genres of existing notes, always asking, and keeps only kept genres', async () => {
+    const { app, frontmatter, files } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Genre: ['Drama', 'Family', 'Sci-Fi', 'Mystery'] },
+      'Media/Movies/Heat (1995).md': { Genre: ['Crime'] },
+    })
+    const settings = settingsWith({ askBeforeChanges: false, allowedGenres: ['Sci-Fi', 'Crime', 'Mystery'] })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'genres')
+
+    // Arrival: its own kept genres (Sci-Fi, Mystery) plus Plex's kept ones (Sci-Fi). Heat already matches.
+    expect(requests.map(r => r.lines)).toEqual([[{
+      key: 'fix:Genre', label: 'Genre', current: 'Drama, Family, Sci-Fi, Mystery', value: 'Sci-Fi, Mystery', edit: 'list', items: ['Sci-Fi', 'Mystery'], unticked: false,
+    }]])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Genre).toEqual(['Sci-Fi', 'Mystery'])
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Genre).toEqual(['Crime'])
+    expect(result.corrected).toEqual(['Media/Movies/Arrival (2016).md'])
+    // Nothing else happens: no new notes, no renames.
+    expect(result.created).toEqual([])
+    expect([...files.keys()].filter(p => p.endsWith('.md')).sort()).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md'])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

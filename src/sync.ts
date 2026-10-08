@@ -20,6 +20,7 @@ import {
   isNamedAs,
   planRenames,
   plexWebLink,
+  isDocumentaryGenre,
   isSearchLink,
   itemKeys,
   ratingKeyFromLink,
@@ -34,7 +35,7 @@ import {
 } from './notes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, keepGenres, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
@@ -68,7 +69,7 @@ export interface SyncResult {
 export type ProgressFn = (message: string) => void
 
 /** 'full' creates, renames and fills in notes; 'playCounts' only refreshes play counts (and ratings, if kept up to date) in existing notes. */
-export type SyncMode = 'full' | 'playCounts'
+export type SyncMode = 'full' | 'playCounts' | 'genres'
 
 type ActiveLibrary = LibrarySetting & { target: MediaKind }
 
@@ -97,6 +98,27 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
     edit,
     items: edit === 'list' ? (value as unknown[]).map(String) : undefined,
   }
+}
+
+/** Values in a note that differ from the source's, offered to fix; `sameLength` names those offered ticked. */
+interface Checks {
+  names: string[]
+  from: Record<string, unknown>
+  to: Record<string, unknown>
+  sameLength: Set<string>
+}
+
+/** A property's value as a list: a list, or text separated by commas. */
+function listOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean)
+  if (typeof value === 'string') return value.split(',').map(v => v.trim()).filter(Boolean)
+  return []
+}
+
+/** The same genres, whatever the order or case. */
+function sameGenres(a: string[], b: string[]): boolean {
+  const key = (list: string[]) => [...new Set(list.map(g => g.toLowerCase()))].sort().join('|')
+  return a.length === b.length && key(a) === key(b)
 }
 
 interface FillPlan {
@@ -172,9 +194,12 @@ export class PlexSync {
    * Whether to go ahead with one creation or change, and which of its lines were unticked
    * (those parts are left out). Null means no.
    */
+  /** Ask before every change even with asking switched off (for "Check genres of existing notes"). */
+  private alwaysAsk = false
+
   private async ask(request: ApprovalRequest, result: SyncResult, item: PlexItem, lib: LibrarySetting): Promise<Approval | null> {
     if (result.stopped) return null
-    if (!this.settings.askBeforeChanges || !this.approve) return { excluded: new Set(), edits: {} }
+    if ((!this.settings.askBeforeChanges && !this.alwaysAsk) || !this.approve) return { excluded: new Set(), edits: {} }
     const remembered = this.approvedAll[request.action]
     if (remembered) return { excluded: remembered, edits: {} }
     const { choice, excluded, edits, mergeWith } = await this.approve(request)
@@ -256,6 +281,9 @@ export class PlexSync {
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
     const full = mode === 'full'
+    // "Check genres of existing notes": only genres, and always asked about, whatever the settings.
+    const genreCheck = mode === 'genres'
+    this.alwaysAsk = genreCheck
     if (full) {
       for (const family of FAMILIES) {
         await this.resolveAmbiguous(entries.filter(e => familyOf(e.lib) === family), indexes[family], result)
@@ -264,12 +292,12 @@ export class PlexSync {
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
     // The only values ever replaced in existing notes: play counts and ratings, each when switched on.
-    const updating: FieldSource[] = [
+    const updating: FieldSource[] = genreCheck ? [] : [
       ...this.settings.updatePlayCounts ? PLAY_SOURCES : [],
       ...this.settings.updateRatings ? RATING_SOURCES : [],
     ]
     const counting = updating.length > 0
-    if (renaming || filling || counting) {
+    if (renaming || filling || counting || genreCheck) {
       progress('Checking existing notes…')
       for (const family of FAMILIES) {
         const index = indexes[family]
@@ -312,7 +340,12 @@ export class PlexSync {
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
           const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
           const links = asking ? this.planLinks(file, item, lib) : null
-          const checks = asking ? this.planChecks(file, item, lib) : null
+          let checks: Checks | null = null
+          try {
+            checks = genreCheck ? await this.planGenres(file, item, lib, kind, progress) : asking ? this.planChecks(file, item, lib) : null
+          } catch (err) {
+            result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
+          }
           if (!renameTo && !fill && !plays && !links && !checks) continue
 
           const lines: ApprovalLine[] = []
@@ -338,7 +371,9 @@ export class PlexSync {
           }
           for (const name of checks?.names ?? []) {
             // The same length in hours or as text starts ticked; any other difference starts unticked.
-            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), value: String(checks!.to[name]), edit: 'number', unticked: !checks!.sameLength.has(name) })
+            const to = checks!.to[name]
+            const shown = typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
+            lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: !checks!.sameLength.has(name) })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -400,7 +435,7 @@ export class PlexSync {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
                 for (const name of fixNames) {
                   const edited = edits[`fix:${name}`]
-                  fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, 'number')
+                  fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, editKind(checks!.to[name]))
                 }
               })
               result.corrected.push(file.path)
@@ -826,7 +861,7 @@ export class PlexSync {
    * in the note is a different number, to offer the source's. Values you chose to keep before are
    * left alone. `sameLength` names those that are the same length in another form (hours, text).
    */
-  private planChecks(file: TFile, item: PlexItem, lib: ActiveLibrary): { names: string[], from: Record<string, unknown>, to: Record<string, number>, sameLength: Set<string> } | null {
+  private planChecks(file: TFile, item: PlexItem, lib: ActiveLibrary): Checks | null {
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
     const to: Record<string, number> = {}
@@ -844,6 +879,38 @@ export class PlexSync {
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to, sameLength } : null
+  }
+
+  /**
+   * "Check genres of existing notes": the genre properties whose value differs from the genres
+   * already there that are kept, plus the source's kept genres (its full details are fetched).
+   * Never offers to empty a property, and leaves alone values you chose to keep before.
+   */
+  private async planGenres(file: TFile, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, progress: ProgressFn): Promise<Checks | null> {
+    const mappings = lib.properties.filter(m => m.source === 'genres' && m.name.trim())
+    if (!mappings.length) return null
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    progress(`Checking genres: ${displayName(item)}…`)
+    // Without the library, a game's lookup skips HowLongToBeat and covers: only genres are wanted.
+    const full = await this.fullItem(item)
+    const allowed = this.settings.allowedGenres
+    const source = sourceValue('genres', full, { kind, link: '', image: null, values: lib.values, genres: allowed })
+    const fromSource = Array.isArray(source) ? source : []
+    const to: Record<string, unknown> = {}
+    for (const m of mappings) {
+      const name = m.name.trim()
+      const current = listOf(from[name])
+      const proposed = allowed.length ? keepGenres(current, allowed) : [...current]
+      for (const genre of fromSource) {
+        if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
+      }
+      const wanted = kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed
+      if (!wanted.length || sameGenres(current, wanted)) continue
+      if (this.settings.keptValues[`${item.ratingKey}|${name}`] === String(from[name])) continue
+      to[name] = wanted
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to, sameLength: new Set(names) } : null
   }
 
   /**

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.38] - 2026-10-08
+
+### Added
+- **Check genres of existing notes** (command): goes through every note matched to a Plex item or Steam game, compares its Genre with the source's, and shows the "Change this note?" pop-up where they differ. The genres offered are the note's own that are in **Genres to keep**, plus the source's that are (Steam's store tags included). So unwanted genres drop out and missing ones are added. Remove any with ×, or untick to keep the note's as they are, and it won't be asked about again. It always asks, even with "Ask before every change" off, and changes nothing but genres. It's slow, because each item's full details are fetched (Steam's spaced out, about one game every second and a half), so it's a command rather than part of every sync.
+
 ## [0.0.37] - 2026-10-08
 
 ### Added

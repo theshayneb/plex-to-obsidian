@@ -110,11 +110,6 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
 /** Sources holding an image. */
 const IMAGE_SOURCES: FieldSource[] = ['poster', 'wideImage']
 
-/** A rating for the approval pop-up, on your emoji scale. */
-function stars(n: number): string {
-  return ratingLabel(n)
-}
-
 /** Values in a note that differ from the source's, offered to fix; `sameLength` names those offered ticked. */
 interface Checks {
   names: string[]
@@ -416,7 +411,7 @@ export class PlexSync {
             lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
           }
           if (toPlex) {
-            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? stars(rating!.plex) : null, value: stars(toPlex), unticked: genreCheck || !this.settings.tickDifferences })
+            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, lib.target === 'music') : null, value: ratingLabel(toPlex, lib.target === 'music'), unticked: genreCheck || !this.settings.tickDifferences })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -729,7 +724,7 @@ export class PlexSync {
     const names = lib.properties.filter(m => RATING_SOURCES.includes(m.source) && m.name.trim()).map(m => m.name.trim())
     if (!names.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    const note = names.map(name => noteStars(from[name])).find(value => value !== null) ?? null
+    const note = names.map(name => noteStars(from[name], lib.target === 'music')).find(value => value !== null) ?? null
     const plex = userStars(item) ?? 0
     return { names, note, plex, direction: ratingDirection(note, plex, this.settings.ratingsSeen[item.ratingKey]) }
   }

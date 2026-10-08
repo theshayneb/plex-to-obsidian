@@ -133,6 +133,8 @@ describe('sourceValue', () => {
     expect(value('userRatingEmoji', rated(10))).toBe('🩷')
     expect(value('userRatingEmoji', rated(3))).toBe('⭐')
     expect(value('userRatingEmoji', rated(0))).toBeUndefined()
+    expect(value('userRatingEmoji', rated(6), { ...ctx, kind: 'music' })).toBe('⭐⭐⭐')
+    expect(value('userRatingEmoji', rated(10), { ...ctx, kind: 'music' })).toBe('⭐⭐⭐⭐⭐')
     expect(value('userRatingEmoji', rated(undefined))).toBeUndefined()
   })
 
@@ -234,6 +236,10 @@ describe('ratings both ways', () => {
     expect(noteStars('💣')).toBe(1)
     expect(noteStars('⭐⭐⭐⭐')).toBe(4)
     expect(noteStars('⭐⭐⭐⭐⭐')).toBe(5)
+    // Music: plain stars, one per two points in Plex.
+    expect(noteStars('⭐', true)).toBe(1)
+    expect(noteStars('⭐⭐⭐', true)).toBe(3)
+    expect(noteStars('⭐⭐⭐⭐⭐', true)).toBe(5)
     expect(noteStars('🩷')).toBe(5)
     expect(noteStars('2')).toBe(2)
     expect(noteStars('')).toBeNull()

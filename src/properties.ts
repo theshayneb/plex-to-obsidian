@@ -270,14 +270,15 @@ export function userStars(item: PlexItem): number | undefined {
  */
 const RATING_EMOJI = ['', '💣', '⭐', '⭐⭐', '⭐⭐⭐', '🩷']
 
-/** A rating level for the approval pop-up: the emoji, and what Plex stores for it (out of 10). */
-export function ratingLabel(level: number): string {
-  return `${RATING_EMOJI[Math.min(5, level)] ?? level} (${Math.min(5, level) * 2} in Plex)`
+/** A rating level for the approval pop-up: as written in notes, and what Plex stores for it (out of 10). */
+export function ratingLabel(level: number, plainStars = false): string {
+  return `${starEmoji(level, plainStars) ?? level} (${Math.min(5, level) * 2} in Plex)`
 }
 
-function starEmoji(stars: number | undefined): string | undefined {
+/** A rating level as written in notes: your emoji scale, or (music) plain stars, one per two points in Plex. */
+function starEmoji(stars: number | undefined, plainStars = false): string | undefined {
   if (!stars) return undefined
-  return RATING_EMOJI[Math.min(5, stars)]
+  return plainStars ? '⭐'.repeat(Math.min(5, stars)) : RATING_EMOJI[Math.min(5, stars)]
 }
 
 /** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
@@ -287,14 +288,19 @@ function hours(minutes: number | undefined): number {
 }
 
 /**
- * A rating as written in a note, in stars (1–5): a number, or stars as emoji ("⭐⭐⭐", "🩷" for
+ * A rating as written in a note, in levels (1–5): a number, plain stars for music (`plainStars`), or the emoji scale ("⭐⭐⭐", "🩷" for
  * five). Null when there's none.
  */
-export function noteStars(value: unknown): number | null {
+export function noteStars(value: unknown, plainStars = false): number | null {
   if (typeof value === 'number') return value > 0 ? Math.min(5, Math.round(value)) : null
   if (typeof value !== 'string' || !value.trim()) return null
   if (value.includes('🩷')) return 5
   if (value.includes('💣')) return 1
+  if (plainStars) {
+    // Music: one star per two points in Plex.
+    const count = [...value].filter(c => c === '⭐').length
+    if (count) return Math.min(5, count)
+  }
   // ⭐ is level 2, ⭐⭐ 3, ⭐⭐⭐ 4. From the five-star scale (song notes): ⭐⭐⭐⭐ is 4 too, ⭐⭐⭐⭐⭐ 5.
   const stars = [...value].filter(c => c === '⭐').length
   if (stars >= 5) return 5
@@ -427,7 +433,8 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'criticRating': return item.rating
     case 'audienceRating': return item.audienceRating
     case 'userRating': return userStars(item)
-    case 'userRatingEmoji': return starEmoji(userStars(item))
+    // Music ratings are plain stars (⭐ to ⭐⭐⭐⭐⭐); everything else uses the emoji scale.
+    case 'userRatingEmoji': return starEmoji(userStars(item), ctx.kind === 'music')
     case 'addedAt': return localDate(item.addedAt)
     case 'lastViewedAt': return localDate(item.lastViewedAt)
     case 'viewCount': return playCount(item)

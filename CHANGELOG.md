@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.57] - 2026-10-08
+
+### Changed
+- Music libraries rate in plain stars, one per two points in Plex: ⭐ (Plex 1–2), ⭐⭐ (3–4), ⭐⭐⭐ (5–6), ⭐⭐⭐⭐ (7–8), ⭐⭐⭐⭐⭐ (9–10), both when writing song notes and when reading them (to send to Plex or compare). Everything else keeps 💣 ⭐ ⭐⭐ ⭐⭐⭐ 🩷.
+
 ## [0.0.56] - 2026-10-08
 
 ### Changed

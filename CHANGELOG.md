@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.60] - 2026-10-08
+
+### Added
+- Book notes get their ratings converted to the star scale too, in "Check existing notes against sources": every book note with a rating in the earlier scale is offered the same rating as 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷, whether or not Open Library finds the book, and whatever properties are ticked for the check. The rating property is the Books library's, or the name your other libraries use for theirs (such as "Rating").
+
 ## [0.0.59] - 2026-10-08
 
 ### Changed

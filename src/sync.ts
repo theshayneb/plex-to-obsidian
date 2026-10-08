@@ -110,6 +110,13 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
 /** Sources holding an image. */
 const IMAGE_SOURCES: FieldSource[] = ['poster', 'wideImage']
 
+/** A note's ratings in an older scale, and the same ratings in the star scale, to offer. */
+interface Rescale {
+  names: string[]
+  from: Record<string, unknown>
+  to: Record<string, string>
+}
+
 /** Values in a note that differ from the source's, offered to fix; `sameLength` names those offered ticked. */
 interface Checks {
   names: string[]
@@ -418,9 +425,7 @@ export class PlexSync {
             const shown = to === POSTER_PREVIEW ? { value: POSTER_PREVIEW } : typeof to === 'number' ? { value: String(to), edit: 'number' as const } : editable(to)
             lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
           }
-          for (const name of rescale?.names ?? []) {
-            lines.push({ key: `rescale:${name}`, label: name, current: describeValue(rescale!.from[name]), value: rescale!.to[name], edit: 'text', unticked: !this.settings.tickDifferences })
-          }
+          lines.push(...this.rescaleLines(rescale))
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), unticked: genreCheck || !this.settings.tickDifferences })
           }
@@ -430,7 +435,6 @@ export class PlexSync {
           const sending = Boolean(toPlex) && !excluded.has('plexRating')
           // Reviewed either way: ticked, the note gets the star scale; unticked, its rating already is.
           const rescaleNames = (rescale?.names ?? []).filter(name => !excluded.has(`rescale:${name}`))
-          if (rescale) this.reviewRating(item.ratingKey)
           if (toPlex && !sending) {
             // Plex's rating is to stay as it is: don't offer this note's rating again while it's the same.
             this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
@@ -528,15 +532,7 @@ export class PlexSync {
                 this.reviewRating(item.ratingKey)
               }
             }
-            if (rescaleNames.length) {
-              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of rescaleNames) {
-                  const edited = edits[`rescale:${name}`]
-                  fm[name] = typeof edited === 'string' ? edited.trim() : rescale!.to[name]
-                }
-              })
-              result.corrected.push(file.path)
-            }
+            if (await this.applyRescale(file, item.ratingKey, rescale, excluded, edits)) result.corrected.push(file.path)
             if (sending && toPlex) {
               await this.plex!.rate(item.ratingKey, toPlex * 2)
               this.seeRating(item.ratingKey, toPlex)
@@ -756,12 +752,15 @@ export class PlexSync {
    * (read in its old scale) as 💣, ⭐⭐ to ⭐⭐⭐⭐ or 🩷, to offer. A note already written that way is
    * marked reviewed without asking.
    */
-  private planRescale(file: TFile, item: PlexItem, lib: LibrarySetting): { names: string[], from: Record<string, unknown>, to: Record<string, string> } | null {
-    if (this.settings.ratingsReviewed[item.ratingKey]) return null
+  private planRescale(file: TFile, item: PlexItem, lib: LibrarySetting): Rescale | null {
     const names = lib.properties.filter(m => m.source === 'userRatingEmoji' && m.name.trim()).map(m => m.name.trim())
-    if (!names.length) return null
+    return this.planRescaleOf(file, item.ratingKey, names, this.noteScale(item.ratingKey, lib))
+  }
+
+  /** As `planRescale`, for these properties of a note (by its key), written in `old` until reviewed. */
+  private planRescaleOf(file: TFile, noteKey: string, names: string[], old: RatingScale): Rescale | null {
+    if (this.settings.ratingsReviewed[noteKey] || !names.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    const old = this.noteScale(item.ratingKey, lib)
     const to: Record<string, string> = {}
     for (const name of names) {
       const current: unknown = from[name]
@@ -771,10 +770,30 @@ export class PlexSync {
     }
     const changed = Object.keys(to)
     if (!changed.length) {
-      this.reviewRating(item.ratingKey)
+      this.reviewRating(noteKey)
       return null
     }
     return { names: changed, from, to }
+  }
+
+  /** The approval pop-up's lines for a rescale. */
+  private rescaleLines(rescale: Rescale | null): ApprovalLine[] {
+    return (rescale?.names ?? []).map(name => ({ key: `rescale:${name}`, label: name, current: describeValue(rescale!.from[name]), value: rescale!.to[name], edit: 'text' as const, unticked: !this.settings.tickDifferences }))
+  }
+
+  /** Writes the rescaled ratings that were left ticked (as edited), and marks the note reviewed either way. */
+  private async applyRescale(file: TFile, noteKey: string, rescale: Rescale | null, excluded: Set<string>, edits: Record<string, string | string[]>): Promise<boolean> {
+    if (!rescale) return false
+    this.reviewRating(noteKey)
+    const names = rescale.names.filter(name => !excluded.has(`rescale:${name}`))
+    if (!names.length) return false
+    await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+      for (const name of names) {
+        const edited = edits[`rescale:${name}`]
+        fm[name] = typeof edited === 'string' ? edited.trim() : rescale.to[name]
+      }
+    })
+    return true
   }
 
   private seeRating(ratingKey: string, stars: number): void {
@@ -843,24 +862,11 @@ export class PlexSync {
     if (fill?.imageProperty) {
       lines.push({ key: `add:${fill.imageProperty}`, label: fill.imageProperty, current: describeValue(now[fill.imageProperty]), value: POSTER_PREVIEW })
     }
-    for (const name of rescale?.names ?? []) {
-      lines.push({ key: `rescale:${name}`, label: name, current: describeValue(rescale!.from[name]), value: rescale!.to[name], edit: 'text', unticked: !this.settings.tickDifferences })
-    }
+    lines.push(...this.rescaleLines(rescale))
     const approval = await this.ask({ action: 'change', path, lines, position, total }, result, item, lib)
     if (!approval) return
     const { excluded, edits } = approval
-    if (rescale) {
-      this.reviewRating(item.ratingKey)
-      const rescaled = rescale.names.filter(name => !excluded.has(`rescale:${name}`))
-      if (rescaled.length) {
-        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-          for (const name of rescaled) {
-            const edited = edits[`rescale:${name}`]
-            fm[name] = typeof edited === 'string' ? edited.trim() : rescale.to[name]
-          }
-        })
-      }
-    }
+    await this.applyRescale(file, item.ratingKey, rescale, excluded, edits)
     if (!fill) return
     fill = {
       ...fill,
@@ -1152,7 +1158,11 @@ export class PlexSync {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
-    if (!mappings.length) return
+    // Book ratings are converted to the star scale too: the Books library's rating property, or the
+    // name the other libraries give theirs (book notes may have one the plugin doesn't fill in).
+    const ratingNames = [...new Set(Object.values(this.settings.libraries).flatMap(l => l.properties)
+      .filter(m => m.source === 'userRatingEmoji' && m.name.trim()).map(m => m.name.trim()))]
+    if (!mappings.length && !ratingNames.length) return
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
     const folder = normalizePath(lib.folder)
@@ -1164,11 +1174,26 @@ export class PlexSync {
       const noteKey = `book:${file.path}`
       if (noteKey in this.settings.ignored) continue
       const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const rescale = this.planRescaleOf(file, noteKey, ratingNames, 'emoji')
+      const asItem: PlexItem = { ratingKey: noteKey, type: 'book', title: file.basename }
+      // A book nothing can be found for still gets its rating converted.
+      const rescaleOnly = async (): Promise<void> => {
+        if (!rescale) return
+        const approval = await this.ask({ action: 'change', path: file.path, lines: this.rescaleLines(rescale), position, total: files.length }, result, asItem, lib)
+        if (!approval) return
+        if (await this.applyRescale(file, noteKey, rescale, approval.excluded, approval.edits)) result.corrected.push(file.path)
+        else result.declined++
+      }
       const link: unknown = linkProp ? from[linkProp] : undefined
       const linked = ratingKeyFromLink(link)
       const work = linked?.startsWith('ol-') ? linked.slice(3) : null
       if (!work && noteKey in this.settings.keptLinks) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
+        await rescaleOnly()
+        continue
+      }
+      if (!mappings.length) {
+        await rescaleOnly()
         continue
       }
       let book: PlexItem | null
@@ -1180,15 +1205,17 @@ export class PlexSync {
         book = await lookUpBook({ work, title, author: authors[0] }, this.settings.googleBooksKey ?? '')
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
+        await rescaleOnly()
         continue
       }
       if (!book) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
+        await rescaleOnly()
         continue
       }
       const searched = !work
-      const checks = this.compareNote(file, book, lib, 'book', mappings, noteKey)
-      const lines: ApprovalLine[] = []
+      const checks = this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
+      const lines: ApprovalLine[] = this.rescaleLines(rescale)
       for (const name of checks?.names ?? []) {
         const offer = checks!.to[name]
         const shown = typeof offer === 'number' ? { value: String(offer), edit: 'number' as const } : editable(offer)
@@ -1201,13 +1228,13 @@ export class PlexSync {
       }
       if (!lines.length) continue
 
-      const note = searched
+      const note = searched && (checks || newLink)
         ? `Found on Open Library: ${book.title}${book.authors?.length ? ` by ${book.authors.join(', ')}` : ''}${book.year ? `, ${book.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
         : undefined
-      const asItem: PlexItem = { ratingKey: noteKey, type: 'book', title: file.basename }
       const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total: files.length }, result, asItem, lib)
       if (!approval) continue
       const { excluded, edits } = approval
+      const rescaled = await this.applyRescale(file, noteKey, rescale, excluded, edits)
       const offered = new Map<string, unknown>([...(checks?.names ?? []).map((n): [string, unknown] => [n, checks!.to[n]]), ...(newLink && linkProp ? [[linkProp, newLink] as [string, unknown]] : [])])
       const apply = [...offered.keys()].filter(name => !excluded.has(`fix:${name}`))
       for (const name of [...offered.keys()].filter(n => excluded.has(`fix:${n}`))) {
@@ -1220,7 +1247,8 @@ export class PlexSync {
         result.keptLinks++
       }
       if (!apply.length) {
-        result.declined++
+        if (rescaled) result.corrected.push(file.path)
+        else result.declined++
         continue
       }
       try {

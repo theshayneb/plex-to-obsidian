@@ -988,6 +988,39 @@ describe('PlexSync', () => {
     expect(requested.some(u => u.includes('/:/rate?key=2') && u.endsWith('rating=4'))).toBe(true)
   })
 
+  it('offers book ratings in the star scale in a check, found on Open Library or not', async () => {
+    steamResponses = {
+      'https://openlibrary.org/search.json?q=': { docs: [{ key: '/works/OL1W', title: 'Dune' }] },
+      'https://openlibrary.org/search.json?title=': { docs: [] },
+    }
+    const { app, frontmatter } = makeApp({
+      'Media/Books/Dune.md': { Rating: '⭐⭐', Link: 'https://openlibrary.org/works/OL1W' },
+      'Media/Books/My zine.md': { Rating: '⭐' },
+      'Media/Books/Bad book.md': { Rating: '💣' },
+    })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
+    expect(requests.map(r => [r.path, r.lines.map(l => [l.key, l.current, l.value])]).sort()).toEqual([
+      ['Media/Books/Dune.md', [['rescale:Rating', '⭐⭐', '⭐⭐⭐']]],
+      // Not on Open Library: its rating is still converted.
+      ['Media/Books/My zine.md', [['rescale:Rating', '⭐', '⭐⭐']]],
+    ])
+    expect(frontmatter.get('Media/Books/Dune.md')!.Rating).toBe('⭐⭐⭐')
+    expect(frontmatter.get('Media/Books/My zine.md')!.Rating).toBe('⭐⭐')
+    // 💣 is one star in both scales: nothing to offer, just marked reviewed.
+    expect(settings.ratingsReviewed).toMatchObject({ 'book:Media/Books/Dune.md': true, 'book:Media/Books/My zine.md': true, 'book:Media/Books/Bad book.md': true })
+    expect(result.unmatched).toContain('Media/Books/My zine.md')
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

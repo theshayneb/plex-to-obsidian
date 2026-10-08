@@ -157,7 +157,9 @@ export async function lookUpBook(by: { work?: string | null, title?: string, aut
 export async function googleBooksSummary(book: PlexItem, key = ''): Promise<string | undefined> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
   const search = async (q: string, byIsbn: boolean) => {
-    const body = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books${withKey}`) as { items?: GoogleVolume[] }
+    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books${withKey}`)
+    if (res.status >= 400) throw new Error(`Google Books returned ${res.status}`)
+    const body = res.json as { items?: GoogleVolume[] }
     return googleDescription(body.items, book.title, byIsbn)
   }
   try {
@@ -175,13 +177,37 @@ export async function googleBooksSummary(book: PlexItem, key = ''): Promise<stri
   }
 }
 
+/**
+ * A Google Books request, tried again (after 1.5 and 4 seconds) when Google says it's busy (503)
+ * or limiting requests (429), which happens most to requests without a key.
+ */
+async function googleBooksGet(url: string): Promise<{ status: number, json: unknown }> {
+  let res = await requestUrl({ url, throw: false })
+  for (const wait of [1500, 4000]) {
+    if (res.status !== 503 && res.status !== 429) break
+    await new Promise(resolve => window.setTimeout(resolve, wait))
+    res = await requestUrl({ url, throw: false })
+  }
+  return res as { status: number, json: unknown }
+}
+
 /** Tries Google Books (with the key, if one is given) for the settings' Test button. Returns what to tell the user. */
 export async function testGoogleBooks(key: string): Promise<string> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
   try {
-    const res = await requestUrl({ url: `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('isbn:9780441172719')}${withKey}`, throw: false })
+    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('isbn:9780441172719')}${withKey}`)
+    if (res.status === 503 || res.status === 429) {
+      return key.trim()
+        ? `Google Books is busy (${res.status}), even after trying again. Try again in a few minutes; until then book summaries come from Open Library.`
+        : `Google Books is busy (${res.status}), even after trying again. Without a key, everyone shares a small allowance, so this happens often: add a free API key (Google Cloud console, with the Books API enabled) and test again. Until then book summaries come from Open Library.`
+    }
     if (res.status >= 400) {
-      const reason = (res.json as { error?: { message?: string } } | null)?.error?.message
+      let reason: string | undefined
+      try {
+        reason = (res.json as { error?: { message?: string } } | null)?.error?.message
+      } catch {
+        // not JSON
+      }
       return `Google Books refused${key.trim() ? ' the key' : ''} (${res.status}${reason ? `: ${reason}` : ''}).`
     }
     const found = ((res.json as { items?: unknown[] } | null)?.items ?? []).length

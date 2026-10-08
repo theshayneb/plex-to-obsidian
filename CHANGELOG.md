@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.53] - 2026-10-08
+
+### Fixed
+- Google Books: when it answers "busy" (503) or "too many requests" (429), which happens most without an API key, the plugin waits and tries again twice before giving up (book summaries then come from Open Library, as before). The Test button now says what that means, and suggests adding a free key when there's none.
+
 ## [0.0.52] - 2026-10-08
 
 ### Changed

@@ -174,3 +174,19 @@ export async function googleBooksSummary(book: PlexItem, key = ''): Promise<stri
     return undefined
   }
 }
+
+/** Tries Google Books (with the key, if one is given) for the settings' Test button. Returns what to tell the user. */
+export async function testGoogleBooks(key: string): Promise<string> {
+  const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
+  try {
+    const res = await requestUrl({ url: `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('isbn:9780441172719')}${withKey}`, throw: false })
+    if (res.status >= 400) {
+      const reason = (res.json as { error?: { message?: string } } | null)?.error?.message
+      return `Google Books refused${key.trim() ? ' the key' : ''} (${res.status}${reason ? `: ${reason}` : ''}).`
+    }
+    const found = ((res.json as { items?: unknown[] } | null)?.items ?? []).length
+    return `Google Books works${key.trim() ? ' with the key' : ' (no key)'}: ${found ? 'found a test book' : 'it answered, but found nothing for a test book'}.`
+  } catch (err) {
+    return `Couldn't reach Google Books: ${err instanceof Error ? err.message : String(err)}`
+  }
+}

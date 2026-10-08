@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.50] - 2026-10-08
+
+### Added
+- A way to check every connection in Setup, like Steam's: **Check Plex** (connects with the server address and token, and says how many libraries it found), and **Test** buttons for the SteamGridDB API key and the Google Books API key (Google Books can be tested with no key, too). OMDb already had one.
+
 ## [0.0.49] - 2026-10-08
 
 ### Changed

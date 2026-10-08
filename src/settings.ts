@@ -1,7 +1,8 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import { cleanOmdbKey } from './discover-data'
-import { testOmdbKey } from './discover'
+import { testGoogleBooks, testOmdbKey } from './discover'
+import { steamGridCovers } from './steamgriddb'
 import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
@@ -124,6 +125,26 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             await this.save()
           })
       })
+
+    new Setting(el)
+      .setName('Check Plex')
+      .setDesc('Connects to the server with the address and token, to check them.')
+      .addButton(button => button
+        .setButtonText('Check')
+        .onClick(async () => {
+          button.setDisabled(true)
+          try {
+            if (!settings.serverUrl || !settings.token) throw new Error('enter the server address and token first')
+            const plex = new PlexClient(settings.serverUrl, settings.token)
+            await plex.machineIdentifier()
+            const libraries = await plex.libraries()
+            new Notice(`Plex: connected, ${libraries.length} librar${libraries.length === 1 ? 'y' : 'ies'} found`, 8000)
+          } catch (err) {
+            new Notice(`Plex: ${errorMessage(err)}`, 10000)
+          } finally {
+            button.setDisabled(false)
+          }
+        }))
 
     this.displaySteam(el)
     this.displayOtherSources(el)
@@ -537,6 +558,22 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           await this.save()
         })
       })
+      .addButton(button => button.setButtonText('Test').onClick(async () => {
+        const key = (steam.gridKey ?? '').trim()
+        if (!key) {
+          new Notice('Paste your SteamGridDB API key first')
+          return
+        }
+        button.setDisabled(true)
+        try {
+          const covers = await steamGridCovers(key, 620)
+          new Notice(`SteamGridDB: the key works (${covers.length} covers for Portal 2)`, 8000)
+        } catch (err) {
+          new Notice(`SteamGridDB: ${errorMessage(err)}`, 10000)
+        } finally {
+          button.setDisabled(false)
+        }
+      }))
     new Setting(containerEl)
       .setName('Steam folder')
       .setDesc('Desktop only, for the "Games: your Steam collections" source: where Steam is installed on this computer, if it isn\'t in the usual place (Program Files on Windows, Application Support on a Mac). Your collections are read from Steam\'s own files there.')
@@ -603,6 +640,11 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           settings.googleBooksKey = value.trim()
           await this.save()
         }))
+      .addButton(button => button.setButtonText('Test').onClick(async () => {
+        button.setDisabled(true)
+        new Notice(await testGoogleBooks(settings.googleBooksKey ?? ''), 10_000)
+        button.setDisabled(false)
+      }))
   }
 
   /** Items tied to existing notes with "Use an existing note", each with a button to undo it. */

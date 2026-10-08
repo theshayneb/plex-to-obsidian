@@ -270,9 +270,12 @@ export function userStars(item: PlexItem): number | undefined {
  */
 const RATING_EMOJI = ['', '💣', '⭐', '⭐⭐', '⭐⭐⭐', '🩷']
 
-/** A rating level for the approval pop-up: as written in notes, and what Plex stores for it (out of 10). */
-export function ratingLabel(level: number, plainStars = false): string {
-  return `${starEmoji(level, plainStars) ?? level} (${Math.min(5, level) * 2} in Plex)`
+/**
+ * A rating for the approval pop-up: as written in notes, and the stars Plex shows for it (out of
+ * five, halves included). `plexStars` is Plex's own when it differs from the level's (say, 3.5).
+ */
+export function ratingLabel(level: number, plainStars = false, plexStars = Math.min(5, level)): string {
+  return `${starEmoji(level, plainStars) ?? level} (${plexStars} star${plexStars === 1 ? '' : 's'} in Plex)`
 }
 
 /** A rating level as written in notes: your emoji scale, or (music) plain stars, one per two points in Plex. */

@@ -392,8 +392,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
-      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐ (8 in Plex)', unticked: false }]],
-      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐ (8 in Plex)', value: '⭐ (4 in Plex)', unticked: false }]],
+      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐ (4 stars in Plex)', unticked: false }]],
+      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐ (4 stars in Plex)', value: '⭐ (2 stars in Plex)', unticked: false }]],
     ])
     expect(requested.filter(u => u.includes('/:/rate'))).toEqual([
       'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=8',
@@ -955,7 +955,7 @@ describe('PlexSync', () => {
       ['fix:Rating', '4', true],
       ['fix:tags', 'favourites, movie', false],
       ['fix:Image', 'poster downloaded from Plex', false],
-      ['plexRating', '⭐ (4 in Plex)', true],
+      ['plexRating', '⭐ (2 stars in Plex)', true],
     ])
     expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({ Rating: 2, tags: ['favourites', 'movie'], Image: '[[Media/Movies/Images/Heat (1995).jpg]]' })
     expect(binaries).toContain('Media/Movies/Images/Heat (1995).jpg')

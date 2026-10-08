@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -265,5 +265,14 @@ describe('fictionOnlyAlone', () => {
     expect(fictionOnlyAlone(['Fiction', 'Fantasy'])).toEqual(['Fantasy'])
     expect(fictionOnlyAlone(['fiction'])).toEqual(['fiction'])
     expect(fictionOnlyAlone([])).toEqual([])
+  })
+})
+
+describe('ratingLabel', () => {
+  it('says how many stars Plex shows', () => {
+    expect(ratingLabel(1)).toBe('💣 (1 star in Plex)')
+    expect(ratingLabel(4)).toBe('⭐⭐⭐ (4 stars in Plex)')
+    expect(ratingLabel(4, false, 3.5)).toBe('⭐⭐⭐ (3.5 stars in Plex)')
+    expect(ratingLabel(3, true)).toBe('⭐⭐⭐ (3 stars in Plex)')
   })
 })

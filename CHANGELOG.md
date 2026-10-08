@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.58] - 2026-10-08
+
+### Changed
+- The approval pop-up shows ratings with the stars Plex displays for them, out of five, e.g. "⭐⭐ (3 stars in Plex)", instead of Plex's number out of 10. Your current Plex rating shows its half stars too ("3.5 stars in Plex").
+
 ## [0.0.57] - 2026-10-08
 
 ### Changed

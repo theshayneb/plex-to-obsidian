@@ -411,7 +411,7 @@ export class PlexSync {
             lines.push({ key: `fix:${name}`, label: name, current: describeValue(checks!.from[name]), ...shown, unticked: Boolean(checks!.yours?.has(name)) || (!this.settings.tickDifferences && !checks!.sameLength.has(name)) })
           }
           if (toPlex) {
-            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, lib.target === 'music') : null, value: ratingLabel(toPlex, lib.target === 'music'), unticked: genreCheck || !this.settings.tickDifferences })
+            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, lib.target === 'music', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex, lib.target === 'music'), unticked: genreCheck || !this.settings.tickDifferences })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue

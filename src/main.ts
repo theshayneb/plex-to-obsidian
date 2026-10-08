@@ -127,6 +127,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`filled in ${result.filled.length}`)
         console.log('Media import and sync: filled in', result.filled)
       }
+      if (result.links.length) {
+        parts.push(`fixed ${result.links.length} link${result.links.length === 1 ? '' : 's'}`)
+        console.log('Media import and sync: replaced links', result.links)
+      }
       if (result.merged.length) {
         parts.push(`matched ${result.merged.length} to existing notes`)
         console.log('Media import and sync: matched to existing notes', result.merged)

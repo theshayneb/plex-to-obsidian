@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isSearchLink,
   defaultLibraryTarget,
   addToIndex,
   emptyIndex,
@@ -190,5 +191,16 @@ describe('isNamedAs', () => {
     expect(isNamedAs('Airbag 2', 'Airbag')).toBe(true)
     expect(isNamedAs('Airbag live', 'Airbag')).toBe(false)
     expect(isNamedAs('Airbag2', 'Airbag')).toBe(false)
+  })
+})
+
+describe('isSearchLink', () => {
+  it('knows search pages from item pages', () => {
+    expect(isSearchLink('https://store.steampowered.com/search/?term=Wildermyth')).toBe(true)
+    expect(isSearchLink('[https://store.steampowered.com/search/?term=](https://store.steampowered.com/search/?term=Wildermyth)')).toBe(true)
+    expect(isSearchLink('https://www.google.com/search?q=hades')).toBe(true)
+    expect(isSearchLink('https://store.steampowered.com/app/620/Portal_2/')).toBe(false)
+    expect(isSearchLink('https://howlongtobeat.com/game/62941')).toBe(false)
+    expect(isSearchLink(undefined)).toBe(false)
   })
 })

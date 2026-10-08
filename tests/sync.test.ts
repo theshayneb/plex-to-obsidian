@@ -563,6 +563,49 @@ describe('PlexSync', () => {
     expect(requested.some(u => u.includes('appdetails'))).toBe(false)
   })
 
+  it('offers the right link for a note linking elsewhere: search links ticked, others unticked and remembered', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [
+        { appid: 763890, name: 'Wildermyth', playtime_forever: 0 },
+        { appid: 1145360, name: 'Hades', playtime_forever: 0 },
+        { appid: 620, name: 'Portal 2', playtime_forever: 0 },
+      ] } },
+    }
+    const search = '[https://store.steampowered.com/search/?term=](https://store.steampowered.com/search/?term=Wildermyth)'
+    const hltb = 'https://www.pcgamingwiki.com/wiki/Hades'
+    const { app, frontmatter } = makeApp({
+      'Media/Video Games/Wildermyth.md': { Link: search },
+      'Media/Video Games/Hades.md': { Link: hltb },
+      'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/Portal_2/' },
+    })
+    const settings = settingsWith({ serverUrl: '', token: '', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    settings.libraries.steam.properties = [{ name: 'Link', source: 'plexLink' }]
+    const requests: ApprovalRequest[] = []
+    // Like pressing Apply without touching the ticks.
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+
+    expect(requests.map(r => r.path)).toEqual(['Media/Video Games/Wildermyth.md', 'Media/Video Games/Hades.md'])
+    expect(requests[0].lines).toEqual([{ key: 'link:Link', label: 'Link', current: search, value: 'https://store.steampowered.com/app/763890/', edit: 'text', unticked: false }])
+    expect(requests[1].lines[0]).toMatchObject({ key: 'link:Link', current: hltb, unticked: true })
+    expect(frontmatter.get('Media/Video Games/Wildermyth.md')!.Link).toBe('https://store.steampowered.com/app/763890/')
+    expect(frontmatter.get('Media/Video Games/Hades.md')!.Link).toBe(hltb)
+    expect(result.links).toEqual(['Media/Video Games/Wildermyth.md'])
+    expect(settings.keptLinks).toEqual({ 'steam-1145360': hltb })
+
+    // Kept links aren't offered again.
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests).toEqual([])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

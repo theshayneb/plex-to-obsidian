@@ -20,6 +20,8 @@ import {
   isNamedAs,
   planRenames,
   plexWebLink,
+  isSearchLink,
+  itemKeys,
   ratingKeyFromLink,
   renderFileName,
   sanitizeFileName,
@@ -53,6 +55,10 @@ export interface SyncResult {
   newlyIgnored: string[]
   /** Existing notes chosen with "Use an existing note" in this sync. */
   merged: string[]
+  /** Existing notes whose link was replaced with the item's own (when you ticked it). */
+  links: string[]
+  /** Links you chose to keep in this sync. */
+  keptLinks: number
   skipped: number
   failed: { title: string, error: string }[]
 }
@@ -243,7 +249,7 @@ export class PlexSync {
 
   async run(progress: ProgressFn, mode: SyncMode = 'full'): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], keptLinks: 0 }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -299,7 +305,9 @@ export class PlexSync {
             }
           }
           const plays = counting ? this.planUpdates(file, item, lib, updating) : null
-          if (!renameTo && !fill && !plays) continue
+          // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
+          const links = full && this.settings.askBeforeChanges && this.approve ? this.planLinks(file, item, lib) : null
+          if (!renameTo && !fill && !plays && !links) continue
 
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -318,9 +326,20 @@ export class PlexSync {
           for (const name of plays?.names ?? []) {
             lines.push({ key: `update:${name}`, label: name, current: describeValue(plays!.from[name]), value: String(plays!.to[name]), edit: editKind(plays!.to[name]) })
           }
+          for (const name of links?.names ?? []) {
+            // A search page is a stand-in, so replacing it starts ticked; any other link starts unticked.
+            lines.push({ key: `link:${name}`, label: name, current: describeValue(links!.from[name]), value: links!.to[name], edit: 'text', unticked: !links!.placeholders.has(name) })
+          }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
           const { excluded, edits } = approval
+          const linkNames = (links?.names ?? []).filter(name => !excluded.has(`link:${name}`))
+          // A link left unticked is yours to keep: don't offer to replace it again while it stays the same.
+          const keptLink = (links?.names ?? []).find(name => excluded.has(`link:${name}`))
+          if (keptLink) {
+            this.settings.keptLinks[item.ratingKey] = String(links!.from[keptLink])
+            result.keptLinks++
+          }
           // Leave out whatever was unticked, and use whatever was edited.
           if (excluded.has('rename')) renameTo = null
           else if (renameTo && typeof edits.rename === 'string') {
@@ -349,7 +368,7 @@ export class PlexSync {
             const edited = edits[`update:${name}`]
             return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
           }
-          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length) {
+          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length) {
             result.declined++
             continue
           }
@@ -361,6 +380,15 @@ export class PlexSync {
               addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
             }
             if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
+            if (linkNames.length) {
+              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                for (const name of linkNames) {
+                  const edited = edits[`link:${name}`]
+                  fm[name] = typeof edited === 'string' ? edited.trim() : links!.to[name]
+                }
+              })
+              result.links.push(file.path)
+            }
             if (plays && playNames.length) {
               await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
                 for (const name of playNames) fm[name] = playValue(name)
@@ -529,7 +557,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], keptLinks: 0 }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
@@ -619,9 +647,9 @@ export class PlexSync {
     }
   }
 
-  /** Saves newly ignored and merged items before handing back the result. */
+  /** Saves newly ignored and merged items, and links kept, before handing back the result. */
   private async finish(result: SyncResult): Promise<SyncResult> {
-    if (result.newlyIgnored.length || result.merged.length) await this.saveSettings()
+    if (result.newlyIgnored.length || result.merged.length || result.keptLinks) await this.saveSettings()
     return result
   }
 
@@ -765,6 +793,32 @@ export class PlexSync {
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to } : null
+  }
+
+  /**
+   * Link properties that hold a link to somewhere other than this item (say, a game's HowLongToBeat
+   * page instead of its Steam Store page), to offer the item's own link instead. A link to this item
+   * in any form (its Plex page or IMDb page for a movie) counts as right, and so does one you chose
+   * to keep before.
+   */
+  private planLinks(file: TFile, item: PlexItem, lib: ActiveLibrary): { names: string[], from: Record<string, unknown>, to: Record<string, string>, placeholders: Set<string> } | null {
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const keys = itemKeys(item)
+    const link = this.linkFor(item)
+    const to: Record<string, string> = {}
+    const placeholders = new Set<string>()
+    for (const m of lib.properties) {
+      const name = m.name.trim()
+      const current: unknown = from[name]
+      if (m.source !== 'plexLink' || !name || isBlank(current) || current === link) continue
+      const pointsAt = ratingKeyFromLink(current)
+      if (pointsAt && keys.includes(pointsAt)) continue
+      if (this.settings.keptLinks[item.ratingKey] === String(current)) continue
+      to[name] = link
+      if (isSearchLink(current)) placeholders.add(name)
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to, placeholders } : null
   }
 
   /** Where the item's Link points: its Plex page, a game's Steam Store page, or its IMDb (or the like) page. */

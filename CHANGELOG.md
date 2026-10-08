@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.33] - 2026-10-08
+
+### Added
+- Fixing links in existing notes: when a note's Link doesn't point to its item (for example a Steam search link like `store.steampowered.com/search/?term=…`, rather than the game's store page), syncs show the "Change this note?" pop-up with the note's link and the right one. Only when "Ask before every change" is on: a link that's already there is never replaced without asking.
+  - Search links (Steam's, Google's and the like) are offered ticked, so they're replaced unless you untick them; "Apply to all the rest" fixes them all at once.
+  - Any other link is offered unticked, so it's kept unless you tick it. Keep it and you won't be asked about it again, unless the link changes.
+  - You can edit the new link before applying.
+
 ## [0.0.32] - 2026-10-08
 
 ### Added

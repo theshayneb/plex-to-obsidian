@@ -175,6 +175,15 @@ export function ratingKeyFromLink(link: unknown): string | null {
   return match ? match[1] : null
 }
 
+/**
+ * Whether a link is a search page rather than an item's own page, such as Steam's
+ * store.steampowered.com/search/?term=… (bare or inside a Markdown link).
+ */
+export function isSearchLink(link: unknown): boolean {
+  if (typeof link !== 'string') return false
+  return /https?:\/\/[^\s)\]]*(\/search\b|[?&](term|q|query|s)=)/i.test(link)
+}
+
 /** Characters that can't be in file names (or break links), each with its own replacement setting. */
 export const REPLACEABLE_CHARS = [':', '?', '/', '"', '*', '#'] as const
 /** The rest share one replacement setting, stored under 'other'. */

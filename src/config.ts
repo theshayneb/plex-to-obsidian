@@ -82,6 +82,8 @@ export interface PlexNotesSettings {
   ignored: Record<string, IgnoredItem>
   /** Items tied to existing notes, by rating key: matched to that note, and never renamed. */
   merged: Record<string, MergedItem>
+  /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
+  keptLinks: Record<string, string>
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
@@ -134,6 +136,7 @@ export function defaultSettings(): PlexNotesSettings {
     askBeforeChanges: true,
     ignored: {},
     merged: {},
+    keptLinks: {},
     updatePlayCounts: false,
     updateRatings: false,
     playCountHours: 0,
@@ -251,6 +254,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.fileNameReplacements = { ...saved.fileNameReplacements }
   settings.ignored = { ...saved.ignored }
   settings.merged = { ...saved.merged }
+  settings.keptLinks = { ...saved.keptLinks }
   settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {

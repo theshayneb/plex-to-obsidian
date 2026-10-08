@@ -35,6 +35,8 @@ export interface ApprovalLine {
   items?: string[]
   /** Can't be unticked (a new note's file name). */
   required?: boolean
+  /** Starts unticked: offered, but only done if ticked (replacing a link already in the note). */
+  unticked?: boolean
   /** Images to pick from for the value (game covers). */
   choices?: CoverChoice[]
 }
@@ -87,6 +89,13 @@ export class ApprovalModal extends Modal {
         : 'Edit any new value (× removes an item from a list), or untick anything you don\'t want changed.',
     })
 
+    if (lines.some(line => line.key.startsWith('link:'))) {
+      contentEl.createEl('p', {
+        cls: 'setting-item-description',
+        text: 'The note has a link that doesn\'t point to this item, so its own link is offered. A search link is replaced unless you untick it; any other link is kept unless you tick it. A link you keep isn\'t offered for replacing again.',
+      })
+    }
+
     const table = contentEl.createDiv('pmn-approval-scroll').createEl('table', { cls: 'pmn-approval-table' })
     const head = table.createEl('thead').createEl('tr')
     head.createEl('th')
@@ -94,11 +103,15 @@ export class ApprovalModal extends Modal {
     if (!create) head.createEl('th', { text: 'Now' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
-    for (const { key, label, current, value, edit, items, required, choices } of lines) {
+    for (const { key, label, current, value, edit, items, required, choices, unticked } of lines) {
       const row = body.createEl('tr')
       const box = row.createEl('td').createEl('input', { type: 'checkbox' })
-      box.checked = true
+      box.checked = !unticked
       box.disabled = Boolean(required)
+      if (unticked) {
+        this.pmnExcluded.add(key)
+        row.addClass('pmn-approval-off')
+      }
       row.createEl('td', { cls: 'pmn-approval-name', text: label })
       if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Now')
       const newLabel = create ? 'Value' : 'New'
@@ -118,6 +131,7 @@ export class ApprovalModal extends Modal {
           else this.pmnEdits[key] = field.value
         })
         if (choices?.length) this.pmnCoverPicker(field, choices)
+        if (unticked) field.disabled = true
       } else {
         cell(row, value, 'pmn-approval-new', newLabel)
       }

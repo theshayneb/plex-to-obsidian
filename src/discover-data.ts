@@ -137,14 +137,14 @@ const BOOK_GENRES = 5
  * Open Library mixes tags into its subjects: "genre:Fiction" becomes "Fiction", and other tagged
  * ones ("nyt:hardcover-fiction=2009-10-04", "series:…") are left out. Repeats are dropped.
  */
-export function bookGenres(subjects: string[] | undefined): string[] {
+export function bookGenres(subjects: string[] | undefined, limit = BOOK_GENRES): string[] {
   const genres: string[] = []
   for (const subject of subjects ?? []) {
     const named = /^\s*genre\s*:\s*(.*)$/i.exec(subject)
     // Other tags look like "nyt:…" (no space after the colon), unlike subjects such as "History: 1900s".
     const genre = (named ? named[1] : /^\s*[a-z_]+:\S/i.test(subject) ? '' : subject).trim()
     if (genre && !genres.some(g => g.toLowerCase() === genre.toLowerCase())) genres.push(genre)
-    if (genres.length === BOOK_GENRES) break
+    if (genres.length === limit) break
   }
   return genres
 }

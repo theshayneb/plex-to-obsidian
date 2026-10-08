@@ -1,6 +1,7 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver, type OwnerChooser } from './approval-modal'
 import {
+  BOOKS_LIBRARY,
   ensureSteamLibrary,
   hasSource,
   mergeLibraries,
@@ -33,6 +34,7 @@ import {
   type MediaKind,
   type PlexItem,
 } from './notes'
+import { bookSubjects, findBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, keepGenres, sameLengthOtherForm, linkPropertyNames, PLAY_SOURCES, RATING_SOURCES, sourceValue, usesSource, type FieldSource } from './properties'
@@ -461,6 +463,7 @@ export class PlexSync {
         }
       }
     }
+    if (genreCheck && !result.stopped) await this.checkBookGenres(result, progress)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>
@@ -879,6 +882,113 @@ export class PlexSync {
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to, sameLength } : null
+  }
+
+  /**
+   * "Check genres of existing notes" for the Books library, which no sync lists: each note's
+   * genres are compared with its Open Library work's subjects (kept ones only). A note without an
+   * Open Library link is looked up by title and author; the pop-up says which book was found, and
+   * also offers its link. Leaving that link unticked means it's the wrong book: that note isn't
+   * looked up again.
+   */
+  private async checkBookGenres(result: SyncResult, progress: ProgressFn): Promise<void> {
+    const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
+    if (!lib || lib.target !== 'book') return
+    const genreProps = lib.properties.filter(m => m.source === 'genres' && m.name.trim()).map(m => m.name.trim())
+    if (!genreProps.length) return
+    const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
+    const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
+    const folder = normalizePath(lib.folder)
+    const files = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(`${folder}/`))
+    const allowed = this.settings.allowedGenres
+    let position = 0
+    for (const file of files) {
+      position++
+      if (result.stopped) break
+      const noteKey = `book:${file.path}`
+      if (noteKey in this.settings.ignored) continue
+      const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const link: unknown = linkProp ? from[linkProp] : undefined
+      const linked = ratingKeyFromLink(link)
+      let work = linked?.startsWith('ol-') ? linked.slice(3) : null
+      let found: PlexItem | null = null
+      let subjects: string[]
+      try {
+        progress(`Checking genres: ${file.basename}…`)
+        if (!work) {
+          if (noteKey in this.settings.keptLinks) continue
+          const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
+          // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
+          const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
+          found = (await findBook(title, authors[0]))?.item ?? null
+          if (!found) continue
+          work = found.ratingKey.slice(3)
+        }
+        subjects = await bookSubjects(work)
+      } catch (err) {
+        result.failed.push({ title: file.basename, error: `checking genres failed: ${errorText(err)}` })
+        continue
+      }
+
+      const fromSource = keepGenres(subjects, allowed)
+      const lines: ApprovalLine[] = []
+      const to: Record<string, string[]> = {}
+      for (const name of genreProps) {
+        const current = listOf(from[name])
+        const proposed = allowed.length ? keepGenres(current, allowed) : [...current]
+        for (const genre of fromSource) {
+          if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
+        }
+        if (!proposed.length || sameGenres(current, proposed)) continue
+        if (this.settings.keptValues[`${noteKey}|${name}`] === String(from[name])) continue
+        to[name] = proposed
+        lines.push({ key: `fix:${name}`, label: name, current: describeValue(from[name]), ...editable(proposed) })
+      }
+      const newLink = found?.webLink
+      if (found && linkProp && newLink) {
+        lines.push({ key: `link:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !isBlank(link) })
+      }
+      if (!lines.length) continue
+
+      const note = found
+        ? `Found on Open Library: ${found.title}${found.authors?.length ? ` by ${found.authors.join(', ')}` : ''}${found.year ? `, ${found.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
+        : undefined
+      const asItem: PlexItem = { ratingKey: noteKey, type: 'book', title: file.basename }
+      const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total: files.length }, result, asItem, lib)
+      if (!approval) continue
+      const { excluded, edits } = approval
+      const fixNames = Object.keys(to).filter(name => !excluded.has(`fix:${name}`))
+      for (const name of Object.keys(to).filter(n => excluded.has(`fix:${n}`))) {
+        this.settings.keptValues[`${noteKey}|${name}`] = String(from[name])
+        result.keptLinks++
+      }
+      const linkWanted = Boolean(found && linkProp && newLink) && !excluded.has(`link:${linkProp}`)
+      if (found && linkProp && newLink && !linkWanted) {
+        // Not this book's link: don't look this note up again.
+        this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
+        result.keptLinks++
+      }
+      if (!fixNames.length && !linkWanted) {
+        result.declined++
+        continue
+      }
+      try {
+        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+          for (const name of fixNames) {
+            const edited = edits[`fix:${name}`]
+            fm[name] = edited === undefined ? to[name] : parseEdit(edited, 'list')
+          }
+          if (linkWanted) {
+            const edited = edits[`link:${linkProp!}`]
+            fm[linkProp!] = typeof edited === 'string' ? edited.trim() : newLink
+          }
+        })
+        if (fixNames.length) result.corrected.push(file.path)
+        if (linkWanted) result.links.push(file.path)
+      } catch (err) {
+        result.failed.push({ title: file.basename, error: errorText(err) })
+      }
+    }
   }
 
   /**

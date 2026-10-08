@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.39] - 2026-10-08
+
+### Added
+- **Check genres of existing notes** now covers book notes too (every note in the Books library's folder), comparing their genres with Open Library's subjects (kept ones only).
+  - A note with an Open Library link is checked against that book.
+  - A note without one is looked up on Open Library by its title and Author (a name like "Dune by Frank Herbert" is searched as "Dune", by Frank Herbert). The pop-up says which book was found (title, author, year) so you can check it's the same book, and also offers its Open Library link. Wrong book? Press Skip. If you untick the link, that note isn't looked up again.
+
 ## [0.0.38] - 2026-10-08
 
 ### Added

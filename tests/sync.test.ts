@@ -692,6 +692,37 @@ describe('PlexSync', () => {
     expect([...files.keys()].filter(p => p.endsWith('.md')).sort()).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md'])
   })
 
+  it('checks book genres against Open Library, finding books without a link by title and author', async () => {
+    steamResponses = {
+      'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction', 'genre:Fiction', 'Deserts'] },
+      'https://openlibrary.org/search.json': { docs: [{ key: '/works/OL27448W', title: 'The Hobbit', author_name: ['J.R.R. Tolkien'], first_publish_year: 1937 }] },
+      'https://openlibrary.org/works/OL27448W.json': { subjects: ['Fantasy fiction', 'Fantasy', 'Dragons'] },
+    }
+    const { app, frontmatter } = makeApp({
+      'Media/Books/Dune by Frank Herbert.md': { Author: ['Frank Herbert'], Genre: ['Classics'], Link: 'https://openlibrary.org/works/OL893415W' },
+      'Media/Books/The Hobbit by J.R.R. Tolkien.md': { Author: '[[J.R.R. Tolkien]]', Genre: [] },
+    })
+    const settings = settingsWith({ allowedGenres: ['Sci-Fi', 'Fiction', 'Fantasy'] })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'genres')
+
+    expect(requests.map(r => r.path)).toEqual(['Media/Books/Dune by Frank Herbert.md', 'Media/Books/The Hobbit by J.R.R. Tolkien.md'])
+    expect(requests[0].note).toBeUndefined()
+    expect(requests[1].note).toBe('Found on Open Library: The Hobbit by J.R.R. Tolkien, 1937. Make sure it\'s the same book; if it isn\'t, press Skip.')
+    expect(requested.some(u => u.includes('search.json?title=The%20Hobbit&author=J.R.R.%20Tolkien'))).toBe(true)
+    expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Genre).toEqual(['Sci-Fi', 'Fiction'])
+    expect(frontmatter.get('Media/Books/The Hobbit by J.R.R. Tolkien.md')).toMatchObject({ Genre: ['Fantasy'], Link: 'https://openlibrary.org/works/OL27448W' })
+    expect(result.links).toEqual(['Media/Books/The Hobbit by J.R.R. Tolkien.md'])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },

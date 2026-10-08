@@ -47,6 +47,8 @@ export interface ApprovalRequest {
   path: string
   /** What will happen, one line per part. */
   lines: ApprovalLine[]
+  /** Something to check before saying yes, shown above the lines (say, which book was found). */
+  note?: string
   position: number
   total: number
 }
@@ -82,6 +84,7 @@ export class ApprovalModal extends Modal {
     const { contentEl } = this
     contentEl.createEl('p', { cls: 'setting-item-description', text: `${position} of ${total}` })
     contentEl.createEl('p').createEl('code', { text: path })
+    if (this.pmnRequest.note) contentEl.createEl('p', { cls: 'pmn-approval-note', text: this.pmnRequest.note })
     contentEl.createEl('p', {
       cls: 'setting-item-description',
       text: create

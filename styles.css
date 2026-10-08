@@ -344,3 +344,10 @@
 .pmn-genres {
   min-width: 14em;
 }
+
+/* Something to check in the approval pop-up, such as which book was found. */
+.pmn-approval-note {
+  padding: var(--size-4-2) var(--size-4-3);
+  border-left: 3px solid var(--interactive-accent);
+  background-color: var(--background-secondary);
+}

@@ -1,5 +1,6 @@
 import { requestUrl } from 'obsidian'
 import {
+  bookGenres,
   cleanOmdbKey,
   hltbFound,
   omdbFound,
@@ -101,4 +102,24 @@ export async function testOmdbKey(pasted: string): Promise<string> {
   } catch (err) {
     return `The key ${key} didn't work: ${err instanceof Error ? err.message : String(err)}`
   }
+}
+
+/**
+ * The likeliest Open Library match for a book by its title (and author, when known), for books
+ * whose note has no Open Library link. Null when nothing is found.
+ */
+export async function findBook(title: string, author?: string): Promise<Found | null> {
+  const query = `title=${encodeURIComponent(title)}${author ? `&author=${encodeURIComponent(author)}` : ''}`
+  const body = await getJson(`https://openlibrary.org/search.json?${query}&limit=5&fields=${OPEN_LIBRARY_FIELDS}`, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
+  for (const doc of body.docs ?? []) {
+    const found = openLibraryFound(doc)
+    if (found) return found
+  }
+  return null
+}
+
+/** All of an Open Library work's subjects, cleaned of tags ("genre:Fiction" becomes "Fiction"). */
+export async function bookSubjects(work: string): Promise<string[]> {
+  const body = await getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as { subjects?: string[] }
+  return bookGenres(body.subjects, Infinity)
 }

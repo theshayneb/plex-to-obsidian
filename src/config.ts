@@ -23,6 +23,8 @@ export interface LibrarySetting {
   /** Frontmatter properties written to new notes, in order. */
   properties: PropertyMapping[]
   values: PropertyValues
+  /** Genres never written for this library, even when they're in "Genres to keep". */
+  leaveOutGenres?: string[]
 }
 
 /** An item tied by hand ("Use an existing note") to a note that was already there. */
@@ -143,7 +145,7 @@ export const DEFAULT_MATCH_BY: Record<MediaKind, MatchBy> = {
 }
 
 /** The genres kept to start with: the owner's own list. */
-export const DEFAULT_GENRES = ['Action', 'Adventure', 'Biography', 'Collecting', 'Comedy', 'Crime', 'Documentary', 'Dystopian', 'Fantasy', 'Fiction', 'Fitness', 'History', 'Horror', 'Memoir', 'Musical', 'Mystery', 'Puzzle', 'Rhythm', 'Sci-Fi', 'Science', 'Self-Help', 'Simulation', 'Strategy', 'Thriller', 'Trivia', 'Western']
+export const DEFAULT_GENRES = ['Action', 'Adventure', 'Biography', 'Collecting', 'Comedy', 'Crime', 'Documentary', 'Dystopian', 'Fantasy', 'Fiction', 'Fitness', 'History', 'Horror', 'Memoir', 'Musical', 'Mystery', 'Puzzle', 'Rhythm', 'Romance', 'Sci-Fi', 'Science', 'Self-Help', 'Simulation', 'Strategy', 'Thriller', 'Trivia', 'Western']
 export function defaultSettings(): PlexNotesSettings {
   return {
     serverUrl: '',
@@ -209,6 +211,8 @@ export function retarget(lib: LibrarySetting, target: LibraryTarget): LibrarySet
   if (was(lib.fileNameFormat, k => DEFAULT_FILE_NAMES[k])) lib.fileNameFormat = DEFAULT_FILE_NAMES[target]
   if (!isKind(old) || lib.matchBy === DEFAULT_MATCH_BY[old]) lib.matchBy = DEFAULT_MATCH_BY[target]
   if (was(lib.properties, defaultProperties)) lib.properties = defaultProperties(target)
+  // Romance is a genre for everything but music.
+  if (target === 'music' && !lib.leaveOutGenres?.length) lib.leaveOutGenres = ['Romance']
   const values = defaultValues(target)
   lib.values = {
     watched: lib.values.watched || values.watched,
@@ -348,6 +352,15 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     // Music notes don't record a track's length any more.
     for (const lib of Object.values(settings.libraries)) {
       if (lib.target === 'music') lib.properties = lib.properties.filter(m => !(m.source === 'durationClock' && m.name.trim() === 'Duration'))
+    }
+  })
+  migrateOnce(settings, saved, 'romance-genre', () => {
+    // Romance is kept for everything but music.
+    if (settings.allowedGenres.length && !settings.allowedGenres.some(g => g.toLowerCase() === 'romance')) {
+      settings.allowedGenres = [...settings.allowedGenres, 'Romance']
+    }
+    for (const lib of Object.values(settings.libraries)) {
+      if (lib.target === 'music' && !lib.leaveOutGenres?.some(g => g.toLowerCase() === 'romance')) lib.leaveOutGenres = [...lib.leaveOutGenres ?? [], 'Romance']
     }
   })
   migrateOnce(settings, saved, 'book-pages-duration', () => {

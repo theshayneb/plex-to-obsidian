@@ -880,6 +880,7 @@ export class PlexSync {
       image: game ? item.portrait ?? null : null,
       values: lib.values,
       genres: this.settings.allowedGenres,
+      leaveOut: lib.leaveOutGenres,
     })
     const additions = Object.entries(values).filter(([, value]) => !isBlank(value))
     const poster = game ? undefined : wanted.find(m => m.source === 'poster')
@@ -986,7 +987,7 @@ export class PlexSync {
   /** The differences between a note and an item's details, for the chosen properties. */
   private compareNote(file: TFile, item: PlexItem, lib: LibrarySetting, kind: MediaKind, mappings: LibrarySetting['properties'], noteKey: string): Checks | null {
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    const ctx = { kind, link: this.linkFor(item), image: fromPlex(item) ? null : item.portrait ?? null, values: lib.values, genres: this.settings.allowedGenres }
+    const ctx = { kind, link: this.linkFor(item), image: fromPlex(item) ? null : item.portrait ?? null, values: lib.values, genres: this.settings.allowedGenres, leaveOut: lib.leaveOutGenres }
     const keys = itemKeys(item)
     const to: Record<string, unknown> = {}
     const ticked = new Set<string>()
@@ -997,7 +998,7 @@ export class PlexSync {
         const pointsAt = ratingKeyFromLink(current)
         if (pointsAt && keys.includes(pointsAt)) continue
       }
-      const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx), this.settings.allowedGenres, kind)
+      const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx), this.settings.allowedGenres, kind, lib.leaveOutGenres)
       if (!offer) continue
       if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
       to[name] = offer.to
@@ -1149,6 +1150,7 @@ export class PlexSync {
       image: !fromPlex(item) ? item.portrait ?? null : hasImage(item) ? POSTER_PREVIEW : null,
       values: lib.values,
       genres: this.settings.allowedGenres,
+      leaveOut: lib.leaveOutGenres,
     })
     const lines: ApprovalLine[] = [{ key: 'file', label: 'File name', value: fileName, edit: 'text', required: true }]
     for (const [name, value] of Object.entries(frontmatter)) {
@@ -1200,6 +1202,7 @@ export class PlexSync {
       image,
       values,
       genres: this.settings.allowedGenres,
+      leaveOut: lib.leaveOutGenres,
     })
     for (const [name, value] of Object.entries(overrides)) {
       if (name in frontmatter) frontmatter[name] = value

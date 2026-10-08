@@ -836,6 +836,18 @@ describe('PlexSync', () => {
     expect(approve.mock.calls[0][0].lines.map(l => [l.label, l.unticked])).toEqual([['Summary', false], ['Duration', false]])
   })
 
+  it('adds Romance to the kept genres, left out of music, once', () => {
+    const saved = {
+      allowedGenres: ['Action', 'Comedy'],
+      libraries: { 3: { title: 'Music', type: 'artist', target: 'music', folder: 'Media/Music', fileNameFormat: '{{title}}', matchBy: 'loose', properties: [], values: { watched: '', started: '', unwatched: '', tag: 'music' } } },
+    }
+    const once = loadSettings(saved)
+    expect(once.allowedGenres).toEqual(['Action', 'Comedy', 'Romance'])
+    expect(once.libraries['3'].leaveOutGenres).toEqual(['Romance'])
+    const again = loadSettings({ ...saved, migrations: once.migrations })
+    expect(again.allowedGenres).toEqual(['Action', 'Comedy'])
+  })
+
   it('drops Duration from saved music libraries and renames book Pages to Duration, once', () => {
     const saved = {
       libraries: {

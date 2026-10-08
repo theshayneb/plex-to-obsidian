@@ -87,6 +87,12 @@ describe('sourceValue', () => {
     expect(value('status', { ...show, viewedLeafCount: 0 })).toBe('pending')
   })
 
+  it('leaves out a library\'s left-out genres, even when kept', () => {
+    const track: PlexItem = { ratingKey: '5', type: 'track', title: 'Song', Genre: [{ tag: 'Romance' }, { tag: 'Rock' }] }
+    expect(value('genres', track, { ...ctx, kind: 'music', genres: ['Romance', 'Rock'], leaveOut: ['romance'] })).toEqual(['Rock'])
+    expect(value('genres', track, { ...ctx, kind: 'music', leaveOut: ['Romance'] })).toEqual(['Rock'])
+  })
+
   it('adds a game\'s store tags to its genres, only when they\'re kept', () => {
     const game: PlexItem = { ratingKey: 'steam-1', type: 'game', title: 'Dinocop', Genre: [{ tag: 'Adventure' }, { tag: 'Indie' }], steamTags: ['Funny', 'Mystery', 'Comedy', 'Adventure'] }
     expect(value('genres', game, { ...ctx, kind: 'game', genres: ['Adventure', 'Mystery', 'Comedy'] })).toEqual(['Adventure', 'Mystery', 'Comedy'])

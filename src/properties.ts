@@ -175,6 +175,8 @@ export interface NoteContext {
   values: PropertyValues
   /** The only genres to keep (the settings' "Genres to keep"); empty or missing keeps them all. */
   genres?: string[]
+  /** Genres never written for this library ("Genres to leave out"). */
+  leaveOut?: string[]
 }
 
 /** Other names sources use for a kept genre, or genres that are two in one ("Action & Adventure"). */
@@ -187,6 +189,13 @@ const GENRE_ALIASES: Record<string, string[]> = {
   'biographical': ['Biography'],
   'music': ['Musical'],
   'documentaries': ['Documentary'],
+}
+
+/** Drops the genres a library leaves out (case ignored). */
+export function leaveOut(genres: string[], left: string[] | undefined): string[] {
+  if (!left?.length) return genres
+  const out = new Set(left.map(g => g.trim().toLowerCase()))
+  return genres.filter(g => !out.has(g.trim().toLowerCase()))
 }
 
 /**
@@ -361,7 +370,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'genres': {
       // A game's store tags ("Mystery") count as genres too, but only those in "Genres to keep".
       const tagged = ctx.genres?.length ? item.steamTags ?? [] : []
-      const genres = keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres)
+      const genres = leaveOut(keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres), ctx.leaveOut)
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres
     }
@@ -502,7 +511,7 @@ export function sameValue(current: unknown, value: unknown): boolean {
  * duration in hours or text, a search link, or genres (the note's kept ones plus the source's).
  * Any other difference starts unticked: it's yours unless you tick it.
  */
-export function checkValue(source: FieldSource, current: unknown, value: unknown, allowedGenres: string[], kind: MediaKind): { to: unknown, ticked: boolean } | null {
+export function checkValue(source: FieldSource, current: unknown, value: unknown, allowedGenres: string[], kind: MediaKind, leftOut: string[] = []): { to: unknown, ticked: boolean } | null {
   if (blank(value)) return null
   if (source === 'genres') {
     const own = listOf(current)
@@ -510,7 +519,7 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
     for (const genre of listOf(value)) {
       if (!proposed.some(g => g.toLowerCase() === genre.toLowerCase())) proposed.push(genre)
     }
-    const wanted = kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed
+    const wanted = leaveOut(kind === 'documentary' ? proposed.filter(g => !isDocumentaryGenre(g)) : proposed, leftOut)
     if (!wanted.length || sameList(own, wanted)) return null
     return { to: wanted, ticked: true }
   }

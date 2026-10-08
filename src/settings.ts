@@ -220,6 +220,17 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           })
       })
 
+    new Setting(el)
+      .setName('Genres to leave out')
+      .setDesc('Genres never written for this library, even when they\'re in "Genres to keep" (under All libraries). Separate them with commas.')
+      .addText(text => text
+        .setPlaceholder('For example romance, horror')
+        .setValue((lib.leaveOutGenres ?? []).join(', '))
+        .onChange(async value => {
+          lib.leaveOutGenres = [...new Set(value.split(',').map(g => g.trim()).filter(Boolean))]
+          await this.save()
+        }))
+
     this.displayProperties(el, lib)
 
     new Setting(el).setName('Property values').setHeading()

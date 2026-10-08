@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.46] - 2026-10-08
+
+### Added
+- **Romance** is added to **Genres to keep**, for everything except music.
+- **Genres to leave out** (each library's settings): genres never written for that library, even when they're in Genres to keep. Your music libraries leave out Romance.
+
 ## [0.0.45] - 2026-10-08
 
 ### Added

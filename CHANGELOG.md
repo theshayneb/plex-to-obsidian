@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.44] - 2026-10-08
+
+### Changed
+- Music: track lengths are no longer recorded. Duration is gone from the music defaults, and removed once from your music libraries' properties (add it back in a library's settings if you ever want it). Existing notes aren't changed.
+- Books: the page count goes in **Duration**, like other media's length. The Books library's "Pages" property is renamed to Duration once (rename it back in its settings if you prefer). Existing notes aren't changed; "Check existing notes against sources" can fill Duration in.
+
 ## [0.0.43] - 2026-10-08
 
 ### Changed

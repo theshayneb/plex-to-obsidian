@@ -94,6 +94,8 @@ export interface PlexNotesSettings {
   unmatchedIgnored: string[]
   /** Start every offered change to a value already in a note ticked (off: only clear-cut fixes are). */
   tickDifferences: boolean
+  /** One-time changes to saved settings already made, so they aren't made again (and can be undone by hand). */
+  migrations: string[]
   /** Refresh "Play count" properties in existing notes on every sync (they're overwritten). */
   updatePlayCounts: boolean
   /** Also replace "Your rating" properties in existing notes on every sync (and in background updates). */
@@ -154,6 +156,7 @@ export function defaultSettings(): PlexNotesSettings {
     keptValues: {},
     unmatchedIgnored: [],
     tickDifferences: true,
+    migrations: [],
     allowedGenres: [...DEFAULT_GENRES],
     checkProperties: null,
     updatePlayCounts: false,
@@ -334,5 +337,30 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (steamLib && JSON.stringify(steamLib.properties) === JSON.stringify(oldGameProperties())) {
     steamLib.properties = defaultProperties('game')
   }
+  migrateOnce(settings, saved, 'music-no-duration', () => {
+    // Music notes don't record a track's length any more.
+    for (const lib of Object.values(settings.libraries)) {
+      if (lib.target === 'music') lib.properties = lib.properties.filter(m => !(m.source === 'durationClock' && m.name.trim() === 'Duration'))
+    }
+  })
+  migrateOnce(settings, saved, 'book-pages-duration', () => {
+    // A book's page count goes in Duration, like other media's length.
+    for (const lib of Object.values(settings.libraries)) {
+      if (lib.target !== 'book' || lib.properties.some(m => m.name.trim() === 'Duration')) continue
+      lib.properties = lib.properties.map(m => m.source === 'pages' && m.name.trim() === 'Pages' ? { ...m, name: 'Duration' } : m)
+    }
+  })
   return settings
+}
+
+/**
+ * Makes a change to saved settings once: settings saved before it are changed, and it's never
+ * made again (so you can undo it by hand). New settings already have it.
+ */
+function migrateOnce(settings: PlexNotesSettings, saved: { migrations?: unknown }, name: string, change: () => void): void {
+  const done = Array.isArray(saved.migrations) ? saved.migrations.map(String) : []
+  settings.migrations = [...new Set([...settings.migrations, ...done])]
+  if (settings.migrations.includes(name)) return
+  if (Object.keys(saved).length) change()
+  settings.migrations.push(name)
 }

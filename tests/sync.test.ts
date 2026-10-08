@@ -204,7 +204,6 @@ describe('PlexSync', () => {
       Track: 6,
       Genre: ['Alternative'],
       Date: '1997-05-21',
-      Duration: '4:24',
       Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F100',
       Image: '[[Media/Music/Images/Radiohead - OK Computer.jpg]]',
       tags: ['music'],
@@ -790,6 +789,24 @@ describe('PlexSync', () => {
     expect(approve.mock.calls[0][0].lines.map(l => [l.label, l.unticked])).toEqual([['Summary', false], ['Duration', false]])
   })
 
+  it('drops Duration from saved music libraries and renames book Pages to Duration, once', () => {
+    const saved = {
+      libraries: {
+        3: { title: 'Music', type: 'artist', target: 'music', folder: 'Media/Music', fileNameFormat: '{{title}}', matchBy: 'loose',
+          properties: [{ name: 'Artist', source: 'artist' }, { name: 'Duration', source: 'durationClock' }], values: { watched: '', started: '', unwatched: '', tag: 'music' } },
+        books: { title: 'Books', type: 'books', target: 'book', folder: 'Media/Books', fileNameFormat: '{{title}}', matchBy: 'loose',
+          properties: [{ name: 'Author', source: 'authors' }, { name: 'Pages', source: 'pages' }], values: { watched: '', started: '', unwatched: 'pending', tag: 'book' } },
+      },
+    }
+    const once = loadSettings(saved)
+    expect(once.libraries['3'].properties.map(p => p.name)).toEqual(['Artist'])
+    expect(once.libraries.books.properties).toEqual([{ name: 'Author', source: 'authors' }, { name: 'Duration', source: 'pages' }])
+    // Put back by hand afterwards: left alone.
+    const again = loadSettings({ ...saved, migrations: once.migrations })
+    expect(again.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Duration'])
+    expect(again.libraries.books.properties.map(p => p.name)).toEqual(['Author', 'Pages'])
+  })
+
   describe('a note whose name matches two items', () => {
     const blackSheep = [
       { ratingKey: '53792', type: 'movie', title: 'Black Sheep', year: 2006 },
@@ -869,7 +886,7 @@ describe('PlexSync', () => {
       const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).addNew(item, 'books')
       expect(result.created).toBe('Media/Books/Dune (1965).md')
       expect(frontmatter.get('Media/Books/Dune (1965).md')).toEqual({
-        Author: ['Frank Herbert'], Genre: ['Sci-Fi'], Year: 1965, Pages: 604, Summary: 'A desert planet.', Status: 'pending',
+        Author: ['Frank Herbert'], Genre: ['Sci-Fi'], Year: 1965, Duration: 604, Summary: 'A desert planet.', Status: 'pending',
         Link: 'https://openlibrary.org/works/OL893415W', Image: 'https://covers/x-L.jpg', tags: ['book'],
       })
     })
@@ -969,7 +986,7 @@ describe('PlexSync', () => {
     const { retarget } = await import('../src/config')
     retarget(settings.libraries['3'], 'music')
     expect(settings.libraries['3']).toMatchObject({ folder: 'Media/Music', fileNameFormat: '{{artist}} - {{title}}', values: { tag: 'music' } })
-    expect(settings.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Album', 'Track', 'Genre', 'Date', 'Duration', 'Link', 'Image', 'tags'])
+    expect(settings.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Album', 'Track', 'Genre', 'Date', 'Link', 'Image', 'tags'])
   })
 
   it('moves settings from older versions into each library', () => {

@@ -102,7 +102,6 @@ export const DEFAULT_MUSIC_PROPERTIES: PropertyMapping[] = [
   { name: 'Track', source: 'trackNumber' },
   { name: 'Genre', source: 'genres' },
   { name: 'Date', source: 'releaseDate' },
-  { name: 'Duration', source: 'durationClock' },
   { name: 'Link', source: 'plexLink', fill: true },
   { name: 'Image', source: 'poster' },
   { name: 'tags', source: 'typeTag' },
@@ -124,7 +123,8 @@ export const DEFAULT_BOOK_PROPERTIES: PropertyMapping[] = [
   { name: 'Author', source: 'authors' },
   { name: 'Genre', source: 'genres' },
   { name: 'Year', source: 'year' },
-  { name: 'Pages', source: 'pages' },
+  // A book's length is its page count, under the same name as other media's length.
+  { name: 'Duration', source: 'pages' },
   { name: 'Summary', source: 'summary' },
   { name: 'Status', source: 'status' },
   { name: 'Link', source: 'plexLink', fill: true },

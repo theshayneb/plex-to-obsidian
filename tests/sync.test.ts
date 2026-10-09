@@ -1070,7 +1070,7 @@ describe('PlexSync', () => {
       requests.push(r)
       return Promise.resolve({ choice: 'apply', excluded: [] })
     })
-    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre', 'Rating'])
     expect(requests.map(r => [r.path, r.lines.map(l => [l.key, l.current, l.value])]).sort()).toEqual([
       ['Media/Books/Dune.md', [['rescale:Rating', '⭐⭐', '⭐⭐⭐']]],
       // Not on Open Library: its rating is still converted.

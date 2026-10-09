@@ -378,7 +378,9 @@ export class PlexSync {
           // rating changed in the note isn't overwritten with Plex's old one.
           // A rating still in an older scale is offered in the star scale whenever a pop-up can ask.
           const reviewing = genreCheck || (full && this.settings.askBeforeChanges && Boolean(this.approve))
-          const rescale = reviewing ? this.planRescale(file, item, lib) : null
+          // A check converts and compares ratings only when its rating property is among those checked.
+          const ratingChecked = !genreCheck || lib.properties.some(m => RATING_SOURCES.includes(m.source) && chosen.has(m.name.trim()))
+          const rescale = reviewing && ratingChecked ? this.planRescale(file, item, lib) : null
           const rating = this.ratingPlan(file, item, lib)
           const notOverwritten = new Set([...beingFilled, ...rescale?.names ?? []])
           if (rating && rating.direction !== 'toNote') rating.names.forEach(name => notOverwritten.add(name))
@@ -387,7 +389,7 @@ export class PlexSync {
           const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
           // A check offers sending your rating to Plex whenever the two differ (you pick which wins);
           // a sync only when the note's is the one that changed.
-          const offerToPlex = genreCheck ? Boolean(rating?.note && rating.note !== rating.plex) : asking && this.settings.sendRatings && rating?.direction === 'toPlex'
+          const offerToPlex = genreCheck ? ratingChecked && Boolean(rating?.note && rating.note !== rating.plex) : asking && this.settings.sendRatings && rating?.direction === 'toPlex'
           const toPlex = offerToPlex && this.plex && rating?.note
             && this.settings.keptValues[`${item.ratingKey}|plexRating`] !== String(rating.note) ? rating.note : null
           // Remembered only when the note and Plex agree (or one was just made to match the other).
@@ -1215,6 +1217,7 @@ export class PlexSync {
     // name the other libraries give theirs (book notes may have one the plugin doesn't fill in).
     const ratingNames = [...new Set(Object.values(this.settings.libraries).flatMap(l => l.properties)
       .filter(m => m.source === 'userRatingEmoji' && m.name.trim()).map(m => m.name.trim()))]
+      .filter(name => chosen.has(name))
     if (!mappings.length && !ratingNames.length) return
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()

@@ -7,10 +7,13 @@ import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
 import type { PlexItem } from './notes'
 import { PlexSync } from './sync'
+import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 
 export default class PlexMediaNotesPlugin extends Plugin {
   settings: PlexNotesSettings = defaultSettings()
   private plexSyncRunning = false
+  /** The "Check against sources: <property>" commands there are now, by command id. */
+  private propertyCommands = new Map<string, string>()
   /** Earliest time to try a background play count update again after one failed (ms). */
   private playCountRetryAt = 0
 
@@ -46,6 +49,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         new CheckModal(this.app, this.settings, properties => void this.checkNotes(properties)).open()
       },
     })
+
+    this.refreshPropertyCommands()
 
     this.addCommand({
       id: 'check-this-note',
@@ -89,6 +94,16 @@ export default class PlexMediaNotesPlugin extends Plugin {
       },
     })
 
+    // A "Plex playlist" view for Bases (Obsidian 1.10 and later): sends a Base's songs to Plex.
+    if (typeof this.registerBasesView === 'function') {
+      this.registerBasesView(PLAYLIST_VIEW, {
+        name: 'Plex playlist',
+        icon: 'list-music',
+        factory: (controller, containerEl) => playlistView(controller, containerEl, () => this.settings),
+        options: () => [{ type: 'text', key: 'playlistName', displayName: 'Playlist name in Plex', placeholder: 'This view\'s name' }],
+      })
+    }
+
     this.addSettingTab(new PlexNotesSettingTab(this.app, this))
 
     // Background play count updates: check at startup and every 10 minutes whether one is due.
@@ -124,6 +139,33 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings)
+    this.refreshPropertyCommands()
+  }
+
+  /**
+   * One "Check against sources: <property>" command per property a check can compare: every note,
+   * that property only, so "Apply to all the rest" can be used for a property it gets right and
+   * another reviewed note by note. Kept in step with the libraries' properties.
+   */
+  private refreshPropertyCommands(): void {
+    const wanted = new Map<string, string>()
+    for (const { name } of checkableProperties(this.settings)) {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'property'
+      let id = `check-property-${slug}`
+      for (let n = 2; wanted.has(id); n++) id = `check-property-${slug}-${n}`
+      wanted.set(id, name)
+    }
+    for (const [id, name] of this.propertyCommands) {
+      if (wanted.get(id) === name) continue
+      // Obsidian before 1.7.2 can't remove a command; it stays until Obsidian restarts.
+      if (typeof this.removeCommand === 'function') this.removeCommand(id)
+      this.propertyCommands.delete(id)
+    }
+    for (const [id, name] of wanted) {
+      if (this.propertyCommands.has(id)) continue
+      this.addCommand({ id, name: `Check against sources: ${name}`, callback: () => void this.checkNotes([name]) })
+      this.propertyCommands.set(id, name)
+    }
   }
 
   /** Makes a note for an item picked in "Add something new", or opens the one it already has. */

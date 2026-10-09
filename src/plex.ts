@@ -19,6 +19,18 @@ interface MediaContainer {
   totalSize?: number
 }
 
+export interface PlexPlaylist {
+  ratingKey: string
+  title: string
+  smart?: boolean | number | string
+  leafCount?: number
+}
+
+/** How Plex names a list of items in its own library, for a playlist. */
+export function itemsUri(machineId: string, ratingKeys: string[]): string {
+  return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKeys.join(',')}`
+}
+
 export function normalizeServerUrl(url: string): string {
   let out = url.trim().replace(/\/+$/, '')
   if (out && !/^https?:\/\//i.test(out)) out = `http://${out}`
@@ -86,6 +98,60 @@ export class PlexClient {
     })
     if (res.status === 401) throw new Error('Plex rejected the token (401)')
     if (res.status >= 400) throw new Error(`Plex returned ${res.status} when rating`)
+  }
+
+  /** Sends a request that changes something in Plex (playlists), answering with what Plex returns. */
+  private async send(method: 'POST' | 'PUT' | 'DELETE', path: string): Promise<MediaContainer> {
+    const res = await requestUrl({ url: `${this.baseUrl}${path}`, method, headers: this.headers('application/json'), throw: false })
+    if (res.status === 401) throw new Error('Plex rejected the token (401)')
+    if (res.status >= 400) throw new Error(`Plex returned ${res.status} for ${path.split('?')[0]}`)
+    try {
+      return (res.json as { MediaContainer?: MediaContainer }).MediaContainer ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  /** Several items at once (as many as Plex still has), in batches. */
+  async items(ratingKeys: string[]): Promise<PlexItem[]> {
+    const out: PlexItem[] = []
+    for (let start = 0; start < ratingKeys.length; start += 100) {
+      const keys = ratingKeys.slice(start, start + 100).map(encodeURIComponent).join(',')
+      try {
+        out.push(...(await this.get(`/library/metadata/${keys}`)).Metadata ?? [])
+      } catch (err) {
+        // Plex answers 404 when none of the batch exists any more.
+        if (!(err instanceof Error && err.message.includes(' 404 '))) throw err
+      }
+    }
+    return out
+  }
+
+  /** Your music playlists. */
+  async audioPlaylists(): Promise<PlexPlaylist[]> {
+    return ((await this.get('/playlists?playlistType=audio')).Metadata ?? []) as unknown as PlexPlaylist[]
+  }
+
+  /** The entries of a playlist, each with the id Plex removes it by. */
+  async playlistEntries(playlistKey: string): Promise<{ playlistItemID: number }[]> {
+    return ((await this.get(`/playlists/${encodeURIComponent(playlistKey)}/items`)).Metadata ?? []) as unknown as { playlistItemID: number }[]
+  }
+
+  /** Makes a music playlist of these items, in this order, and answers with its key. */
+  async createAudioPlaylist(title: string, machineId: string, ratingKeys: string[]): Promise<string> {
+    const made = await this.send('POST', `/playlists?type=audio&smart=0&title=${encodeURIComponent(title)}&uri=${encodeURIComponent(itemsUri(machineId, ratingKeys))}`)
+    const key = made.Metadata?.[0]?.ratingKey
+    if (!key) throw new Error('Plex did not return the new playlist')
+    return key
+  }
+
+  /** Adds these items to the end of a playlist, in this order. */
+  async addToPlaylist(playlistKey: string, machineId: string, ratingKeys: string[]): Promise<void> {
+    await this.send('PUT', `/playlists/${encodeURIComponent(playlistKey)}/items?uri=${encodeURIComponent(itemsUri(machineId, ratingKeys))}`)
+  }
+
+  async removeFromPlaylist(playlistKey: string, playlistItemID: number): Promise<void> {
+    await this.send('DELETE', `/playlists/${encodeURIComponent(playlistKey)}/items/${playlistItemID}`)
   }
 
   /** Full metadata; the library listing can leave out some genres. */

@@ -361,3 +361,41 @@
   max-height: 40vh;
   overflow-y: auto;
 }
+
+/* The "Plex playlist" Bases view and its pop-up. */
+.pmn-playlist {
+  padding: var(--size-4-3) var(--size-4-4);
+  overflow-y: auto;
+}
+
+.pmn-playlist-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  margin-bottom: var(--size-4-2);
+}
+
+.pmn-playlist-name {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
+}
+
+.pmn-playlist-count {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.pmn-playlist-songs {
+  margin: 0 0 var(--size-4-3);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.pmn-playlist .pmn-playlist-songs {
+  max-height: none;
+}
+
+.pmn-playlist-missing {
+  color: var(--text-muted);
+}

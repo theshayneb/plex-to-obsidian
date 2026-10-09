@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.65] - 2026-10-09
+
+- New "Plex playlist" view for Bases (Obsidian 1.10 and later): it lists the Base's songs in its order, with a "Send to Plex" button. Plex gets a music playlist of those songs (named after the view, or the "Playlist name in Plex" view option). A playlist with that name already in Plex has its songs replaced. A pop-up shows what goes in, and what's left out and why, before anything is sent.
+- New commands "Check against sources: <property>", one per property: every note, that property only. Use "Apply to all the rest" for the properties it gets right, and review the others one by one.
+- A check only converts ratings to the star scale, or offers to send them to Plex, when the rating property is among those checked.
+
 ## [0.0.64] - 2026-10-09
 
 - New command "Check this note against sources": the full check (every property) of just the note you have open, books included. A notice says whether it changed, already matched, or matches nothing.

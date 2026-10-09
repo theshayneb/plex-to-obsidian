@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.62] - 2026-10-09
+
+### Fixed
+- "Apply to all the rest" no longer applies, in the notes it skips showing, anything that would have started unticked there: a link of yours being replaced, a status of your own (like "revisit"), a rating or image of yours. Those are only ever changed in a pop-up you see. As before, it still leaves out whatever you unticked in the pop-up where you pressed it.
+
 ## [0.0.61] - 2026-10-09
 
 ### Fixed

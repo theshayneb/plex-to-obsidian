@@ -207,7 +207,9 @@ export class PlexSync {
     if (result.stopped) return null
     if ((!this.settings.askBeforeChanges && !this.alwaysAsk) || !this.approve) return { excluded: new Set(), edits: {} }
     const remembered = this.approvedAll[request.action]
-    if (remembered) return { excluded: remembered, edits: {} }
+    // "All the rest" leaves out what was unticked then, and anything that would start unticked here
+    // (a link, status, rating or image of your own): those are never changed without being seen.
+    if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
     const { choice, excluded, edits, mergeWith } = await this.approve(request)
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.

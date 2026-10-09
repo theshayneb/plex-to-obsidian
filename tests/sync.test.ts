@@ -467,6 +467,24 @@ describe('PlexSync', () => {
     ])
   })
 
+  it('never applies what would start unticked through "Apply to all the rest"', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Summary: 'Mine.' },
+      'Media/Movies/Heat (1995).md': { Summary: 'Also mine.', Status: 'revisit' },
+    })
+    const settings = settingsWith({ tickDifferences: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Summary', source: 'summary' }, { name: 'Status', source: 'status' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], { ...movies[1], viewCount: 1 }] } })
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 1, summary: 'Cops and robbers.' }] } })
+    // "Apply to all the rest" on the first pop-up, leaving everything as offered.
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> =>
+      Promise.resolve({ choice: 'all', excluded: r.lines.filter(l => l.unticked).map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Status'])
+    expect(approve).toHaveBeenCalledTimes(1)
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({ Summary: 'Also mine.', Status: 'revisit' })
+  })
+
   it('shows the play count now and after', async () => {
     const { app } = makeApp({ 'Media/Movies/Heat (1995).md': { Plays: 1 } })
     const settings = settingsWith({ updatePlayCounts: true })

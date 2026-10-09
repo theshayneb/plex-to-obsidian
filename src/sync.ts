@@ -36,7 +36,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
@@ -64,6 +64,8 @@ export interface SyncResult {
   corrected: string[]
   /** Notes in the libraries' folders that no item matched (full syncs and checks). */
   unmatched: string[]
+  /** Notes a check compared with their source (whether or not anything differed). */
+  checked: string[]
   /** Notes whose rating was sent to Plex. */
   sentRatings: string[]
   /** Links and values you chose to keep in this sync. */
@@ -292,10 +294,11 @@ export class PlexSync {
 
   /**
    * @param checking for 'check': the property names to compare (in every library that has them).
+   * @param only for 'check': just these notes (say, the open one), not every note.
    */
-  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = []): Promise<SyncResult> {
+  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [] }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -317,6 +320,7 @@ export class PlexSync {
           .flatMap(({ item, lib }) => findNote(indexes[family], item, this.naming(lib), lib.matchBy)?.paths ?? [])
         this.listUnmatched(family, active, matched, result)
       }
+      if (genreCheck && only) result.unmatched = result.unmatched.filter(path => only.has(path))
     }
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
@@ -344,9 +348,11 @@ export class PlexSync {
           if (result.stopped) break
           // Ignored items still count above, so their notes are never taken for another item.
           if (this.isIgnored(item)) continue
+          if (genreCheck && only && !only.has(path)) continue
           const { lib, kind } = this.libraryFor(item, libOf.get(item)!)
           const file = this.app.vault.getAbstractFileByPath(path)
           if (!(file instanceof TFile)) continue
+          if (genreCheck) result.checked.push(path)
 
           // Work out every change first, so it can be shown before anything happens.
           let renameTo: string | null = null
@@ -547,7 +553,7 @@ export class PlexSync {
         }
       }
     }
-    if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress)
+    if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress, only)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>
@@ -704,7 +710,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [] }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)
@@ -1094,6 +1100,31 @@ export class PlexSync {
   }
 
   /**
+   * The notes whose release date is only a year (or the 1st of January that a year alone becomes),
+   * in every library's folder, the Books library's included, with the date properties to check.
+   */
+  vagueDateNotes(): { paths: Set<string>, properties: string[] } {
+    const paths = new Set<string>()
+    const properties = new Set<string>()
+    const files = this.app.vault.getMarkdownFiles()
+    for (const lib of Object.values(this.settings.libraries)) {
+      if (lib.target === 'skip') continue
+      const names = lib.properties.filter(m => m.source === 'releaseDate' && m.name.trim()).map(m => m.name.trim())
+      if (!names.length) continue
+      const folder = normalizePath(lib.folder)
+      for (const file of files) {
+        if (!file.path.startsWith(`${folder}/`)) continue
+        const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+        const vague = names.filter(name => vagueDate(from[name]))
+        if (!vague.length) continue
+        paths.add(file.path)
+        vague.forEach(name => properties.add(name))
+      }
+    }
+    return { paths, properties: [...properties] }
+  }
+
+  /**
    * The notes in this family's folders that no item matched (nor "Use an existing note" tied),
    * apart from those you chose to always ignore.
    */
@@ -1176,7 +1207,7 @@ export class PlexSync {
    * title and author; the pop-up says which book was found. Leaving its link unticked means it's
    * the wrong book: that note isn't looked up again. Books that can't be found count as unmatched.
    */
-  private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn): Promise<void> {
+  private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn, only?: Set<string>): Promise<void> {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
@@ -1188,7 +1219,7 @@ export class PlexSync {
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
     const folder = normalizePath(lib.folder)
-    const files = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(`${folder}/`))
+    const files = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(`${folder}/`) && (!only || only.has(f.path)))
     let position = 0
     for (const file of files) {
       position++
@@ -1235,6 +1266,7 @@ export class PlexSync {
         await rescaleOnly()
         continue
       }
+      result.checked.push(file.path)
       const searched = !work
       const checks = this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
       const lines: ApprovalLine[] = this.rescaleLines(rescale)

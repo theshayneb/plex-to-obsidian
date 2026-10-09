@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
-import { CheckModal, UnmatchedModal } from './check-modal'
+import { CheckModal, checkableProperties, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
@@ -44,6 +44,31 @@ export default class PlexMediaNotesPlugin extends Plugin {
       name: 'Check existing notes against sources',
       callback: () => {
         new CheckModal(this.app, this.settings, properties => void this.checkNotes(properties)).open()
+      },
+    })
+
+    this.addCommand({
+      id: 'check-this-note',
+      name: 'Check this note against sources',
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile()
+        if (!file || file.extension !== 'md') return false
+        if (!checking) void this.checkThisNote(file)
+        return true
+      },
+    })
+
+    this.addCommand({
+      id: 'check-year-only-dates',
+      name: 'Check notes with a year-only date against sources',
+      callback: () => {
+        const { paths, properties } = new PlexSync(this.app, this.settings, () => this.saveSettings()).vagueDateNotes()
+        if (!paths.size) {
+          new Notice('No notes have a year-only date')
+          return
+        }
+        new Notice(`${paths.size} note${paths.size === 1 ? ' has' : 's have'} a year-only date; checking ${paths.size === 1 ? 'it' : 'them'}…`)
+        void this.checkNotes(properties, paths)
       },
     })
 
@@ -120,8 +145,9 @@ export default class PlexMediaNotesPlugin extends Plugin {
    * "Check existing notes against sources": compares the chosen properties of every existing note
    * with its source and asks about each difference, then lists the notes nothing matched. Slow:
    * every item's full details are fetched, Steam's spaced out.
+   * @param only just these notes, not every note.
    */
-  async checkNotes(properties: string[]): Promise<void> {
+  async checkNotes(properties: string[], only?: Set<string>): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('Media sync is already running')
       return
@@ -131,7 +157,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new Notice('Starting…', 0)
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message), 'check', properties)
+        .run(message => notice.setMessage(message), 'check', properties, only)
       notice.hide()
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
       if (result.keptLinks) parts.push(`${result.keptLinks} value${result.keptLinks === 1 ? '' : 's'} kept as they were`)
@@ -142,6 +168,37 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.error('Media import and sync: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path)).open()
+    } catch (err) {
+      notice.hide()
+      new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
+    } finally {
+      this.plexSyncRunning = false
+    }
+  }
+
+  /**
+   * "Check this note against sources": the full check (every property) of the open note alone.
+   * Its source is still found by listing Plex and Steam, so it takes as long as their listings do.
+   */
+  async checkThisNote(file: TFile): Promise<void> {
+    if (this.plexSyncRunning) {
+      new Notice('Media sync is already running')
+      return
+    }
+    this.plexSyncRunning = true
+    const notice = new Notice(`Checking ${file.basename}…`, 0)
+    try {
+      const properties = checkableProperties(this.settings).map(p => p.name)
+      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+        .run(message => notice.setMessage(message), 'check', properties, new Set([file.path]))
+      notice.hide()
+      if (result.failed.length) {
+        console.error('Media import and sync: failed items', result.failed)
+        new Notice(`Checking failed: ${result.failed.map(f => f.error).join('; ')}`, 10000)
+      } else if ([...result.corrected, ...result.links, ...result.sentRatings].includes(file.path)) new Notice(`${file.basename}: changed`)
+      else if (result.declined || result.keptLinks || result.stopped) new Notice(`${file.basename}: left as it was`)
+      else if (result.checked.includes(file.path)) new Notice(`${file.basename} already matches its source`)
+      else new Notice(`${file.basename} matches nothing in Plex, Steam or Open Library (or its library isn't synced)`, 8000)
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)

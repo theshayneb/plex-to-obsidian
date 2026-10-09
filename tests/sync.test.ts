@@ -885,6 +885,28 @@ describe('PlexSync', () => {
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
   })
 
+  it('checks just the notes asked for, and replaces a year-only date with the full one, ticked', async () => {
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Date: '2016' },
+      'Media/Movies/Heat (1995).md': { Date: '1995-01-01' },
+      'Media/Movies/Old film I deleted.md': { Date: '2001' },
+    })
+    const settings = settingsWith({ tickDifferences: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], movies[1]] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve(), r => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) }))
+
+    const vague = sync.vagueDateNotes()
+    expect([...vague.paths]).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md', 'Media/Movies/Old film I deleted.md'])
+    expect(vague.properties).toEqual(['Date'])
+
+    const result = await sync.run(() => {}, 'check', ['Date'], new Set(['Media/Movies/Arrival (2016).md']))
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Date: '2016-11-11' })
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({ Date: '1995-01-01' })
+    expect(result.checked).toEqual(['Media/Movies/Arrival (2016).md'])
+    expect(result.unmatched).toEqual([])
+  })
+
   it('points out notes in the libraries\' folders that match nothing, unless always ignored', async () => {
     const { app } = makeApp({
       'Media/Movies/Heat (1995).md': {},

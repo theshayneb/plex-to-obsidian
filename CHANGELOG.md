@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.64] - 2026-10-09
+
+- New command "Check this note against sources": the full check (every property) of just the note you have open, books included. A notice says whether it changed, already matched, or matches nothing.
+- New command "Check notes with a year-only date against sources": finds every note whose date is only a year (or the 1st of January a year became) and checks just its date. A fuller date from the same year starts ticked.
+
 ## [0.0.63] - 2026-10-09
 
 ### Changed

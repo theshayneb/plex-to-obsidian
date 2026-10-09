@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { PlexItem } from '../src/notes'
 import {
+  vagueDate,
+  checkValue,
   buildFrontmatter,
   DEFAULT_PROPERTIES,
   defaultValues,
@@ -291,5 +293,18 @@ describe('fullDate', () => {
   it('is used for release dates', () => {
     const game: PlexItem = { ratingKey: 'hltb-1', type: 'game', title: 'Old game', year: 1998 }
     expect(sourceValue('releaseDate', game, ctx)).toBe('1998-01-01')
+  })
+})
+
+describe('vagueDate', () => {
+  it('knows a year alone, as text, a number or the 1st of January', () => {
+    expect(['2024', 2024, '2024-01-01', ' 2024 '].map(vagueDate)).toEqual([true, true, true, true])
+    expect(['2024-03-01', '2024-01-02', '', undefined, 'soon'].map(vagueDate)).toEqual([false, false, false, false, false])
+  })
+
+  it('lets a check replace a year-only date with the source\'s, ticked (not one from another year)', () => {
+    expect(checkValue('releaseDate', '2016-01-01', '2016-11-11', [], 'movie')).toEqual({ to: '2016-11-11', ticked: true })
+    expect(checkValue('releaseDate', 2016, '2016-01-01', [], 'movie')).toEqual({ to: '2016-01-01', ticked: true })
+    expect(checkValue('releaseDate', '2015-01-01', '2016-11-11', [], 'movie')).toEqual({ to: '2016-11-11', ticked: false })
   })
 })

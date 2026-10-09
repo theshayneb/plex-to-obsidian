@@ -309,6 +309,12 @@ export function fullDate(date: string | undefined, year?: number): string | unde
   return year ? `${year}-01-01` : undefined
 }
 
+/** A date that's only a year: "2024", 2024, or "2024-01-01" (what a year alone becomes). */
+export function vagueDate(value: unknown): boolean {
+  const text = typeof value === 'number' ? String(value) : typeof value === 'string' ? value.trim() : ''
+  return /^\d{4}(-01-01)?$/.test(text)
+}
+
 /** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
 /** Minutes as hours, to one decimal place. */
 function hours(minutes: number | undefined): number {
@@ -592,6 +598,8 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
   }
   if (blank(current)) return { to: value, ticked: true }
   if (sameValue(current, value)) return null
+  // A year alone (or the 1st of January standing in for one) gives way to the source's date.
+  if (source === 'releaseDate' && vagueDate(current) && String(value).startsWith(String(current).trim().slice(0, 4))) return { to: value, ticked: true }
   if (source === 'durationMinutes' && typeof value === 'number') return { to: value, ticked: sameLengthOtherForm(current, value) }
   return { to: value, ticked: false }
 }

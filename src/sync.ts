@@ -416,7 +416,12 @@ export class PlexSync {
           .map(({ item, lib }) => ({ item, lib, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
         const libOf = new Map(matches.map(m => [m.item, m.lib]))
         const plans = planRenames(matches)
+        let planned = 0
         for (const { item, path } of plans) {
+          planned++
+          if (result.stopped) break
+          // The pop-ups only start once every note's changes are known, so show how far along it is.
+          progress(`Checking existing notes: ${planned} of ${plans.length} (${displayName(item)})…`)
           // Ignored items still count above, so their notes are never taken for another item.
           if (this.isIgnored(item)) continue
           if (genreCheck && only && !only.has(path)) continue
@@ -468,7 +473,7 @@ export class PlexSync {
           const links = asking ? this.planLinks(file, item, lib) : null
           let checks: Checks | null = null
           try {
-            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosen, progress) : asking ? this.planChecks(file, item, lib) : null
+            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosen) : asking ? this.planChecks(file, item, lib) : null
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
@@ -1262,10 +1267,9 @@ export class PlexSync {
    * item's full details fetched. Values you chose to keep before are left alone, and so is a link
    * that points to this item in any form.
    */
-  private async planFullCheck(file: TFile, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, chosen: Set<string>, progress: ProgressFn): Promise<Checks | null> {
+  private async planFullCheck(file: TFile, item: PlexItem, lib: ActiveLibrary, kind: MediaKind, chosen: Set<string>): Promise<Checks | null> {
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
     if (!mappings.length) return null
-    progress(`Checking ${displayName(item)}…`)
     // A game's HowLongToBeat lookup (and cover choices) only when a property needs them.
     const needsLib = mappings.some(m => HLTB_SOURCES.includes(m.source) || m.source === 'poster')
     const full = await this.fullItem(item, needsLib ? lib : undefined)

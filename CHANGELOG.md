@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.71] - 2026-10-09
+
+- While it works out the changes for existing notes (before the first pop-up), the notice now counts along ("Checking existing notes: 120 of 900 (Heat)…") instead of sitting on "Checking existing notes…".
+
 ## [0.0.70] - 2026-10-09
 
 - The list of notes that match nothing now says why for each note with a link: what the link is to in Plex (an album or artist, an episode, something no longer in Plex), that its library isn't synced or is set to Skip, or that another note is already matched to that item. Notes without a link say so.

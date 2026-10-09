@@ -98,6 +98,8 @@ export interface PlexNotesSettings {
   keptValues: Record<string, string>
   /** Notes that match nothing but are fine as they are ("Always ignore"): not pointed out again. */
   unmatchedIgnored: string[]
+  /** Recommendations you said "Not interested" to (`note:<path>` or `item:<rating key>`): not suggested again. */
+  notInterested: string[]
   /** Start every offered change to a value already in a note ticked (off: only clear-cut fixes are). */
   tickDifferences: boolean
   /** One-time changes to saved settings already made, so they aren't made again (and can be undone by hand). */
@@ -168,6 +170,7 @@ export function defaultSettings(): PlexNotesSettings {
     keptLinks: {},
     keptValues: {},
     unmatchedIgnored: [],
+    notInterested: [],
     tickDifferences: true,
     migrations: [],
     allowedGenres: [...DEFAULT_GENRES],
@@ -300,6 +303,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.ratingsSeen = { ...saved.ratingsSeen }
   settings.ratingsReviewed = { ...saved.ratingsReviewed }
   if (Array.isArray(saved.unmatchedIgnored)) settings.unmatchedIgnored = saved.unmatchedIgnored.map(String)
+  if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)
   settings.steam = { ...settings.steam, ...saved.steam }

@@ -983,6 +983,22 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Free Solo (2018).md')!.Summary).toBeUndefined()
   })
 
+  it('lists Plex items with no note, and makes a note for one with its Plex link', async () => {
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': {} })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], movies[1]] } })
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{ ...movies[1], summary: 'Cops and robbers.' }] } })
+    const missing = await new PlexSync(app as never, settings, () => Promise.resolve()).withoutNotes(() => {})
+    expect(missing.map(m => [m.item.title, m.libraryKey, m.kind])).toEqual([['Heat', '1', 'movie']])
+    const { created } = await new PlexSync(app as never, settings, () => Promise.resolve()).addNew(missing[0].item, '1')
+    expect(created).toBe('Media/Movies/Heat (1995).md')
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')).toMatchObject({
+      Summary: 'Cops and robbers.',
+      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2',
+    })
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})
@@ -1423,5 +1439,24 @@ describe('file name brackets', () => {
     expect(loadSettings({}).fileNameReplacements).toMatchObject({ '[': '(', ']': ')' })
     expect(loadSettings({ serverUrl: 'x', fileNameReplacements: { ':': '-' } }).fileNameReplacements).toEqual({ ':': '-', '[': '(', ']': ')' })
     expect(loadSettings({ serverUrl: 'x', fileNameReplacements: { '[': '' } }).fileNameReplacements['[']).toBe('')
+  })
+})
+
+describe('recommendation data', () => {
+  it('reads ratings (old and new scales), statuses, genres and people from notes', async () => {
+    const { noteEntries } = await import('../src/recommend-data')
+    const { app } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Genre: ['Sci-Fi'], Rating: '⭐⭐⭐', Director: ['[[Denis Villeneuve]]'], Status: 'completed' },
+      'Media/Movies/Dune (2021).md': { Genre: ['Sci-Fi'], Status: 'pending' },
+    })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries[1].properties.push({ name: 'Rating', source: 'userRatingEmoji' }, { name: 'Director', source: 'directors' })
+    const entries = noteEntries(app as never, settings)
+    // ⭐⭐⭐ is four stars in the old emoji scale, until the note's rating is reviewed.
+    expect(entries.map(e => [e.title, e.level, e.unseen, e.genres, e.people])).toEqual([
+      ['Arrival (2016)', 4, false, ['Sci-Fi'], ['Denis Villeneuve']],
+      ['Dune (2021)', null, true, ['Sci-Fi'], []],
+    ])
   })
 })

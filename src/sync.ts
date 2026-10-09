@@ -703,6 +703,17 @@ export class PlexSync {
    * Explains, without changing anything, what a sync does with the items a Plex or Steam link
    * points to, or whose title contains the text: one report (a list of paragraphs) per item.
    */
+  /**
+   * The items in Plex and Steam that have no note yet (and aren't skipped every time), with the
+   * library each is in, for recommendations. Reads the libraries; changes nothing.
+   */
+  async withoutNotes(progress: ProgressFn): Promise<{ item: PlexItem, libraryKey: string, kind: MediaKind }[]> {
+    const { active, indexes, entries } = await this.prepare(progress, false)
+    return entries
+      .filter(({ item, lib }) => !this.isIgnored(item) && !hasNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy))
+      .map(({ item, lib }) => ({ item, kind: lib.target, libraryKey: active.find(([, l]) => l === lib)?.[0] ?? '' }))
+  }
+
   async explain(query: string, progress: ProgressFn): Promise<string[][]> {
     const { indexes, entries } = await this.prepare(progress, true)
     const key = ratingKeyFromLink(query)
@@ -828,7 +839,14 @@ export class PlexSync {
     const chosen = this.settings.libraries[libKey] as LibrarySetting | undefined
     if (!chosen || chosen.target === 'skip') throw new Error('Choose a library to add it to')
     const lib = chosen as ActiveLibrary
-    const item = found.type === 'game' ? await this.gameDetails(found, lib) : found
+    // A Plex item (made from the recommendations page) needs the server, for its link and poster,
+    // and its full details, which listings leave some of out.
+    if (fromPlex(found) && !this.plex && plexReady(this.settings)) {
+      this.plex = new PlexClient(this.settings.serverUrl, this.settings.token)
+      this.machineId = await this.plex.machineIdentifier()
+    }
+    const item = found.type === 'game' ? await this.gameDetails(found, lib)
+      : fromPlex(found) && this.plex ? { ...found, ...await this.plex.item(found.ratingKey) ?? {} } : found
     const family = familyOf(lib)
     const libs = Object.values(this.settings.libraries)
       .filter((l): l is ActiveLibrary => l.target !== 'skip')

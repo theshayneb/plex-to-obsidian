@@ -658,6 +658,25 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Skipped every time').setHeading()
     this.displayIgnored(containerEl)
     this.displayKept(containerEl)
+    this.displayNotInterested(containerEl)
+  }
+
+  /** Recommendations you said "Not interested" to. */
+  private displayNotInterested(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+    const count = settings.notInterested.length
+    new Setting(containerEl).setName('Not interested').setHeading()
+    new Setting(containerEl)
+      .setName(`${count} recommendation${count === 1 ? '' : 's'}`)
+      .setDesc('Suggestions you said "Not interested" to on the recommendations page aren\'t suggested again. Forget them to see them again.')
+      .addButton(button => button
+        .setButtonText('Forget all')
+        .setDisabled(!count)
+        .onClick(async () => {
+          settings.notInterested = []
+          await this.save()
+          this.refresh()
+        }))
   }
 
   /** Values and links you chose to keep in pop-ups, which aren't offered again while they stay the same. */

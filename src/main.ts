@@ -8,6 +8,7 @@ import { errorMessage, PlexNotesSettingTab } from './settings'
 import type { PlexItem } from './notes'
 import { PlexSync } from './sync'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
+import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 
 export default class PlexMediaNotesPlugin extends Plugin {
   settings: PlexNotesSettings = defaultSettings()
@@ -103,6 +104,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
         options: () => [{ type: 'text', key: 'playlistName', displayName: 'Playlist name in Plex', placeholder: 'This view\'s name' }],
       })
     }
+
+    this.registerView(RECOMMEND_VIEW, leaf => new RecommendView(leaf, this))
+    this.addRibbonIcon('sparkles', 'Open recommendations', () => void this.openRecommendations())
+    this.addCommand({
+      id: 'open-recommendations',
+      name: 'Open recommendations',
+      callback: () => void this.openRecommendations(),
+    })
 
     this.addSettingTab(new PlexNotesSettingTab(this.app, this))
 
@@ -251,6 +260,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
     } finally {
       this.plexSyncRunning = false
     }
+  }
+
+  /** Shows the recommendations dashboard, in its own tab (the one already open, if there is one). */
+  private async openRecommendations(): Promise<void> {
+    const open = this.app.workspace.getLeavesOfType(RECOMMEND_VIEW)[0]
+    const leaf = open ?? this.app.workspace.getLeaf('tab')
+    if (!open) await leaf.setViewState({ type: RECOMMEND_VIEW, active: true })
+    await this.app.workspace.revealLeaf(leaf)
   }
 
   /** "Always ignore" for a note that matches nothing: it isn't pointed out again. */

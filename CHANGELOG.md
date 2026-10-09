@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.74] - 2026-10-09
+
+- New recommendations page ("Open recommendations" command, or the sparkles in the ribbon): for movies and TV, music, games and books, what you haven't rated or haven't watched (read, played) yet that's most like what you rated ⭐⭐⭐⭐ or 🩷, from your notes and from Plex items you have no note for. Each says why ("Like Arrival and Sicario · Denis Villeneuve, Sci-Fi"). People in common (director, writer, cast, studio, author, artist, developer, publisher) count most, then genres, styles and moods, and a 🩷 counts twice a ⭐⭐⭐⭐.
+- Each suggestion has "Not interested" (undo under Settings → Remembered choices), and a Plex item with no note has "Make a note".
+
 ## [0.0.73] - 2026-10-09
 
 - The plugin is now called Media Manager. Its folder, settings and hotkeys stay as they were.

@@ -8,7 +8,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel } from '../src/properties'
+  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel, fullDate } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -277,5 +277,19 @@ describe('ratingLabel', () => {
     expect(ratingLabel(4)).toBe('⭐⭐⭐⭐ (4 stars in Plex)')
     expect(ratingLabel(4, 'stars', 3.5)).toBe('⭐⭐⭐⭐ (3.5 stars in Plex)')
     expect(ratingLabel(5)).toBe('🩷 (5 stars in Plex)')
+  })
+})
+
+describe('fullDate', () => {
+  it('turns a year (or year and month) into a date Obsidian can read', () => {
+    expect(fullDate('2024')).toBe('2024-01-01')
+    expect(fullDate('2024-05')).toBe('2024-05-01')
+    expect(fullDate('2024-05-17')).toBe('2024-05-17')
+    expect(fullDate(undefined, 1965)).toBe('1965-01-01')
+    expect(fullDate(undefined)).toBeUndefined()
+  })
+  it('is used for release dates', () => {
+    const game: PlexItem = { ratingKey: 'hltb-1', type: 'game', title: 'Old game', year: 1998 }
+    expect(sourceValue('releaseDate', game, ctx)).toBe('1998-01-01')
   })
 })

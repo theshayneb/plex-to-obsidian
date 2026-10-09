@@ -294,6 +294,21 @@ export function starEmoji(stars: number | undefined, scale: RatingScale = 'stars
   return level === 5 ? '🩷' : level === 1 ? '💣' : '⭐'.repeat(level)
 }
 
+/**
+ * A date Obsidian can read (YYYY-MM-DD): a year alone becomes the 1st of January ("2024" →
+ * "2024-01-01"), a year and month the 1st of the month; with no date at all, the year (if known)
+ * is used the same way.
+ */
+export function fullDate(date: string | undefined, year?: number): string | undefined {
+  const text = date?.trim()
+  if (text) {
+    if (/^\d{4}$/.test(text)) return `${text}-01-01`
+    if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`
+    return text
+  }
+  return year ? `${year}-01-01` : undefined
+}
+
 /** Times played; for a show, Plex's total episode plays, or failing that the episodes watched. */
 /** Minutes as hours, to one decimal place. */
 function hours(minutes: number | undefined): number {
@@ -422,7 +437,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'tagline': return item.tagline
     case 'title': return item.title
     case 'originalTitle': return item.type === 'track' ? undefined : item.originalTitle
-    case 'releaseDate': return orAlbum(item, i => i.originallyAvailableAt)
+    case 'releaseDate': return fullDate(orAlbum(item, i => i.originallyAvailableAt), yearOf(item))
     case 'year': return yearOf(item)
     case 'durationMinutes': return item.duration ? Math.round(item.duration / 60000) : undefined
     case 'durationText': return durationText(item.duration)

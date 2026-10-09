@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.63] - 2026-10-09
+
+### Changed
+- Release dates are always full dates Obsidian can read: when a source only has the year (some Steam games, HowLongToBeat, Open Library, OMDb without a release date), the date is the 1st of January of that year (YYYY-01-01); a year and month becomes the 1st of the month. "Check existing notes against sources" offers this for notes that have just a year.
+
 ## [0.0.62] - 2026-10-09
 
 ### Fixed

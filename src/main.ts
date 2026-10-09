@@ -213,7 +213,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         parts.push(`${result.failed.length} failed (see the developer console)`)
         console.error('Media import and sync: failed items', result.failed)
       }
-      new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path)).open()
+      new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
@@ -307,7 +307,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       }
       if (result.unmatched.length) parts.push(`${result.unmatched.length} note${result.unmatched.length === 1 ? '' : 's'} ${result.unmatched.length === 1 ? 'matches' : 'match'} nothing`)
       new Notice(parts.join(', '), 8000)
-      if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path)).open()
+      if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
     } catch (err) {
       notice.hide()
       new Notice(`Media sync failed: ${errorMessage(err)}`, 10000)

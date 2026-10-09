@@ -67,6 +67,8 @@ export interface SyncResult {
   unmatched: string[]
   /** Notes a check compared with their source (whether or not anything differed). */
   checked: string[]
+  /** Why some of the unmatched notes match nothing, by path (when their link says). */
+  unmatchedWhy: Record<string, string>
   /** Notes whose rating was sent to Plex. */
   sentRatings: string[]
   /** Links and values you chose to keep in this sync. */
@@ -366,7 +368,7 @@ export class PlexSync {
    */
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>): Promise<SyncResult> {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -389,6 +391,7 @@ export class PlexSync {
         this.listUnmatched(family, active, matched, result)
       }
       if (genreCheck && only) result.unmatched = result.unmatched.filter(path => only.has(path))
+      await this.explainUnmatched(result, entries, progress)
     }
     const renaming = full && this.settings.renameExistingNotes
     const filling = full && active.some(([, lib]) => lib.properties.some(m => m.fill))
@@ -709,6 +712,38 @@ export class PlexSync {
     return reports
   }
 
+  /**
+   * Why each unmatched note with a link matches nothing: what its link points to, and why that
+   * isn't synced (or that another note already has it).
+   */
+  private async explainUnmatched(result: SyncResult, entries: Entry[], progress: ProgressFn): Promise<void> {
+    const names = [...new Set(Object.values(this.settings.libraries).flatMap(lib => linkPropertyNames(lib.properties)))]
+    const listed = new Map(entries.flatMap(({ item }) => itemKeys(item).map((key): [string, PlexItem] => [key, item])))
+    // Enough to explain a long list without a request per note on a huge one.
+    for (const path of result.unmatched.slice(0, 200)) {
+      const file = this.app.vault.getAbstractFileByPath(path)
+      if (!(file instanceof TFile)) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const key = names.map(name => ratingKeyFromLink(frontmatter[name])).find((k): k is string => Boolean(k))
+      if (!key) {
+        result.unmatchedWhy[path] = 'It has no Plex or Steam link, and its file name matches no item\'s.'
+        continue
+      }
+      const item = listed.get(key)
+      if (item) {
+        result.unmatchedWhy[path] = `Its link is to ${displayName(item)}, but another note is matched to that.`
+        continue
+      }
+      if (key.startsWith('imdb-') || key.startsWith('ol-') || key.startsWith('hltb-')) continue
+      progress(`Looking into ${file.basename}…`)
+      try {
+        result.unmatchedWhy[path] = (await this.explainMissing(key)).join(': ')
+      } catch {
+        // Just not explained.
+      }
+    }
+  }
+
   /** Why an item a link points to isn't in any library being synced. */
   private async explainMissing(key: string): Promise<string[]> {
     if (key.startsWith('steam-')) {
@@ -793,7 +828,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [] }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)

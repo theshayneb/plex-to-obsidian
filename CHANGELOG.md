@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.70] - 2026-10-09
+
+- The list of notes that match nothing now says why for each note with a link: what the link is to in Plex (an album or artist, an episode, something no longer in Plex), that its library isn't synced or is set to Skip, or that another note is already matched to that item. Notes without a link say so.
+
 ## [0.0.69] - 2026-10-09
 
 - Import and sync and the checks now ask about existing notes grouped by library, then by what changes: all the notes where only the Link changes, then those where the Link and the Rating change, and so on, fewest changes first. Each pop-up says which group it's in (for example "Movies · Link (3 of 12)"). Every note's changes are worked out before the first pop-up, so a check takes a while before it starts asking.

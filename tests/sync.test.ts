@@ -992,6 +992,21 @@ describe('PlexSync', () => {
     expect(result.renamed).toEqual([{ from: 'Media/Movies/arrival.md', to: 'Media/Movies/Arrival (2016).md' }])
   })
 
+  it('says why a note with a link matches nothing', async () => {
+    const { app } = makeApp({
+      'Media/Movies/Aurora by Juanes.md': { Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F103528' },
+      'Media/Movies/Old film I deleted.md': {},
+    })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    responses.set('/library/metadata/103528', { MediaContainer: { Metadata: [{ ratingKey: '103528', type: 'album', title: 'Aurora', parentTitle: 'Juanes' }] } })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(result.unmatched).toEqual(['Media/Movies/Aurora by Juanes.md', 'Media/Movies/Old film I deleted.md'])
+    expect(result.unmatchedWhy['Media/Movies/Aurora by Juanes.md']).toContain('That\'s a link to an album. Music notes are made for each track.')
+    expect(result.unmatchedWhy['Media/Movies/Old film I deleted.md']).toContain('no Plex or Steam link')
+  })
+
   it('points out notes in the libraries\' folders that match nothing, unless always ignored', async () => {
     const { app } = makeApp({
       'Media/Movies/Heat (1995).md': {},

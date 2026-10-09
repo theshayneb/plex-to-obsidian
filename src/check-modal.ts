@@ -79,7 +79,8 @@ export class CheckModal extends Modal {
  */
 export class UnmatchedModal extends Modal {
   constructor(app: App, private readonly pmnTitle: string, private readonly pmnSummary: string | null,
-    private readonly pmnUnmatched: string[], private readonly pmnIgnore: (path: string) => Promise<void>) {
+    private readonly pmnUnmatched: string[], private readonly pmnIgnore: (path: string) => Promise<void>,
+    private readonly pmnWhy: Record<string, string> = {}) {
     super(app)
   }
 
@@ -102,7 +103,7 @@ export class UnmatchedModal extends Modal {
     for (const path of this.pmnUnmatched) {
       const row = new Setting(list)
         .setName(path.split('/').pop()!.replace(/\.md$/, ''))
-        .setDesc(path.split('/').slice(0, -1).join('/'))
+        .setDesc([path.split('/').slice(0, -1).join('/'), this.pmnWhy[path]].filter(Boolean).join(' · '))
         .addButton(b => b.setButtonText('Open').onClick(() => {
           const file = this.app.vault.getAbstractFileByPath(path)
           if (file instanceof TFile) void this.app.workspace.getLeaf(true).openFile(file)

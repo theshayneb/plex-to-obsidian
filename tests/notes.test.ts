@@ -225,7 +225,7 @@ describe('songs by several artists', () => {
   })
 
   it('matches a song whose Plex artist lists several artists to a note named with the first', () => {
-    const naming = { format: '{{artist}} - {{title}}', replacements: [] }
+    const naming = { format: '{{artist}} - {{title}}', replacements: {} }
     const index = emptyIndex()
     addToIndex(index, 'Music/Juanes - Aurora.md', 'Juanes - Aurora')
     const item = { ratingKey: '1', type: 'track', title: 'Aurora (ft. Mon Laferte)', originalTitle: 'Juanes, Mon Laferte', grandparentTitle: 'Juanes' }

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.76] - 2026-10-09
+
+- A game's playtime never goes down: when the note's playtime is longer than Steam's, syncs and checks leave it as it is instead of offering Steam's.
+
 ## [0.0.75] - 2026-10-09
 
 - Recommendations no longer need Director or cast properties in your notes: for every note that matches a Plex item, the item's director, writers, main cast, studio and genres (and a song's artist) are taken from Plex for ranking only. Nothing is written to your notes. A book's author also comes from a "Title by Author" file name when the note has no author property.

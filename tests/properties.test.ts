@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlexItem } from '../src/notes'
 import {
   vagueDate,
+  playtimeShrinks,
   checkValue,
   buildFrontmatter,
   DEFAULT_PROPERTIES,
@@ -311,5 +312,13 @@ describe('vagueDate', () => {
   it('never makes a date vaguer: a year-only source leaves a full date from that year alone', () => {
     expect(checkValue('releaseDate', '2019-09-03', '2019-01-01', [], 'book')).toBeNull()
     expect(checkValue('releaseDate', '2019-09-03', '1900-01-01', [], 'book')).toEqual({ to: '1900-01-01', ticked: false })
+  })
+})
+
+describe('playtime', () => {
+  it('never offers a shorter playtime than the note\'s', () => {
+    expect([playtimeShrinks(12.5, 10), playtimeShrinks('12.5', 10), playtimeShrinks(8, 10), playtimeShrinks('', 10), playtimeShrinks(undefined, 10)]).toEqual([true, true, false, false, false])
+    expect(checkValue('playtime', 12.5, 10, [], 'game')).toBeNull()
+    expect(checkValue('playtime', 8, 10, [], 'game')).toEqual({ to: 10, ticked: false })
   })
 })

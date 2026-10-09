@@ -577,6 +577,15 @@ export function sameValue(current: unknown, value: unknown): boolean {
  * duration in hours or text, a search link, or genres (the note's kept ones plus the source's).
  * Any other difference starts unticked: it's yours unless you tick it.
  */
+/**
+ * Whether a playtime from Steam would make the note's smaller: the note's (hours, as a number or
+ * text such as "12.5") is more than Steam's, so it's kept (time played elsewhere, say).
+ */
+export function playtimeShrinks(current: unknown, value: unknown): boolean {
+  const mine = typeof current === 'number' ? current : typeof current === 'string' ? parseFloat(current.replace(',', '.')) : NaN
+  return typeof value === 'number' && Number.isFinite(mine) && mine > value
+}
+
 export function checkValue(source: FieldSource, current: unknown, value: unknown, allowedGenres: string[], kind: MediaKind, leftOut: string[] = []): { to: unknown, ticked: boolean } | null {
   if (blank(value)) return null
   if (source === 'genres') {
@@ -598,6 +607,8 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
   }
   if (blank(current)) return { to: value, ticked: true }
   if (sameValue(current, value)) return null
+  // A longer playtime in the note than Steam's stays.
+  if (source === 'playtime' && playtimeShrinks(current, value)) return null
   // A date of yours is never made vaguer: the source's year alone (or the 1st of January standing
   // in for one, as with every Open Library book) doesn't replace a full date from that year.
   if (source === 'releaseDate' && vagueDate(value) && !vagueDate(current) && String(current).trim().startsWith(String(value).slice(0, 4))) return null

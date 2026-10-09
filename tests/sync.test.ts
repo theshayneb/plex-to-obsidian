@@ -392,8 +392,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
-      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐⭐ (4 stars in Plex)', unticked: false }]],
-      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐⭐ (4 stars in Plex)', value: '⭐⭐ (2 stars in Plex)', unticked: false }]],
+      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐⭐ (4 stars in Plex)', edit: 'text', unticked: false }]],
+      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐⭐ (4 stars in Plex)', value: '⭐⭐ (2 stars in Plex)', edit: 'text', unticked: false }]],
     ])
     expect(requested.filter(u => u.includes('/:/rate'))).toEqual([
       'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=8',
@@ -443,6 +443,28 @@ describe('PlexSync', () => {
     requests.length = 0
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     expect(requests.filter(r => r.action === 'change')).toEqual([])
+  })
+
+  it('sends Plex the rating as you edited it, on its own line or the note\'s', async () => {
+    const { app } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Rating: '⭐⭐⭐' },
+      'Media/Movies/Heat (1995).md': { Rating: '⭐⭐⭐' },
+    })
+    const settings = settingsWith({ sendRatings: true })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], movies[1]] } })
+    responses.set('/:/rate', {})
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      // Arrival: the converted rating edited back to ⭐⭐⭐. Heat: "2" typed on the Plex line.
+      const edits = r.path.includes('Arrival') ? { 'rescale:Rating': '⭐⭐⭐' } : { plexRating: '2' }
+      return Promise.resolve({ choice: 'apply', excluded: [], edits })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requested.filter(u => u.includes('/:/rate')).sort()).toEqual([
+      'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=6',
+      'http://plex:32400/:/rate?key=2&identifier=com.plexapp.plugins.library&rating=4',
+    ])
   })
 
   it('shows the play count now and after', async () => {

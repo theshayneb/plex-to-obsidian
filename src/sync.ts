@@ -427,7 +427,7 @@ export class PlexSync {
           }
           lines.push(...this.rescaleLines(rescale))
           if (toPlex) {
-            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), unticked: genreCheck || !this.settings.tickDifferences })
+            lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
           const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
           if (!approval) continue
@@ -534,8 +534,9 @@ export class PlexSync {
             }
             if (await this.applyRescale(file, item.ratingKey, rescale, excluded, edits)) result.corrected.push(file.path)
             if (sending && toPlex) {
-              await this.plex!.rate(item.ratingKey, toPlex * 2)
-              this.seeRating(item.ratingKey, toPlex)
+              const level = this.plexRatingToSend(toPlex, rescale, excluded, edits)
+              await this.plex!.rate(item.ratingKey, level * 2)
+              this.seeRating(item.ratingKey, level)
               result.sentRatings.push(file.path)
             }
           } catch (err) {
@@ -774,6 +775,25 @@ export class PlexSync {
       return null
     }
     return { names: changed, from, to }
+  }
+
+  /**
+   * The rating to send to Plex: as typed on its own line (💣 to 🩷, or 1–5 stars), else as the
+   * note's rating line was left (a converted rating you edited), else the one offered.
+   */
+  private plexRatingToSend(offered: number, rescale: Rescale | null, excluded: Set<string>, edits: Record<string, string | string[]>): number {
+    const typed = edits.plexRating
+    if (typeof typed === 'string') {
+      const stars = noteStars(typed, 'stars') ?? Number(/\d+/.exec(typed)?.[0])
+      return stars >= 1 ? Math.min(5, stars) : offered
+    }
+    for (const name of rescale?.names ?? []) {
+      if (excluded.has(`rescale:${name}`)) continue
+      const edited = edits[`rescale:${name}`]
+      const level = noteStars(typeof edited === 'string' ? edited : rescale!.to[name], 'stars')
+      if (level) return level
+    }
+    return offered
   }
 
   /** The approval pop-up's lines for a rescale. */

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.61] - 2026-10-09
+
+### Fixed
+- "Your rating in Plex" now sends the rating you chose: if you edit the note's converted rating (say ⭐⭐⭐⭐ back to ⭐⭐⭐), that's what goes to Plex, not the first suggestion. The "Your rating in Plex" line can also be edited on its own: type 💣, ⭐⭐, ⭐⭐⭐, ⭐⭐⭐⭐, 🩷 or a number of stars (1–5); that wins over the note's.
+
 ## [0.0.60] - 2026-10-08
 
 ### Added

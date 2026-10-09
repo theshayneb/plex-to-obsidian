@@ -708,10 +708,28 @@ export class PlexSync {
    * library each is in, for recommendations. Reads the libraries; changes nothing.
    */
   async withoutNotes(progress: ProgressFn): Promise<{ item: PlexItem, libraryKey: string, kind: MediaKind }[]> {
+    return (await this.libraryItems(progress)).withoutNotes
+  }
+
+  /**
+   * Every item in Plex and Steam: those with a note (one note only), by its path, and those with
+   * none yet. For recommendations, which take a note's people (director, cast…) from its item.
+   * Reads the libraries; changes nothing.
+   */
+  async libraryItems(progress: ProgressFn): Promise<{
+    withNotes: { item: PlexItem, path: string, kind: MediaKind }[]
+    withoutNotes: { item: PlexItem, libraryKey: string, kind: MediaKind }[]
+  }> {
     const { active, indexes, entries } = await this.prepare(progress, false)
-    return entries
-      .filter(({ item, lib }) => !this.isIgnored(item) && !hasNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy))
-      .map(({ item, lib }) => ({ item, kind: lib.target, libraryKey: active.find(([, l]) => l === lib)?.[0] ?? '' }))
+    const withNotes: { item: PlexItem, path: string, kind: MediaKind }[] = []
+    const withoutNotes: { item: PlexItem, libraryKey: string, kind: MediaKind }[] = []
+    for (const { item, lib } of entries) {
+      if (this.isIgnored(item)) continue
+      const match = findNote(indexes[familyOf(lib)], item, this.naming(lib), lib.matchBy)
+      if (match?.paths.length === 1) withNotes.push({ item, path: match.paths[0], kind: lib.target })
+      else if (!match) withoutNotes.push({ item, kind: lib.target, libraryKey: active.find(([, l]) => l === lib)?.[0] ?? '' })
+    }
+    return { withNotes, withoutNotes }
   }
 
   async explain(query: string, progress: ProgressFn): Promise<string[][]> {

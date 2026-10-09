@@ -2,7 +2,7 @@ import { ItemView, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import type { PlexItem } from './notes'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
-import { itemEntry, noteEntries } from './recommend-data'
+import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
 import { PlexSync } from './sync'
 
@@ -23,6 +23,8 @@ export class RecommendView extends ItemView {
   // "pmn" prefix: avoid clashing with undocumented members of Obsidian's own class.
   /** Plex and Steam items with no note yet, once looked up (null: not yet). */
   private pmnItems: { entry: RecEntry, item: PlexItem, libraryKey: string }[] | null = null
+  /** What Plex and Steam know about the items notes are for, by note path. */
+  private pmnMatched = new Map<string, RecEntry>()
   private pmnLooking = false
   private pmnLookupError: string | null = null
 
@@ -52,8 +54,9 @@ export class RecommendView extends ItemView {
     this.pmnRender()
     try {
       const sync = new PlexSync(this.app, this.pmnPlugin.settings, () => this.pmnPlugin.saveSettings())
-      const found = await sync.withoutNotes(() => {})
-      this.pmnItems = found.map(({ item, kind, libraryKey }) => ({ entry: itemEntry(item, kind), item, libraryKey }))
+      const { withNotes, withoutNotes } = await sync.libraryItems(() => {})
+      this.pmnItems = withoutNotes.map(({ item, kind, libraryKey }) => ({ entry: itemEntry(item, kind), item, libraryKey }))
+      this.pmnMatched = new Map(withNotes.map(({ item, path, kind }) => [path, itemEntry(item, kind)]))
     } catch (err) {
       this.pmnLookupError = errorMessage(err)
     } finally {
@@ -67,7 +70,11 @@ export class RecommendView extends ItemView {
     contentEl.empty()
     contentEl.addClass('pmn-dash')
     const settings = this.pmnPlugin.settings
-    const notes = noteEntries(this.app, settings)
+    // A note's people (director, cast…) come from its Plex item, so notes needn't have them.
+    const notes = noteEntries(this.app, settings).map(note => {
+      const item = this.pmnMatched.get(note.path)
+      return item ? withItem(note, item) : note
+    })
     const items = this.pmnItems ?? []
     const entries: RecEntry[] = [...notes, ...items.map(i => i.entry)]
     const recs = recommend(entries, new Set(settings.notInterested))

@@ -1442,6 +1442,34 @@ describe('file name brackets', () => {
   })
 })
 
+describe('recommendation data from Plex', () => {
+  it('takes a note\'s director and cast from its Plex item, without writing them to the note', async () => {
+    const { itemEntry, noteEntries, withItem } = await import('../src/recommend-data')
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Genre: ['Sci-Fi'] } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [
+      { ...movies[0], Director: [{ tag: 'Denis Villeneuve' }], Role: [{ tag: 'Amy Adams' }], Genre: [{ tag: 'Drama' }] },
+      movies[1],
+    ] } })
+    const { withNotes, withoutNotes } = await new PlexSync(app as never, settings, () => Promise.resolve()).libraryItems(() => {})
+    expect(withNotes.map(w => [w.path, w.item.title])).toEqual([['Media/Movies/Arrival (2016).md', 'Arrival']])
+    expect(withoutNotes.map(w => w.item.title)).toEqual(['Heat'])
+    const [note] = noteEntries(app as never, settings)
+    const merged = withItem(note, itemEntry(withNotes[0].item, 'movie'))
+    expect([merged.genres, merged.people]).toEqual([['Sci-Fi', 'Drama'], ['Denis Villeneuve', 'Amy Adams']])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Genre: ['Sci-Fi'] })
+  })
+
+  it('takes a book\'s author from a "Title by Author" file name', async () => {
+    const { noteEntries } = await import('../src/recommend-data')
+    const { app } = makeApp({ 'Media/Books/Dune by Frank Herbert.md': {} })
+    const settings = settingsWith({})
+    settings.libraries = { books: { ...newLibrary('Books', 'book', 'book'), properties: [] } }
+    expect(noteEntries(app as never, settings).map(e => e.people)).toEqual([['Frank Herbert']])
+  })
+})
+
 describe('recommendation data', () => {
   it('reads ratings (old and new scales), statuses, genres and people from notes', async () => {
     const { noteEntries } = await import('../src/recommend-data')

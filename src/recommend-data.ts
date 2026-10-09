@@ -41,13 +41,16 @@ export function noteEntries(app: App, settings: PlexNotesSettings): (RecEntry & 
       const level = ratingProps.map(m => noteStars(fm[m.name.trim()], m.source === 'userRating' ? 'stars' : scale)).find(l => l !== null) ?? null
       const unwatched = lib.values.unwatched.trim().toLowerCase()
       const unseen = statusProps.some(name => typeof fm[name] === 'string' && fm[name].trim().toLowerCase() === unwatched)
+      const people = peopleProps.flatMap(name => names(fm[name]))
+      // A book named "Title by Author" has its author even without an author property.
+      const byAuthor = kind === 'book' && !people.length ? / by (.+)$/.exec(file.basename)?.[1] : undefined
       out.push({
         id: `note:${file.path}`,
         path: file.path,
         title: file.basename,
         group: groupOf(kind),
         genres: genreProps.flatMap(name => names(fm[name])),
-        people: peopleProps.flatMap(name => names(fm[name])),
+        people: byAuthor ? [byAuthor] : people,
         level,
         unseen,
       })
@@ -69,4 +72,13 @@ export function itemEntry(item: PlexItem, kind: MediaKind): RecEntry {
     level: item.userRating ? Math.min(5, Math.ceil(item.userRating / 2)) : null,
     unseen: !isWatched(item) && !isStarted(item),
   }
+}
+
+/**
+ * A note with what its Plex or Steam item knows added (genres, and people such as the director,
+ * writers, main cast and studio), for ranking only: nothing is written to the note.
+ */
+export function withItem(note: RecEntry, item: RecEntry): RecEntry {
+  const union = (a: string[], b: string[]) => [...new Map([...a, ...b].map(v => [v.toLowerCase(), v])).values()]
+  return { ...note, genres: union(note.genres, item.genres), people: union(note.people, item.people) }
 }

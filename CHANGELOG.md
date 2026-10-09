@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.75] - 2026-10-09
+
+- Recommendations no longer need Director or cast properties in your notes: for every note that matches a Plex item, the item's director, writers, main cast, studio and genres (and a song's artist) are taken from Plex for ranking only. Nothing is written to your notes. A book's author also comes from a "Title by Author" file name when the note has no author property.
+
 ## [0.0.74] - 2026-10-09
 
 - New recommendations page ("Open recommendations" command, or the sparkles in the ribbon): for movies and TV, music, games and books, what you haven't rated or haven't watched (read, played) yet that's most like what you rated ⭐⭐⭐⭐ or 🩷, from your notes and from Plex items you have no note for. Each says why ("Like Arrival and Sicario · Denis Villeneuve, Sci-Fi"). People in common (director, writer, cast, studio, author, artist, developer, publisher) count most, then genres, styles and moods, and a 🩷 counts twice a ⭐⭐⭐⭐.

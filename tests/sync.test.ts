@@ -940,6 +940,25 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')!.Link).toBe('https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F90&track=100')
   })
 
+  it('asks about like changes together: by library, then fewest properties changing first', async () => {
+    // Arrival needs its summary and date; Heat only its summary. Heat comes first.
+    const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': {}, 'Media/Movies/Heat (1995).md': { Date: '1995-01-01' } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], movies[1]] } })
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{ ...movies[1], summary: 'Cops and robbers.' }] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date'])
+    expect(requests.map(r => [r.path, r.group, r.position, r.total])).toEqual([
+      ['Media/Movies/Heat (1995).md', 'Movies · Summary (1 of 1)', 1, 2],
+      ['Media/Movies/Arrival (2016).md', 'Movies · Date, Summary (1 of 1)', 2, 2],
+    ])
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

@@ -64,6 +64,8 @@ export interface ApprovalRequest {
   note?: string
   /** For a change: the note's other properties, which stay as they are, shown below the lines. */
   unchanged?: UnchangedLine[]
+  /** Which group of like changes this is in (library, what changes, and where in the group). */
+  group?: string
   position: number
   total: number
 }
@@ -98,6 +100,7 @@ export class ApprovalModal extends Modal {
     this.modalEl.addClass('pmn-approval')
     const { contentEl } = this
     contentEl.createEl('p', { cls: 'setting-item-description', text: `${position} of ${total}` })
+    if (this.pmnRequest.group) contentEl.createEl('p', { cls: 'pmn-approval-group', text: this.pmnRequest.group })
     contentEl.createEl('p').createEl('code', { text: path })
     if (this.pmnRequest.note) contentEl.createEl('p', { cls: 'pmn-approval-note', text: this.pmnRequest.note })
     contentEl.createEl('p', {

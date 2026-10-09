@@ -403,6 +403,9 @@ export class PlexSync {
     const sendingRatings = full && this.settings.sendRatings
     if (renaming || filling || counting || genreCheck || sendingRatings) {
       progress('Checking existing notes…')
+      // Every note's changes are worked out first, then asked about grouped by library and by which
+      // properties change, so a run of the same kind of change can be approved one after another.
+      const pending: { lib: ActiveLibrary, labels: string[], decide: (position: number, total: number, group: string) => Promise<void> }[] = []
       for (const family of FAMILIES) {
         const index = indexes[family]
         const matches = entries
@@ -410,10 +413,7 @@ export class PlexSync {
           .map(({ item, lib }) => ({ item, lib, match: findNote(index, item, this.naming(lib), lib.matchBy) }))
         const libOf = new Map(matches.map(m => [m.item, m.lib]))
         const plans = planRenames(matches)
-        let position = 0
         for (const { item, path } of plans) {
-          position++
-          if (result.stopped) break
           // Ignored items still count above, so their notes are never taken for another item.
           if (this.isIgnored(item)) continue
           if (genreCheck && only && !only.has(path)) continue
@@ -507,120 +507,133 @@ export class PlexSync {
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
-          const approval = await this.ask({ action: 'change', path, lines, position, total: plans.length }, result, item, lib)
-          if (!approval) continue
-          const { excluded, edits } = approval
-          const sending = Boolean(toPlex) && !excluded.has('plexRating')
-          // Reviewed either way: ticked, the note gets the star scale; unticked, its rating already is.
-          const rescaleNames = (rescale?.names ?? []).filter(name => !excluded.has(`rescale:${name}`))
-          if (toPlex && !sending) {
-            // Plex's rating is to stay as it is: don't offer this note's rating again while it's the same.
-            this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
-            result.keptLinks++
-          }
-          const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
-          // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
-          for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
-            this.settings.keptValues[`${item.ratingKey}|${name}`] = String(checks!.from[name])
-            result.keptLinks++
-          }
-          const linkNames = (links?.names ?? []).filter(name => !excluded.has(`link:${name}`))
-          // A link left unticked is yours to keep: don't offer to replace it again while it stays the same.
-          const keptLink = (links?.names ?? []).find(name => excluded.has(`link:${name}`))
-          if (keptLink) {
-            this.settings.keptLinks[item.ratingKey] = String(links!.from[keptLink])
-            result.keptLinks++
-          }
-          // Leave out whatever was unticked, and use whatever was edited.
-          if (excluded.has('rename')) renameTo = null
-          else if (renameTo && typeof edits.rename === 'string') {
-            try {
-              renameTo = this.renameTargetFor(file, sanitizeFileName(edits.rename, this.settings.fileNameReplacements))
-            } catch (err) {
-              renameTo = null
-              result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
+          pending.push({ lib, labels: [...new Set(lines.map(line => line.label))].sort(), decide: async (position, total, group) => {
+            const approval = await this.ask({ action: 'change', path, lines, position, total, group }, result, item, lib)
+            if (!approval) return
+            const { excluded, edits } = approval
+            const sending = Boolean(toPlex) && !excluded.has('plexRating')
+            // Reviewed either way: ticked, the note gets the star scale; unticked, its rating already is.
+            const rescaleNames = (rescale?.names ?? []).filter(name => !excluded.has(`rescale:${name}`))
+            if (toPlex && !sending) {
+              // Plex's rating is to stay as it is: don't offer this note's rating again while it's the same.
+              this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
+              result.keptLinks++
             }
-          }
-          if (fill) {
-            fill = {
-              ...fill,
-              additions: fill.additions
-                .filter(([name]) => !excluded.has(`add:${name}`))
-                .map(([name, value]): [string, unknown] => {
-                  const edited = edits[`add:${name}`]
-                  return [name, edited === undefined ? value : parseEdit(edited, editKind(value))]
-                })
-                .filter(([, value]) => !isBlank(value)),
-              imageProperty: fill.imageProperty && !excluded.has(`add:${fill.imageProperty}`) ? fill.imageProperty : null,
+            const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
+            // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
+            for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
+              this.settings.keptValues[`${item.ratingKey}|${name}`] = String(checks!.from[name])
+              result.keptLinks++
             }
-          }
-          const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
-          const playValue = (name: string): unknown => {
-            const edited = edits[`update:${name}`]
-            return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
-          }
-          if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length) {
-            result.declined++
-            continue
-          }
+            const linkNames = (links?.names ?? []).filter(name => !excluded.has(`link:${name}`))
+            // A link left unticked is yours to keep: don't offer to replace it again while it stays the same.
+            const keptLink = (links?.names ?? []).find(name => excluded.has(`link:${name}`))
+            if (keptLink) {
+              this.settings.keptLinks[item.ratingKey] = String(links!.from[keptLink])
+              result.keptLinks++
+            }
+            // Leave out whatever was unticked, and use whatever was edited.
+            if (excluded.has('rename')) renameTo = null
+            else if (renameTo && typeof edits.rename === 'string') {
+              try {
+                renameTo = this.renameTargetFor(file, sanitizeFileName(edits.rename, this.settings.fileNameReplacements))
+              } catch (err) {
+                renameTo = null
+                result.failed.push({ title: item.title, error: `rename failed: ${errorText(err)}` })
+              }
+            }
+            if (fill) {
+              fill = {
+                ...fill,
+                additions: fill.additions
+                  .filter(([name]) => !excluded.has(`add:${name}`))
+                  .map(([name, value]): [string, unknown] => {
+                    const edited = edits[`add:${name}`]
+                    return [name, edited === undefined ? value : parseEdit(edited, editKind(value))]
+                  })
+                  .filter(([, value]) => !isBlank(value)),
+                imageProperty: fill.imageProperty && !excluded.has(`add:${fill.imageProperty}`) ? fill.imageProperty : null,
+              }
+            }
+            const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
+            const playValue = (name: string): unknown => {
+              const edited = edits[`update:${name}`]
+              return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
+            }
+            if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length) {
+              result.declined++
+              return
+            }
 
-          try {
-            if (renameTo) {
-              await this.app.fileManager.renameFile(file, renameTo)
-              result.renamed.push({ from: path, to: renameTo })
-              addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
-            }
-            if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
-            if (fixNames.length) {
-              // A Plex poster offered for an empty image property is downloaded now that it's approved.
-              const posters = new Map<string, string | null>()
-              for (const name of fixNames.filter(n => checks!.to[n] === POSTER_PREVIEW)) {
-                posters.set(name, await this.imageFor(item, normalizePath(lib.folder), renderFileName(this.naming(lib), item)))
+            try {
+              if (renameTo) {
+                await this.app.fileManager.renameFile(file, renameTo)
+                result.renamed.push({ from: path, to: renameTo })
+                addToIndex(index, renameTo, renderFileName(this.naming(lib), item))
               }
-              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of fixNames) {
-                  const edited = edits[`fix:${name}`]
-                  if (posters.has(name)) {
-                    const image = posters.get(name)
-                    if (image) fm[name] = image
-                    continue
+              if (fill && await this.applyFill(file, fill, lib)) result.filled.push(file.path)
+              if (fixNames.length) {
+                // A Plex poster offered for an empty image property is downloaded now that it's approved.
+                const posters = new Map<string, string | null>()
+                for (const name of fixNames.filter(n => checks!.to[n] === POSTER_PREVIEW)) {
+                  posters.set(name, await this.imageFor(item, normalizePath(lib.folder), renderFileName(this.naming(lib), item)))
+                }
+                await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                  for (const name of fixNames) {
+                    const edited = edits[`fix:${name}`]
+                    if (posters.has(name)) {
+                      const image = posters.get(name)
+                      if (image) fm[name] = image
+                      continue
+                    }
+                    fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, editKind(checks!.to[name]))
                   }
-                  fm[name] = edited === undefined ? checks!.to[name] : parseEdit(edited, editKind(checks!.to[name]))
-                }
-              })
-              result.corrected.push(file.path)
-            }
-            if (linkNames.length) {
-              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of linkNames) {
-                  const edited = edits[`link:${name}`]
-                  fm[name] = typeof edited === 'string' ? edited.trim() : links!.to[name]
-                }
-              })
-              result.links.push(file.path)
-            }
-            if (plays && playNames.length) {
-              await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-                for (const name of playNames) fm[name] = playValue(name)
-              })
-              result.playCounts.push(file.path)
-              if (rating && playNames.some(name => rating.names.includes(name))) {
-                this.seeRating(item.ratingKey, rating.plex)
-                // Written by the plugin, so in the star scale now.
-                this.reviewRating(item.ratingKey)
+                })
+                result.corrected.push(file.path)
               }
+              if (linkNames.length) {
+                await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                  for (const name of linkNames) {
+                    const edited = edits[`link:${name}`]
+                    fm[name] = typeof edited === 'string' ? edited.trim() : links!.to[name]
+                  }
+                })
+                result.links.push(file.path)
+              }
+              if (plays && playNames.length) {
+                await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                  for (const name of playNames) fm[name] = playValue(name)
+                })
+                result.playCounts.push(file.path)
+                if (rating && playNames.some(name => rating.names.includes(name))) {
+                  this.seeRating(item.ratingKey, rating.plex)
+                  // Written by the plugin, so in the star scale now.
+                  this.reviewRating(item.ratingKey)
+                }
+              }
+              if (await this.applyRescale(file, item.ratingKey, rescale, excluded, edits)) result.corrected.push(file.path)
+              if (sending && toPlex) {
+                const level = this.plexRatingToSend(toPlex, rescale, excluded, edits)
+                await this.plex!.rate(item.ratingKey, level * 2)
+                this.seeRating(item.ratingKey, level)
+                result.sentRatings.push(file.path)
+              }
+            } catch (err) {
+              result.failed.push({ title: item.title, error: errorText(err) })
             }
-            if (await this.applyRescale(file, item.ratingKey, rescale, excluded, edits)) result.corrected.push(file.path)
-            if (sending && toPlex) {
-              const level = this.plexRatingToSend(toPlex, rescale, excluded, edits)
-              await this.plex!.rate(item.ratingKey, level * 2)
-              this.seeRating(item.ratingKey, level)
-              result.sentRatings.push(file.path)
-            }
-          } catch (err) {
-            result.failed.push({ title: item.title, error: errorText(err) })
-          }
+          } })
         }
+      }
+      const libraryOrder = active.map(([, l]) => l.title)
+      const groupOf = (p: typeof pending[number]) => p.labels.join(', ')
+      pending.sort((a, b) => libraryOrder.indexOf(a.lib.title) - libraryOrder.indexOf(b.lib.title)
+        || a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)))
+      let position = 0
+      for (const p of pending) {
+        position++
+        if (result.stopped) break
+        const same = pending.filter(q => q.lib.title === p.lib.title && groupOf(q) === groupOf(p))
+        await p.decide(position, pending.length, `${p.lib.title} · ${groupOf(p)} (${same.indexOf(p) + 1} of ${same.length})`)
       }
     }
     if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress, only)

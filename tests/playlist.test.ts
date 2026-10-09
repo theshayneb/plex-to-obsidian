@@ -60,7 +60,7 @@ describe('Plex playlists from a Base', () => {
     expect(plan.leftOut).toEqual([
       { path: 'Music/No link.md', reason: 'no Plex link' },
       { path: 'Music/Airbag again.md', reason: 'same song as a note above' },
-      { path: 'Movies/Heat.md', reason: 'not a song in Plex' },
+      { path: 'Movies/Heat.md', reason: 'its Link is to a movie in Plex, not a song' },
     ])
     expect(plan.existing).toBeNull()
     sent.length = 0
@@ -84,6 +84,14 @@ describe('Plex playlists from a Base', () => {
       'DELETE /playlists/55/items/2',
       'PUT /playlists/55/items?uri=server://abc/com.plexapp.plugins.library/library/metadata/101,100',
     ])
+  })
+
+  it('asks for songs one by one when Plex leaves some out of a batch', async () => {
+    const { files, app, settings } = setup({ 'Music/Aurora.md': { Link: link('103528') }, 'Music/Gone.md': { Link: link('5') } })
+    responses.set('/library/metadata/103528', { MediaContainer: { Metadata: [{ ratingKey: '103528', type: 'track', title: 'Aurora', grandparentTitle: 'Juanes' }] } })
+    const plan = await planPlaylist(app as never, settings, 'Road trip', files as never)
+    expect(plan.songs.map(s => s.title)).toEqual(['Aurora (Juanes)'])
+    expect(plan.leftOut).toEqual([{ path: 'Music/Gone.md', reason: 'not in Plex any more' }])
   })
 
   it('won\'t fill a smart playlist', async () => {

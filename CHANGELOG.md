@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.69] - 2026-10-09
+
+- Import and sync and the checks now ask about existing notes grouped by library, then by what changes: all the notes where only the Link changes, then those where the Link and the Rating change, and so on, fewest changes first. Each pop-up says which group it's in (for example "Movies · Link (3 of 12)"). Every note's changes are worked out before the first pop-up, so a check takes a while before it starts asking.
+- Plex playlists: a song Plex left out of a batch lookup is now looked up on its own, so one missing song no longer makes others show as "not in Plex any more". A note whose Link is to an album or artist says so.
+
 ## [0.0.68] - 2026-10-09
 
 - Every property in a change pop-up can be edited now, including the ones it isn't changing and the file name. An edited one turns bold in the accent colour and is saved when you press Apply (an edited file name renames the note). A duration or page count typed as a number is saved as a number.

@@ -115,13 +115,26 @@ export class PlexClient {
   /** Several items at once (as many as Plex still has), in batches. */
   async items(ratingKeys: string[]): Promise<PlexItem[]> {
     const out: PlexItem[] = []
+    const notFound = (err: unknown) => err instanceof Error && err.message.includes(' 404 ')
     for (let start = 0; start < ratingKeys.length; start += 100) {
-      const keys = ratingKeys.slice(start, start + 100).map(encodeURIComponent).join(',')
+      const batch = ratingKeys.slice(start, start + 100)
+      let got: PlexItem[] = []
       try {
-        out.push(...(await this.get(`/library/metadata/${keys}`)).Metadata ?? [])
+        got = (await this.get(`/library/metadata/${batch.map(encodeURIComponent).join(',')}`)).Metadata ?? []
       } catch (err) {
-        // Plex answers 404 when none of the batch exists any more.
-        if (!(err instanceof Error && err.message.includes(' 404 '))) throw err
+        // Plex can answer 404 for a whole batch when some of it no longer exists.
+        if (!notFound(err)) throw err
+      }
+      out.push(...got)
+      // Whatever the batch didn't bring back is asked for on its own, so one missing item never hides the rest.
+      const seen = new Set(got.map(item => item.ratingKey))
+      for (const key of batch.filter(k => !seen.has(k))) {
+        try {
+          const item = await this.item(key)
+          if (item) out.push(item)
+        } catch (err) {
+          if (!notFound(err)) throw err
+        }
       }
     }
     return out

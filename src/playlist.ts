@@ -64,7 +64,7 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
   for (const { path, ratingKey } of wanted) {
     const item = found.get(ratingKey)
     if (!item) leftOut.push({ path, reason: 'not in Plex any more' })
-    else if (item.type !== 'track') leftOut.push({ path, reason: 'not a song in Plex' })
+    else if (item.type !== 'track') leftOut.push({ path, reason: `its Link is to ${item.type === 'album' ? 'an album' : item.type === 'artist' ? 'an artist' : `a ${item.type}`} in Plex, not a song` })
     else songs.push({ path, ratingKey, title: item.grandparentTitle ? `${item.title} (${item.grandparentTitle})` : item.title })
   }
   const same = (await plex.audioPlaylists()).filter(p => p.title === name)

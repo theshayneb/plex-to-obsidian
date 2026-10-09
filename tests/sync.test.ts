@@ -712,6 +712,32 @@ describe('PlexSync', () => {
     expect(requested.some(u => u.includes('appdetails'))).toBe(false)
   })
 
+  it('counts a game linked from a note as yours even when Steam leaves it out (free and never played)', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 120 }] } },
+      'https://store.steampowered.com/api/appdetails?appids=1713610': { 1713610: { success: true, data: {
+        name: 'Purrgatory', short_description: 'Cats.', genres: [{ description: 'Indie' }], release_date: { date: '1 Jan, 2022' },
+      } } },
+    }
+    const { app } = makeApp({
+      'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/' },
+      'Media/Video Games/Purrgatory.md': { Link: 'https://store.steampowered.com/app/1713610/Purrgatory/', 'Total Playtime': 3 },
+    })
+    const settings = settingsWith({ serverUrl: '', token: '', updatePlayCounts: true, steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: true } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    const { withNotes } = await sync.libraryItems(() => {})
+    expect(withNotes.map(w => [w.item.title, w.path])).toEqual([
+      ['Portal 2', 'Media/Video Games/Portal 2.md'],
+      ['Purrgatory', 'Media/Video Games/Purrgatory.md'],
+    ])
+    // Its playtime (none, as far as Steam's list goes) never lowers the note's.
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
+    expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])
+  })
+
   it('offers the right link for a note linking elsewhere: search links ticked, others unticked and remembered', async () => {
     steamResponses = {
       'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [

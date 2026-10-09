@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.77] - 2026-10-09
+
+- Free Steam games you haven't played yet: Steam leaves them out of the games list it gives, so they matched nothing. A note linked to a Steam game (its Link is the Steam Store page) now counts that game as yours anyway, with its name and details from the Steam Store, so syncs, checks and recommendations know it and it's no longer listed as matching nothing. Its playtime from Steam is none, which never lowers the note's.
+
 ## [0.0.76] - 2026-10-09
 
 - A game's playtime never goes down: when the note's playtime is longer than Steam's, syncs and checks leave it as it is instead of offering Steam's.

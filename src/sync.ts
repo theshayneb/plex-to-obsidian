@@ -352,6 +352,22 @@ export class PlexSync {
         const collections = usesSource(lib.properties, 'steamCollections')
           ? readSteamCollections(await this.steam!.steamId(), this.settings.steam.folder ?? '')
           : null
+        // Steam leaves free games you haven't played out of your list, so a note already linked to a
+        // Steam game counts it as yours anyway (its name and details from the store, no playtime).
+        const owned = new Set(games.map(game => game.ratingKey))
+        for (const [key, path] of indexes.game.ratingKeys) {
+          if (!key.startsWith('steam-') || owned.has(key)) continue
+          const appId = Number(key.slice(6))
+          const name = path.split('/').pop()!.replace(/\.md$/, '').replace(/\s*\(\d{4}\)$/, '')
+          let item: PlexItem = { ratingKey: key, type: 'game', title: name, steamAppId: appId, playtimeMinutes: 0 }
+          try {
+            progress(`Reading ${name} from the Steam Store…`)
+            item = { ...await this.steam!.details(item), playtimeMinutes: 0 }
+          } catch (err) {
+            console.warn(`Media Manager: Steam Store details for ${name} failed`, err)
+          }
+          games.push(item)
+        }
         for (const item of games) {
           entries.push({ item: collections ? { ...item, steamCollections: collections.get(item.steamAppId ?? 0) ?? [] } : item, lib })
         }
@@ -788,7 +804,7 @@ export class PlexSync {
     if (key.startsWith('steam-')) {
       return [
         `Steam app ${key.slice(6)}`,
-        'This game isn\'t in the games list Steam gives for your account. It may be a game you don\'t own, a free game you haven\'t played (or free-to-play games are switched off), or the Steam library is set to Skip.',
+        'This game isn\'t in the games list Steam gives for your account. It may be a game you don\'t own, or a free game you haven\'t played (Steam leaves those out; a note linked to it counts it as yours), or the Steam library is set to Skip.',
       ]
     }
     if (!this.plex) return ['That\'s a Plex link, but Plex isn\'t set up in the plugin settings.']

@@ -457,7 +457,7 @@ describe('PlexSync', () => {
     responses.set('/:/rate', {})
     const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
       // Arrival: the converted rating edited back to ⭐⭐⭐. Heat: "2" typed on the Plex line.
-      const edits = r.path.includes('Arrival') ? { 'rescale:Rating': '⭐⭐⭐' } : { plexRating: '2' }
+      const edits: Record<string, string> = r.path.includes('Arrival') ? { 'rescale:Rating': '⭐⭐⭐' } : { plexRating: '2' }
       return Promise.resolve({ choice: 'apply', excluded: [], edits })
     })
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})

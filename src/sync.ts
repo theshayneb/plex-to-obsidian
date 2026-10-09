@@ -1089,7 +1089,7 @@ export class PlexSync {
         this.hltb ??= new HltbClient()
         item.hltb = (await this.hltb.times(item.title, item.year)) ?? undefined
       } catch (err) {
-        console.warn(`Media import and sync: HowLongToBeat lookup for ${item.title} failed`, err)
+        console.warn(`Media Manager: HowLongToBeat lookup for ${item.title} failed`, err)
       }
     }
     if (wantsCover) {
@@ -1101,7 +1101,7 @@ export class PlexSync {
         try {
           choices.push(...await steamGridCovers(gridKey, item.steamAppId))
         } catch (err) {
-          console.warn(`Media import and sync: SteamGridDB covers for ${item.title} failed`, err)
+          console.warn(`Media Manager: SteamGridDB covers for ${item.title} failed`, err)
         }
       }
       item.coverChoices = choices

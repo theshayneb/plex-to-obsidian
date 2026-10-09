@@ -76,11 +76,11 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const { containerEl } = this
     containerEl.empty()
 
-    this.displaySetup(this.section(containerEl, 'setup', 'Setup', 'Servers, accounts and API keys.'))
-    this.displayGeneral(this.section(containerEl, 'general', 'All libraries', 'File names, images, approvals and play counts.'))
+    this.displaySetup(this.section(containerEl, 'setup', 'Connections', 'Plex, Steam and the other sources, with a test for each.'))
+    this.displaySyncing(this.section(containerEl, 'syncing', 'Syncing', 'What a sync may change in your notes, and when.'))
+    this.displayNewNotes(this.section(containerEl, 'general', 'New notes', 'Genres, file names and images, in every library.'))
     this.displayLibraries(containerEl)
-    this.displayMerged(this.section(containerEl, 'merged', 'Merged with existing notes'))
-    this.displayIgnored(this.section(containerEl, 'ignored', 'Skipped every time'))
+    this.displayRemembered(this.section(containerEl, 'remembered', 'Remembered choices', 'What the plugin remembers from your answers in pop-ups, to forget.'))
   }
 
   /** A collapsible section, closed until opened and kept as it was across redraws. */
@@ -127,10 +127,10 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       })
 
     new Setting(el)
-      .setName('Check Plex')
+      .setName('Test Plex')
       .setDesc('Connects to the server with the address and token, to check them.')
       .addButton(button => button
-        .setButtonText('Check')
+        .setButtonText('Test')
         .onClick(async () => {
           button.setDisabled(true)
           try {
@@ -155,7 +155,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const el = parent.createDiv('pmn-indent')
 
     new Setting(el)
-      .setDesc('Load your Plex libraries, then open each one (and Steam, once it is set up) to choose its type, folder, file names and properties.')
+      .setDesc('Load your Plex libraries, then open each one (and the Steam and books libraries) to choose what it holds, where its notes go and what they contain.')
       .addButton(button => button
         .setButtonText('Load libraries')
         .onClick(async () => {
@@ -230,7 +230,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(el)
-      .setName('Match existing notes by')
+      .setName('Recognise existing notes by')
       .setDesc('How a note already in the folder is recognised as this item, so no second note is made. The link is the Plex address or Steam Store page in the note. Case, accents and punctuation are ignored in names. A note linking to a different item never matches by name.')
       .addDropdown(dropdown => {
         for (const [value, label] of Object.entries(MATCH_LABELS)) dropdown.addOption(value, label)
@@ -244,7 +244,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(el)
       .setName('Genres to leave out')
-      .setDesc('Genres never written for this library, even when they\'re in "Genres to keep" (under All libraries). Separate them with commas.')
+      .setDesc('Genres never written in this library, even ones in "Genres to keep" (under New notes). Separate them with commas.')
       .addText(text => text
         .setPlaceholder('For example romance, horror')
         .setValue((lib.leaveOutGenres ?? []).join(', '))
@@ -255,7 +255,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     this.displayProperties(el, lib)
 
-    new Setting(el).setName('Property values').setHeading()
+    new Setting(el).setName('Status and tag values').setHeading()
     const defaults = defaultValues(kind)
     if (book) {
       this.addValueSetting(el, 'New book', 'For "Watched or played status": the status a new book note starts with.',
@@ -281,7 +281,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(el).setName('Properties').setHeading()
     el.createEl('p', {
       cls: 'setting-item-description',
-      text: 'Properties added to new notes, in this order. Choose the name of each property (start typing to pick from the properties already in your vault) and the Plex information that fills it. Properties Plex has no value for are added empty, for you to fill in. Switch on the toggle next to a property to also add a property to existing notes that match a Plex item, when it is missing or empty there; nothing else in those notes changes.',
+      text: 'What new notes contain, in this order: each property\'s name (start typing to pick one already in your vault) and where its value comes from. Ones the source has no value for are left empty. Switch on a property\'s toggle to also fill it in on existing notes where it\'s missing or empty.',
     })
 
     lib.properties.forEach((mapping, index) => {
@@ -366,12 +366,12 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
   }
 
-  private displayGeneral(containerEl: HTMLElement): void {
+  private displayNewNotes(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
 
     new Setting(containerEl)
-      .setName('Images subfolder')
-      .setDesc('Posters are saved in this subfolder of each library folder, for properties set to "Poster image". Every track on an album shares one cover.')
+      .setName('Images folder')
+      .setDesc('Plex posters are downloaded into this folder inside each library\'s folder, for properties set to "Poster image". The tracks of an album share one cover.')
       .addText(text => text
         .setPlaceholder('Images')
         .setValue(settings.imagesSubfolder)
@@ -408,7 +408,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Genres to keep')
-      .setDesc('Only these genres are written to notes, in every library; any others an item has are left out (a movie with Drama, Sci-Fi and Family gets just Sci-Fi). Other names for them count too, such as "Science fiction" for Sci-Fi. One per line, or separated by commas. Leave it empty to keep every genre.')
+      .setDesc('Only these genres are written to notes; an item\'s others are left out (Drama, Sci-Fi and Family becomes just Sci-Fi). Other names count too, such as "Science fiction" for Sci-Fi. One per line or separated by commas; empty keeps every genre.')
       .addTextArea(text => {
         text.inputEl.rows = 8
         text.inputEl.addClass('pmn-genres')
@@ -419,10 +419,14 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             await this.save()
           })
       })
+  }
+
+  private displaySyncing(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
 
     new Setting(containerEl)
       .setName('Ask before every change')
-      .setDesc('Before creating a note, or changing an existing one in any way (renaming it, filling in properties, updating play counts), show what will happen and ask. This includes background play count updates.')
+      .setDesc('Show each new note, and each change to an existing one, in a pop-up to approve, untick or edit first. Checks against sources always ask.')
       .addToggle(toggle => toggle
         .setValue(settings.askBeforeChanges)
         .onChange(async value => {
@@ -431,8 +435,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
-      .setName('Tick differences to start with')
-      .setDesc('When a sync or a check offers to replace a value already in a note (a link, a duration, a summary…), the new value starts ticked, so applying uses it; untick any you want to keep. Off: only clear-cut fixes start ticked (empty values, durations written in hours, search links, genres) and other differences are kept unless you tick them.')
+      .setName('Start replacements ticked')
+      .setDesc('When a pop-up offers to replace a value already in a note, it starts ticked, so applying uses it. Switched off, only clear-cut fixes start ticked (empty values, durations in hours, search links, genres) and other differences are kept unless you tick them.')
       .addToggle(toggle => toggle
         .setValue(settings.tickDifferences)
         .onChange(async value => {
@@ -441,8 +445,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
-      .setName('Fix names of existing notes')
-      .setDesc('Rename notes that already exist for a Plex item to their library\'s file name format, for example adding the year. Only the file name changes. A note that could belong to more than one Plex item is left alone.')
+      .setName('Rename notes to the file name format')
+      .setDesc('Each sync renames existing notes whose name doesn\'t follow their library\'s file name format (for example, adding the year). A note that could belong to more than one item is left alone.')
       .addToggle(toggle => toggle
         .setValue(settings.renameExistingNotes)
         .onChange(async value => {
@@ -451,8 +455,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
-      .setName('Keep play counts up to date')
-      .setDesc('Every sync also updates properties set to "Play count" (and a game\'s playtime) in existing notes, in all libraries. Play counts, ratings and statuses (each when switched on) are the only values a sync ever replaces in existing notes.')
+      .setName('Update play counts')
+      .setDesc('Each sync copies play counts (and games\' playtime) from Plex and Steam into existing notes.')
       .addToggle(toggle => toggle
         .setValue(settings.updatePlayCounts)
         .onChange(async value => {
@@ -462,8 +466,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
-      .setName('Keep ratings up to date')
-      .setDesc('Every sync also updates properties set to "Your rating" (stars or emoji) in existing notes when you change a rating in Plex. A note keeps its rating when the item has none in Plex.')
+      .setName('Update ratings from Plex')
+      .setDesc('Each sync copies a rating you changed in Plex into the note. A rating you changed in the note is never overwritten, and a note keeps its rating when Plex has none.')
       .addToggle(toggle => toggle
         .setValue(settings.updateRatings)
         .onChange(async value => {
@@ -474,7 +478,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Send ratings to Plex')
-      .setDesc('When you rate something in a note (a property set to "Your rating", stars or emoji) and Plex has no rating or the one you had before, a sync offers to send your rating to Plex, in the approval pop-up (so only with "Ask before every change" on). Syncs also stop replacing a rating you changed in a note with Plex\'s old one; one changed in Plex still comes into the note, with "Keep ratings up to date" on.')
+      .setDesc('When you change a rating in a note, the sync\'s pop-up offers to send it to Plex (so only with "Ask before every change" on).')
       .addToggle(toggle => toggle
         .setValue(settings.sendRatings)
         .onChange(async value => {
@@ -483,8 +487,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
-      .setName('Keep status up to date')
-      .setDesc('Every sync also moves properties set to "Watched or played status" forward in existing notes: from not watched to started to watched (for games, from not played to played), as set under each library\'s property values. A status never moves back, and one of your own (such as revisit or abandoned) is never changed.')
+      .setName('Move statuses forward')
+      .setDesc('Each sync moves a note\'s status forward as you watch or play: not watched, then started, then watched (games: not played, then played), using each library\'s status values. It never moves back, and a status of your own (such as revisit) is never changed.')
       .addToggle(toggle => toggle
         .setValue(settings.updateStatus)
         .onChange(async value => {
@@ -496,8 +500,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const kept = [settings.updatePlayCounts && 'play counts', settings.updateRatings && 'ratings', settings.updateStatus && 'statuses'].filter(Boolean)
     if (kept.length) {
       new Setting(containerEl)
-        .setName('Update automatically')
-        .setDesc(`Also update ${kept.join(' and ').replace(/ and (?=.* and )/, ', ')} in the background while the app is open. Nothing else happens in the background. New notes are only made when you run the sync.`)
+        .setName('Update in the background')
+        .setDesc(`Also update ${kept.join(' and ').replace(/ and (?=.* and )/, ', ')} (and Steam collections) while Obsidian is open. Nothing else happens in the background; new notes are only made when you sync.`)
         .addDropdown(dropdown => {
           for (const [value, label] of Object.entries(PLAY_COUNT_SCHEDULE)) dropdown.addOption(value, label)
           dropdown
@@ -585,10 +589,10 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           await this.save()
         }))
     new Setting(containerEl)
-      .setName('Check Steam')
+      .setName('Test Steam')
       .setDesc('Reads your games list once, to check the key and account, and adds the Steam library to the libraries below.')
       .addButton(button => button
-        .setButtonText('Check')
+        .setButtonText('Test')
         .onClick(async () => {
           button.setDisabled(true)
           try {
@@ -611,10 +615,10 @@ export class PlexNotesSettingTab extends PluginSettingTab {
   /** Keys for the databases "Add something new" searches. */
   private displayOtherSources(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
-    new Setting(containerEl).setName('Adding things not in Plex or Steam').setHeading()
+    new Setting(containerEl).setName('Other sources').setHeading()
     containerEl.createEl('p', {
       cls: 'setting-item-description',
-      text: 'The "Add something new" command finds movies and TV shows on OMDb, games on Steam and HowLongToBeat, and books on Open Library (with summaries from Google Books). The note goes in the library you choose, with its properties. Once the item is in Plex or Steam, syncing recognises the note.',
+      text: '"Add a movie, show, game or book" searches OMDb (movies and shows), Steam and HowLongToBeat (games) and Open Library (books, with summaries and dates from Google Books). Checks use them too.',
     })
     new Setting(containerEl)
       .setName('OMDb API key')
@@ -645,6 +649,35 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         new Notice(await testGoogleBooks(settings.googleBooksKey ?? ''), 10_000)
         button.setDisabled(false)
       }))
+  }
+
+  /** Everything remembered from answers in pop-ups, each to forget. */
+  private displayRemembered(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName('Notes you chose for items').setHeading()
+    this.displayMerged(containerEl)
+    new Setting(containerEl).setName('Skipped every time').setHeading()
+    this.displayIgnored(containerEl)
+    this.displayKept(containerEl)
+  }
+
+  /** Values and links you chose to keep in pop-ups, which aren't offered again while they stay the same. */
+  private displayKept(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+    const values = Object.keys(settings.keptValues).length
+    const links = Object.keys(settings.keptLinks).length
+    new Setting(containerEl).setName('Kept as they were').setHeading()
+    new Setting(containerEl)
+      .setName(`${values} value${values === 1 ? '' : 's'} and ${links} link${links === 1 ? '' : 's'}`)
+      .setDesc('Values and links you left unticked in a pop-up are kept and not offered again while they stay the same. Forget them to have syncs and checks offer them again.')
+      .addButton(button => button
+        .setButtonText('Forget all')
+        .setDisabled(!values && !links)
+        .onClick(async () => {
+          settings.keptValues = {}
+          settings.keptLinks = {}
+          await this.save()
+          this.refresh()
+        }))
   }
 
   /** Items tied to existing notes with "Use an existing note", each with a button to undo it. */

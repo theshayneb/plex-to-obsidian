@@ -184,7 +184,7 @@ export async function googleBooksInfo(book: PlexItem, key = ''): Promise<{ summa
       await search(`intitle:"${book.title}"${author ? ` inauthor:"${author}"` : ''}`, false)
     }
   } catch (err) {
-    console.warn('Media import and sync: Google Books lookup failed', err)
+    console.warn('Media Manager: Google Books lookup failed', err)
   }
   return out
 }

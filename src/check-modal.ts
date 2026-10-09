@@ -37,7 +37,7 @@ export class CheckModal extends Modal {
   }
 
   onOpen(): void {
-    this.titleEl.setText('Check existing notes against sources')
+    this.titleEl.setText('Check notes against sources')
     this.modalEl.addClass('pmn-check')
     const { contentEl } = this
     contentEl.createEl('p', {

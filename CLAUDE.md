@@ -1,6 +1,6 @@
-# Media Import and Sync: notes for Claude Code
+# Media Manager: notes for Claude Code
 
-A personal Obsidian plugin (id `plex-media-notes`, kept so the installed folder and settings survive; don't change it) that creates and syncs notes for Plex movies, TV shows, documentaries and music tracks, and Steam games. The owner is the only user.
+A personal Obsidian plugin, "Media Manager" (formerly Media Import and Sync; id `plex-media-notes`, kept so the installed folder and settings survive; don't change it) that creates and syncs notes for Plex movies, TV shows, documentaries and music tracks, and Steam games. The owner is the only user.
 
 ## Workflow
 
@@ -51,4 +51,5 @@ npm run build
 - The background schedule (`playCountHours`) runs `PlexSync.run(…, 'playCounts')`, which must only ever touch play counts, ratings and statuses (each only when its setting is on) and Steam collections.
 - Never put the Plex token in note content (Plex image URLs need it, which is why posters are downloaded, into `<media folder>/Images`).
 - Styles live in `styles.css`, with classes prefixed `pmn-`; use Obsidian's CSS variables, not inline styles.
+- Commands (ids unchanged, so hotkeys survive): "Sync with Plex and Steam" (`create-notes-from-plex`), "Check notes against sources…" (`check-notes`, the `CheckModal`), "Check one property: <name>" (`check-property-*`), "Check this note", "Fix year-only dates", "Add a movie, show, game or book…" (`add-new`), "Why isn't this imported?…" (`explain-item`). Older notes here may use the old names (Import and sync, Check existing notes against sources, Add something new, Explain why…). Settings sections: Connections, Syncing, New notes, Libraries, Remembered choices (merged notes, skipped items, ignored unmatched notes, kept values and links).
 - UI text must be sentence case (Obsidian lint rule); brand words are allowed in `eslint.config.mjs`.

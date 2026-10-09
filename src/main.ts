@@ -30,13 +30,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (moved.length || ignored >= 0) void this.saveSettings()
     }))
 
-    this.addRibbonIcon('clapperboard', 'Import and sync media', () => {
+    this.addRibbonIcon('clapperboard', 'Sync with Plex and Steam', () => {
       void this.syncFromPlex()
     })
 
     this.addCommand({
       id: 'create-notes-from-plex',
-      name: 'Import and sync media',
+      name: 'Sync with Plex and Steam',
       callback: () => {
         void this.syncFromPlex()
       },
@@ -44,7 +44,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'check-notes',
-      name: 'Check existing notes against sources',
+      name: 'Check notes against sources…',
       callback: () => {
         new CheckModal(this.app, this.settings, properties => void this.checkNotes(properties)).open()
       },
@@ -54,7 +54,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'check-this-note',
-      name: 'Check this note against sources',
+      name: 'Check this note',
       checkCallback: (checking: boolean) => {
         const file = this.app.workspace.getActiveFile()
         if (!file || file.extension !== 'md') return false
@@ -65,7 +65,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'check-year-only-dates',
-      name: 'Check notes with a year-only date against sources',
+      name: 'Fix year-only dates',
       callback: () => {
         const { paths, properties } = new PlexSync(this.app, this.settings, () => this.saveSettings()).vagueDateNotes()
         if (!paths.size) {
@@ -79,7 +79,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'add-new',
-      name: 'Add something new (not in Plex or Steam)',
+      name: 'Add a movie, show, game or book…',
       callback: () => {
         new AddModal(this.app, this.settings, () => this.saveSettings(), (item, libraryKey) => this.addNew(item, libraryKey)).open()
       },
@@ -87,7 +87,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     this.addCommand({
       id: 'explain-item',
-      name: 'Explain why an item is or isn\'t imported',
+      name: 'Why isn\'t this imported?…',
       callback: () => {
         new ExplainModal(this.app, (query, progress) =>
           new PlexSync(this.app, this.settings, () => this.saveSettings()).explain(query, progress)).open()
@@ -122,12 +122,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request)).run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
-      if (result.playCounts.length) console.log('Media import and sync: kept up to date (play counts, ratings, status)', result.playCounts)
-      if (result.failed.length) console.error('Media import and sync: failed items', result.failed)
+      if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
+      if (result.failed.length) console.error('Media Manager: failed items', result.failed)
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
-      console.warn('Media import and sync: background play count update failed', err)
+      console.warn('Media Manager: background play count update failed', err)
     } finally {
       this.plexSyncRunning = false
     }
@@ -163,7 +163,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
     for (const [id, name] of wanted) {
       if (this.propertyCommands.has(id)) continue
-      this.addCommand({ id, name: `Check against sources: ${name}`, callback: () => void this.checkNotes([name]) })
+      this.addCommand({ id, name: `Check one property: ${name}`, callback: () => void this.checkNotes([name]) })
       this.propertyCommands.set(id, name)
     }
   }
@@ -191,7 +191,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
    */
   async checkNotes(properties: string[], only?: Set<string>): Promise<void> {
     if (this.plexSyncRunning) {
-      new Notice('Media sync is already running')
+      new Notice('A sync or check is already running')
       return
     }
     await this.saveSettings()
@@ -204,14 +204,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
       if (result.renamed.length) {
         parts.push(`renamed ${result.renamed.length}`)
-        console.log('Media import and sync: renamed', result.renamed)
+        console.log('Media Manager: renamed', result.renamed)
       }
       if (result.keptLinks) parts.push(`${result.keptLinks} value${result.keptLinks === 1 ? '' : 's'} kept as they were`)
       if (result.declined) parts.push(`${result.declined} skipped`)
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed (see the developer console)`)
-        console.error('Media import and sync: failed items', result.failed)
+        console.error('Media Manager: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
     } catch (err) {
@@ -228,7 +228,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
    */
   async checkThisNote(file: TFile): Promise<void> {
     if (this.plexSyncRunning) {
-      new Notice('Media sync is already running')
+      new Notice('A sync or check is already running')
       return
     }
     this.plexSyncRunning = true
@@ -239,7 +239,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         .run(message => notice.setMessage(message), 'check', properties, new Set([file.path]))
       notice.hide()
       if (result.failed.length) {
-        console.error('Media import and sync: failed items', result.failed)
+        console.error('Media Manager: failed items', result.failed)
         new Notice(`Checking failed: ${result.failed.map(f => f.error).join('; ')}`, 10000)
       } else if ([...result.corrected, ...result.links, ...result.sentRatings, ...result.renamed.flatMap(r => [r.from, r.to])].includes(file.path)) new Notice(`${file.basename}: changed`)
       else if (result.declined || result.keptLinks || result.stopped) new Notice(`${file.basename}: left as it was`)
@@ -261,7 +261,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
     async syncFromPlex(): Promise<void> {
     if (this.plexSyncRunning) {
-      new Notice('Media sync is already running')
+      new Notice('A sync or check is already running')
       return
     }
     this.plexSyncRunning = true
@@ -274,28 +274,28 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]
       if (result.renamed.length) {
         parts.push(`renamed ${result.renamed.length}`)
-        console.log('Media import and sync: renamed', result.renamed)
+        console.log('Media Manager: renamed', result.renamed)
       }
       if (result.playCounts.length) parts.push(`kept ${result.playCounts.length} up to date`)
       if (result.filled.length) {
         parts.push(`filled in ${result.filled.length}`)
-        console.log('Media import and sync: filled in', result.filled)
+        console.log('Media Manager: filled in', result.filled)
       }
       if (result.sentRatings.length) {
         parts.push(`sent ${result.sentRatings.length} rating${result.sentRatings.length === 1 ? '' : 's'} to Plex`)
-        console.log('Media import and sync: ratings sent to Plex', result.sentRatings)
+        console.log('Media Manager: ratings sent to Plex', result.sentRatings)
       }
       if (result.corrected.length) {
         parts.push(`corrected ${result.corrected.length} duration${result.corrected.length === 1 ? '' : 's'}`)
-        console.log('Media import and sync: corrected durations', result.corrected)
+        console.log('Media Manager: corrected durations', result.corrected)
       }
       if (result.links.length) {
         parts.push(`fixed ${result.links.length} link${result.links.length === 1 ? '' : 's'}`)
-        console.log('Media import and sync: replaced links', result.links)
+        console.log('Media Manager: replaced links', result.links)
       }
       if (result.merged.length) {
         parts.push(`matched ${result.merged.length} to existing notes`)
-        console.log('Media import and sync: matched to existing notes', result.merged)
+        console.log('Media Manager: matched to existing notes', result.merged)
       }
       parts.push(`${result.skipped} already had one`)
       if (result.declined) parts.push(`${result.declined} skipped by you`)
@@ -303,14 +303,14 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
         parts.push(`${result.failed.length} failed`)
-        console.error('Media import and sync: failed items', result.failed)
+        console.error('Media Manager: failed items', result.failed)
       }
       if (result.unmatched.length) parts.push(`${result.unmatched.length} note${result.unmatched.length === 1 ? '' : 's'} ${result.unmatched.length === 1 ? 'matches' : 'match'} nothing`)
       new Notice(parts.join(', '), 8000)
       if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
     } catch (err) {
       notice.hide()
-      new Notice(`Media sync failed: ${errorMessage(err)}`, 10000)
+      new Notice(`Sync failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
     }

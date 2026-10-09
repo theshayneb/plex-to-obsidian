@@ -23,7 +23,7 @@ export function readSteamCollections(steamId: string, folder: string): Map<numbe
       if (!fs.existsSync(path)) continue
       return collectionsByGame(JSON.parse(fs.readFileSync(path, 'utf8')))
     } catch (err) {
-      console.warn('Media import and sync: could not read Steam collections from', path, err)
+      console.warn('Media Manager: could not read Steam collections from', path, err)
     }
   }
   return null

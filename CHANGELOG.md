@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.73] - 2026-10-09
+
+- The plugin is now called Media Manager. Its folder, settings and hotkeys stay as they were.
+- Settings are reorganised: Connections (Plex, Steam and the other sources, each with a Test button), Syncing (what a sync may change), New notes (genres, file names, images), Libraries, and Remembered choices (notes chosen for items, items skipped every time, notes always ignored, and values and links kept as they were, which can now be forgotten). Settings have clearer names: "Start replacements ticked" (was "Tick differences to start with"), "Rename notes to the file name format" (was "Fix names of existing notes"), "Update play counts", "Update ratings from Plex", "Move statuses forward", "Update in the background", "Recognise existing notes by", "Status and tag values".
+- Commands are renamed: "Sync with Plex and Steam", "Check notes against sources…", "Check one property: …", "Check this note", "Fix year-only dates", "Add a movie, show, game or book…" and "Why isn't this imported?…".
+
 ## [0.0.72] - 2026-10-09
 
 - New "Apply to the rest of this group" button in change pop-ups: it applies to the remaining notes in the same group only (same library, same properties changing), with the same lines unticked, then asks again at the next group. It shows how many are left in the group.

@@ -38,7 +38,7 @@ export class AddModal extends Modal {
   }
 
   onOpen(): void {
-    this.titleEl.setText('Add something new')
+    this.titleEl.setText('Add a movie, show, game or book')
     this.modalEl.addClass('pmn-add')
     this.pmnRender()
   }

@@ -733,6 +733,8 @@ describe('PlexSync', () => {
       ['Portal 2', 'Media/Video Games/Portal 2.md'],
       ['Purrgatory', 'Media/Video Games/Purrgatory.md'],
     ])
+    // Matching needs only the link: the Steam Store isn't asked about it on every sync.
+    expect(requested.some(u => u.includes('appdetails'))).toBe(false)
     // Its playtime (none, as far as Steam's list goes) never lowers the note's.
     const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
     expect(result.playCounts).toEqual(['Media/Video Games/Portal 2.md'])

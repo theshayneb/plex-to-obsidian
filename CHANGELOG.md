@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.78] - 2026-10-09
+
+- Steam games counted from your notes' links (ones Steam's list leaves out) no longer slow down every sync: they aren't looked up on the Steam Store each time, only when a check or fill-in needs their details. They're named as their note is, so they're never renamed for it.
+
 ## [0.0.77] - 2026-10-09
 
 - Free Steam games you haven't played yet: Steam leaves them out of the games list it gives, so they matched nothing. A note linked to a Steam game (its Link is the Steam Store page) now counts that game as yours anyway, with its name and details from the Steam Store, so syncs, checks and recommendations know it and it's no longer listed as matching nothing. Its playtime from Steam is none, which never lowers the note's.

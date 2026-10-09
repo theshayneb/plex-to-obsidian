@@ -353,20 +353,13 @@ export class PlexSync {
           ? readSteamCollections(await this.steam!.steamId(), this.settings.steam.folder ?? '')
           : null
         // Steam leaves free games you haven't played out of your list, so a note already linked to a
-        // Steam game counts it as yours anyway (its name and details from the store, no playtime).
+        // Steam game counts it as yours anyway: named as the note is (so it's never renamed for it),
+        // with no playtime. Its store details are fetched only when a check or fill-in needs them.
         const owned = new Set(games.map(game => game.ratingKey))
         for (const [key, path] of indexes.game.ratingKeys) {
           if (!key.startsWith('steam-') || owned.has(key)) continue
-          const appId = Number(key.slice(6))
-          const name = path.split('/').pop()!.replace(/\.md$/, '').replace(/\s*\(\d{4}\)$/, '')
-          let item: PlexItem = { ratingKey: key, type: 'game', title: name, steamAppId: appId, playtimeMinutes: 0 }
-          try {
-            progress(`Reading ${name} from the Steam Store…`)
-            item = { ...await this.steam!.details(item), playtimeMinutes: 0 }
-          } catch (err) {
-            console.warn(`Media Manager: Steam Store details for ${name} failed`, err)
-          }
-          games.push(item)
+          const name = path.split('/').pop()!.replace(/\.md$/, '')
+          games.push({ ratingKey: key, type: 'game', title: name, steamAppId: Number(key.slice(6)), playtimeMinutes: 0 })
         }
         for (const item of games) {
           entries.push({ item: collections ? { ...item, steamCollections: collections.get(item.steamAppId ?? 0) ?? [] } : item, lib })

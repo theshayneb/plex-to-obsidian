@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.66] - 2026-10-09
+
+- Change pop-ups (Import and sync, and checks against sources) now show every property of the note, plus its file name. The ones that would change have their name in bold, in your theme's accent colour; the rest are listed below them as "No change".
+- Checks can compare the file name too ("File name" in "Check existing notes against sources", and a "Check against sources: File name" command): a note whose name doesn't follow its library's file name format is offered a rename. "Check this note against sources" includes it.
+
 ## [0.0.65] - 2026-10-09
 
 - New "Plex playlist" view for Bases (Obsidian 1.10 and later): it lists the Base's songs in its order, with a "Send to Plex" button. Plex gets a music playlist of those songs (named after the view, or the "Playlist name in Plex" view option). A playlist with that name already in Plex has its songs replaced. A pop-up shows what goes in, and what's left out and why, before anything is sent.

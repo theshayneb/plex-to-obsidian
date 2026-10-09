@@ -43,7 +43,6 @@
 
 /* Property names never break mid-word; the value columns share what's left. */
 .pmn-approval-table .pmn-approval-name {
-  font-weight: var(--font-semibold);
   white-space: nowrap;
   width: 1%;
 }
@@ -72,6 +71,17 @@
 .pmn-approval-off .pmn-approval-name {
   text-decoration: line-through;
   color: var(--text-faint);
+}
+
+/* A property the pop-up would change: bold, in the theme's accent colour (even when unticked). */
+.pmn-approval-table .pmn-approval-name.pmn-approval-changed {
+  font-weight: var(--font-bold);
+  color: var(--text-accent);
+}
+
+/* The rest of the note, which stays as it is. */
+.pmn-approval-same .pmn-approval-name {
+  color: var(--text-muted);
 }
 
 .pmn-approval-table th:first-child,

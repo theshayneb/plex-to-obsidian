@@ -1,4 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
+import { FILE_NAME } from './check-modal'
 import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver, type OwnerChooser } from './approval-modal'
 import {
   BOOKS_LIBRARY,
@@ -212,7 +213,7 @@ export class PlexSync {
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
     if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
-    const { choice, excluded, edits, mergeWith } = await this.approve(request)
+    const { choice, excluded, edits, mergeWith } = await this.approve(request.action === 'change' ? { ...request, unchanged: this.unchangedOf(request) } : request)
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
@@ -227,6 +228,18 @@ export class PlexSync {
     }
     result.declined++
     return null
+  }
+
+  /** A change pop-up's view of the rest of the note: every property no line is about, in the note's order. */
+  private unchangedOf(request: ApprovalRequest): { label: string, value: string | null }[] {
+    const file = this.app.vault.getAbstractFileByPath(request.path)
+    if (!(file instanceof TFile)) return []
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const shown = new Set(request.lines.map(line => line.label))
+    const rest = Object.entries(frontmatter)
+      .filter(([name]) => !shown.has(name))
+      .map(([name, value]) => ({ label: name, value: describeValue(value) }))
+    return request.lines.some(line => line.key === 'rename') ? rest : [{ label: 'File name', value: file.basename }, ...rest]
   }
 
   private naming(lib: LibrarySetting): FileNaming {
@@ -357,7 +370,7 @@ export class PlexSync {
           // Work out every change first, so it can be shown before anything happens.
           let renameTo: string | null = null
           // A note chosen with "Use an existing note" keeps the name you gave it.
-          if (renaming && !this.isMerged(item)) {
+          if ((renaming || (genreCheck && chosen.has(FILE_NAME))) && !this.isMerged(item)) {
             try {
               renameTo = this.renameTarget(file, item, lib)
             } catch (err) {

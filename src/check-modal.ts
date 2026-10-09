@@ -3,9 +3,17 @@ import type { PlexNotesSettings } from './config'
 import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties'
 
 
-/** The properties a check can compare, by name: which source fills them and which libraries have them. */
-export function checkableProperties(settings: PlexNotesSettings): { name: string, source: FieldSource, libraries: string[] }[] {
-  const byName = new Map<string, { name: string, source: FieldSource, libraries: string[] }>()
+/** Not a property: a check with it renames notes whose file name doesn't follow their library's format. */
+export const FILE_NAME = 'File name'
+
+/**
+ * The properties a check can compare, by name: which source fills them (none for the file name)
+ * and which libraries have them.
+ */
+export function checkableProperties(settings: PlexNotesSettings): { name: string, source: FieldSource | null, libraries: string[] }[] {
+  const byName = new Map<string, { name: string, source: FieldSource | null, libraries: string[] }>()
+  const libraries = Object.values(settings.libraries).filter(lib => lib.target !== 'skip' && lib.target !== 'book')
+  if (libraries.length) byName.set(FILE_NAME, { name: FILE_NAME, source: null, libraries: libraries.map(lib => lib.title) })
   for (const lib of Object.values(settings.libraries)) {
     if (lib.target === 'skip') continue
     for (const m of lib.properties) {
@@ -42,7 +50,7 @@ export class CheckModal extends Modal {
     for (const { name, source, libraries } of properties) {
       new Setting(contentEl)
         .setName(name)
-        .setDesc(`${FIELD_SOURCES[source]} · ${libraries.join(', ')}`)
+        .setDesc(`${source ? FIELD_SOURCES[source] : 'Renamed to the library\'s file name format'} · ${libraries.join(', ')}`)
         .addToggle(toggle => toggle
           .setValue(chosen.has(name))
           .onChange(value => {

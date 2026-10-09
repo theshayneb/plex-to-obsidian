@@ -880,6 +880,8 @@ describe('PlexSync', () => {
 
     // Status is compared too, but a status of your own ("revisit") is only replaced if you tick it.
     expect(requests.map(r => r.lines.map(l => [l.label, l.unticked]))).toEqual([[['Summary', true], ['Date', false], ['Status', true]]])
+    // The rest of the note is shown too, unchanged.
+    expect(requests[0].unchanged).toEqual([{ label: 'File name', value: 'Arrival (2016)' }, { label: 'Duration', value: '116' }])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Summary: 'My own summary.', Date: '2016-11-11', Duration: 116, Status: 'revisit' })
     expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.', '1|Status': 'revisit' })
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
@@ -905,6 +907,25 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Heat (1995).md')).toEqual({ Date: '1995-01-01' })
     expect(result.checked).toEqual(['Media/Movies/Arrival (2016).md'])
     expect(result.unmatched).toEqual([])
+  })
+
+  it('renames a note in a check only when the file name is checked, and shows the rest of the note', async () => {
+    const { app, files } = makeApp({ 'Media/Movies/arrival.md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    }
+
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(files.has('Media/Movies/arrival.md')).toBe(true)
+    expect(requests.flatMap(r => r.unchanged ?? []).find(u => u.label === 'File name')).toEqual({ label: 'File name', value: 'arrival' })
+
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['File name'])
+    expect(result.renamed).toEqual([{ from: 'Media/Movies/arrival.md', to: 'Media/Movies/Arrival (2016).md' }])
   })
 
   it('points out notes in the libraries\' folders that match nothing, unless always ignored', async () => {

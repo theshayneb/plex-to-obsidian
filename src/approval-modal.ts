@@ -49,6 +49,8 @@ export interface ApprovalRequest {
   lines: ApprovalLine[]
   /** Something to check before saying yes, shown above the lines (say, which book was found). */
   note?: string
+  /** For a change: the note's other properties, which stay as they are, shown below the lines. */
+  unchanged?: { label: string, value: string | null }[]
   position: number
   total: number
 }
@@ -121,7 +123,7 @@ export class ApprovalModal extends Modal {
         this.pmnExcluded.add(key)
         row.addClass('pmn-approval-off')
       }
-      row.createEl('td', { cls: 'pmn-approval-name', text: label })
+      row.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
       if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing')
       const newLabel = create ? 'Value' : 'New'
       const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
@@ -150,6 +152,15 @@ export class ApprovalModal extends Modal {
         if (box.checked) this.pmnExcluded.delete(key)
         else this.pmnExcluded.add(key)
       })
+    }
+
+    // The rest of the note, for context: nothing to tick, nothing changes.
+    for (const { label, value } of this.pmnRequest.unchanged ?? []) {
+      const row = body.createEl('tr', { cls: 'pmn-approval-same' })
+      row.createEl('td')
+      row.createEl('td', { cls: 'pmn-approval-name', text: label })
+      cell(row, value, 'pmn-approval-now', 'Existing')
+      row.createEl('td', { cls: 'pmn-approval-new pmn-approval-empty', text: 'No change', attr: { 'data-label': 'New' } })
     }
 
     const buttons = new Setting(contentEl)

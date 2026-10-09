@@ -202,6 +202,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
         .run(message => notice.setMessage(message), 'check', properties, only)
       notice.hide()
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
+      if (result.renamed.length) {
+        parts.push(`renamed ${result.renamed.length}`)
+        console.log('Media import and sync: renamed', result.renamed)
+      }
       if (result.keptLinks) parts.push(`${result.keptLinks} value${result.keptLinks === 1 ? '' : 's'} kept as they were`)
       if (result.declined) parts.push(`${result.declined} skipped`)
       if (result.stopped) parts.push('stopped')
@@ -237,7 +241,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.failed.length) {
         console.error('Media import and sync: failed items', result.failed)
         new Notice(`Checking failed: ${result.failed.map(f => f.error).join('; ')}`, 10000)
-      } else if ([...result.corrected, ...result.links, ...result.sentRatings].includes(file.path)) new Notice(`${file.basename}: changed`)
+      } else if ([...result.corrected, ...result.links, ...result.sentRatings, ...result.renamed.flatMap(r => [r.from, r.to])].includes(file.path)) new Notice(`${file.basename}: changed`)
       else if (result.declined || result.keptLinks || result.stopped) new Notice(`${file.basename}: left as it was`)
       else if (result.checked.includes(file.path)) new Notice(`${file.basename} already matches its source`)
       else new Notice(`${file.basename} matches nothing in Plex, Steam or Open Library (or its library isn't synced)`, 8000)

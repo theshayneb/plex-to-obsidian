@@ -1,7 +1,7 @@
 {
   "id": "plex-media-notes",
   "name": "Media Import and Sync",
-  "version": "0.0.65",
+  "version": "0.0.66",
   "minAppVersion": "1.6.6",
   "description": "Create and sync notes for the movies, TV shows, documentaries and music on your Plex server and the games in your Steam library, and add movies, shows, games and books that are not in them yet.",
   "author": "theshayneb",

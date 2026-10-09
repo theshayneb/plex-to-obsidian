@@ -160,7 +160,7 @@ export function defaultSettings(): PlexNotesSettings {
     omdbKey: '',
     googleBooksKey: '',
     imagesSubfolder: 'Images',
-    fileNameReplacements: {},
+    fileNameReplacements: { '[': '(', ']': ')' },
     renameExistingNotes: true,
     askBeforeChanges: true,
     ignored: {},
@@ -292,7 +292,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
-  settings.fileNameReplacements = { ...saved.fileNameReplacements }
+  settings.fileNameReplacements = { ...settings.fileNameReplacements, ...saved.fileNameReplacements }
   settings.ignored = { ...saved.ignored }
   settings.merged = { ...saved.merged }
   settings.keptLinks = { ...saved.keptLinks }
@@ -388,6 +388,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       if (lib.target !== 'book' || lib.properties.some(m => m.name.trim() === 'Duration')) continue
       lib.properties = lib.properties.map(m => m.source === 'pages' && m.name.trim() === 'Pages' ? { ...m, name: 'Duration' } : m)
     }
+  })
+  migrateOnce(settings, saved, 'bracket-replacements', () => {
+    // Square brackets have their own replacements now: round brackets.
+    settings.fileNameReplacements['['] ??= '('
+    settings.fileNameReplacements[']'] ??= ')'
   })
   return settings
 }

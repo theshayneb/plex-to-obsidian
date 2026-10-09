@@ -223,9 +223,9 @@ export function isSearchLink(link: unknown): boolean {
 }
 
 /** Characters that can't be in file names (or break links), each with its own replacement setting. */
-export const REPLACEABLE_CHARS = [':', '?', '/', '"', '*', '#'] as const
+export const REPLACEABLE_CHARS = [':', '?', '/', '"', '*', '#', '[', ']'] as const
 /** The rest share one replacement setting, stored under 'other'. */
-export const OTHER_CHARS = '\\ < > | ^ [ ]'
+export const OTHER_CHARS = '\\ < > | ^'
 const FORBIDDEN = /[\\/:*?"<>|#^[\]]/g
 
 /** How file names are built: the format, and what each forbidden character becomes ('' drops it). */

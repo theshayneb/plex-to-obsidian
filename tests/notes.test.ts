@@ -101,6 +101,10 @@ describe('renderFileName', () => {
     expect(renderFileName(naming, { ...movie, title: 'A|B' })).toBe('A_B (2018)')
     expect(renderFileName(naming, { ...movie, title: '10:30' })).toBe('10-30 (2018)')
   })
+  it('replaces square brackets each on its own', () => {
+    const naming = { format: '{{title}}', replacements: { '[': '(', ']': ')' } }
+    expect(renderFileName(naming, { ...movie, title: 'Song [Live]' })).toBe('Song (Live)')
+  })
   it('never lets a replacement add a forbidden character', () => {
     expect(renderFileName({ format: '{{title}}', replacements: { ':': '/:' } }, { ...movie, title: 'A: B' })).toBe('A B')
   })

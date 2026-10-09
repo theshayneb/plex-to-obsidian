@@ -1417,3 +1417,11 @@ describe('PlexSync', () => {
     expect(loadSettings({}).ignored).toEqual({})
   })
 })
+
+describe('file name brackets', () => {
+  it('turns square brackets into round ones by default, for new and saved settings, unless set', () => {
+    expect(loadSettings({}).fileNameReplacements).toMatchObject({ '[': '(', ']': ')' })
+    expect(loadSettings({ serverUrl: 'x', fileNameReplacements: { ':': '-' } }).fileNameReplacements).toEqual({ ':': '-', '[': '(', ']': ')' })
+    expect(loadSettings({ serverUrl: 'x', fileNameReplacements: { '[': '' } }).fileNameReplacements['[']).toBe('')
+  })
+})

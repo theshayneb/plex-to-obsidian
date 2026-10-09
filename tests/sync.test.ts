@@ -208,7 +208,7 @@ describe('PlexSync', () => {
       Track: 6,
       Genre: ['Alternative'],
       Date: '1997-05-21',
-      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F100',
+      Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F90&track=100',
       Image: '[[Media/Music/Images/Radiohead - OK Computer.jpg]]',
       tags: ['music'],
     })
@@ -881,7 +881,7 @@ describe('PlexSync', () => {
     // Status is compared too, but a status of your own ("revisit") is only replaced if you tick it.
     expect(requests.map(r => r.lines.map(l => [l.label, l.unticked]))).toEqual([[['Summary', true], ['Date', false], ['Status', true]]])
     // The rest of the note is shown too, unchanged.
-    expect(requests[0].unchanged).toEqual([{ label: 'File name', value: 'Arrival (2016)' }, { label: 'Duration', value: '116' }])
+    expect(requests[0].unchanged).toMatchObject([{ label: 'File name', value: 'Arrival (2016)', key: 'own-file' }, { label: 'Duration', value: '116', key: 'own:Duration', edit: 'number' }])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Summary: 'My own summary.', Date: '2016-11-11', Duration: 116, Status: 'revisit' })
     expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.', '1|Status': 'revisit' })
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
@@ -909,6 +909,37 @@ describe('PlexSync', () => {
     expect(result.unmatched).toEqual([])
   })
 
+  it('writes what you edit in the pop-up among the properties it wasn\'t changing, file name included', async () => {
+    const { app, files, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.', Genre: ['Drama'] } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const approve = (r: ApprovalRequest): Promise<Decision> => Promise.resolve({
+      choice: 'apply', excluded: r.lines.map(l => l.key),
+      edits: { 'own:Duration': '116', 'own:Genre': ['Drama', 'Sci-Fi'], 'own-file': 'Arrival' },
+    })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(files.has('Media/Movies/Arrival.md')).toBe(true)
+    expect(frontmatter.get('Media/Movies/Arrival.md')).toEqual({ Duration: 116, Summary: 'Mine.', Genre: ['Drama', 'Sci-Fi'] })
+    expect(result.corrected).toEqual(['Media/Movies/Arrival.md'])
+  })
+
+  it('offers, ticked, to replace a song\'s old link to the track with its album page link', async () => {
+    const old = 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F100'
+    const { app, frontmatter } = makeApp({ 'Media/Music/Radiohead - Karma Police.md': { Link: old } })
+    const settings = settingsWith({})
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [tracks[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Link'])
+    expect(requests[0].lines.map(l => [l.label, l.unticked])).toEqual([['Link', false]])
+    expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')!.Link).toBe('https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F90&track=100')
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})
@@ -920,7 +951,7 @@ describe('PlexSync', () => {
       return Promise.resolve({ choice: 'skip', excluded: [] })
     }
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
-    expect(requests[0].unchanged?.find(u => u.label === 'Duration')).toEqual({ label: 'Duration', value: '1h 56m', warn: 'Not a number' })
+    expect(requests[0].unchanged?.find(u => u.label === 'Duration')).toMatchObject({ label: 'Duration', value: '1h 56m', warn: 'Not a number' })
   })
 
   it('renames a note in a check only when the file name is checked, and shows the rest of the note', async () => {
@@ -936,7 +967,7 @@ describe('PlexSync', () => {
 
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
     expect(files.has('Media/Movies/arrival.md')).toBe(true)
-    expect(requests.flatMap(r => r.unchanged ?? []).find(u => u.label === 'File name')).toEqual({ label: 'File name', value: 'arrival' })
+    expect(requests.flatMap(r => r.unchanged ?? []).find(u => u.label === 'File name')).toMatchObject({ label: 'File name', value: 'arrival' })
 
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['File name'])
     expect(result.renamed).toEqual([{ from: 'Media/Movies/arrival.md', to: 'Media/Movies/Arrival (2016).md' }])

@@ -69,6 +69,12 @@ describe('links', () => {
     expect(ratingKeyFromLink('http://x:32400/library/metadata/99')).toBe('99')
     expect(ratingKeyFromLink(undefined)).toBeNull()
   })
+
+  it('links a song to its album\'s page (Plex has none for a track), keeping the track\'s key', () => {
+    const link = plexWebLink('abc123', '100', '90')
+    expect(link).toBe('https://app.plex.tv/desktop/#!/server/abc123/details?key=%2Flibrary%2Fmetadata%2F90&track=100')
+    expect(ratingKeyFromLink(link)).toBe('100')
+  })
 })
 
 describe('renderFileName', () => {

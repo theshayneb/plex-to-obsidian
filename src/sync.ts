@@ -1,6 +1,6 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian'
 import { FILE_NAME } from './check-modal'
-import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type Approver, type OwnerChooser } from './approval-modal'
+import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type UnchangedLine, type Approver, type OwnerChooser } from './approval-modal'
 import {
   BOOKS_LIBRARY,
   ensureSteamLibrary,
@@ -216,12 +216,20 @@ export class PlexSync {
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
     if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
-    const { choice, excluded, edits, mergeWith } = await this.approve(request.action === 'change' ? this.withWholeNote(request, lib) : request)
+    const shown = request.action === 'change' ? this.withWholeNote(request, lib) : request
+    const { choice, excluded, edits, mergeWith } = await this.approve(shown)
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
     if (choice === 'stop') result.stopped = true
-    if (choice === 'apply' || choice === 'all') return { excluded: skipped, edits: edits ?? {} }
+    if (choice === 'apply' || choice === 'all') {
+      try {
+        await this.applyOwnEdits(shown, edits ?? {}, result)
+      } catch (err) {
+        result.failed.push({ title: request.path, error: `your edits failed: ${errorText(err)}` })
+      }
+      return { excluded: skipped, edits: edits ?? {} }
+    }
     if (choice === 'merge' && mergeWith) return { excluded: new Set(), edits: {}, mergeWith }
     if (choice === 'ignore') {
       this.settings.ignored[item.ratingKey] = { name: displayName(item), library: lib.title, since: Date.now() }
@@ -248,11 +256,45 @@ export class PlexSync {
     }
     const lines = request.lines.map(line => line.key === 'rename' || !warnOf(line.label) ? line : { ...line, warn: warnOf(line.label) })
     const shown = new Set(lines.map(line => line.label))
-    const rest = Object.entries(frontmatter)
+    const rest: UnchangedLine[] = Object.entries(frontmatter)
       .filter(([name]) => !shown.has(name))
-      .map(([name, value]) => ({ label: name, value: describeValue(value), warn: warnOf(name) }))
-    const unchanged = lines.some(line => line.key === 'rename') ? rest : [{ label: 'File name', value: file.basename }, ...rest]
+      .map(([name, value]) => {
+        // Anything but a nested object can be edited here.
+        const plain = value === null || typeof value !== 'object' || Array.isArray(value)
+        const editing = plain ? { key: `own:${name}`, ...editable(value) } : {}
+        // A duration or page count typed as a number is saved as one.
+        if (numbers.has(name) && 'edit' in editing && editing.edit === 'text') editing.edit = 'number'
+        return { label: name, value: describeValue(value), warn: warnOf(name), ...editing }
+      })
+    const unchanged = lines.some(line => line.key === 'rename') ? rest : [{ label: 'File name', value: file.basename, key: 'own-file', edit: 'text' as const }, ...rest]
     return { ...request, lines, unchanged }
+  }
+
+  /**
+   * The edits you made in a change pop-up to properties (or the file name) it wasn't changing:
+   * written as soon as you approve, before the pop-up's own changes.
+   */
+  private async applyOwnEdits(request: ApprovalRequest, edits: Record<string, string | string[]>, result: SyncResult): Promise<void> {
+    const own = (request.unchanged ?? []).filter(line => line.key && line.edit && line.key in edits)
+    if (!own.length) return
+    const file = this.app.vault.getAbstractFileByPath(request.path)
+    if (!(file instanceof TFile)) return
+    const properties = own.filter(line => line.key !== 'own-file')
+    if (properties.length) {
+      await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+        for (const line of properties) fm[line.label] = parseEdit(edits[line.key!], line.edit!) ?? (line.edit === 'list' ? [] : null)
+      })
+    }
+    const renamed = own.find(line => line.key === 'own-file')
+    if (renamed) {
+      const from = file.path
+      const to = this.renameTargetFor(file, sanitizeFileName(String(edits['own-file']), this.settings.fileNameReplacements))
+      if (to) {
+        await this.app.fileManager.renameFile(file, to)
+        result.renamed.push({ from, to })
+      }
+    }
+    if (!result.corrected.includes(file.path)) result.corrected.push(file.path)
   }
 
   private naming(lib: LibrarySetting): FileNaming {
@@ -1193,7 +1235,9 @@ export class PlexSync {
     for (const m of mappings) {
       const name = m.name.trim()
       const current: unknown = from[name]
-      if (m.source === 'plexLink') {
+      // A song's older link (to the track, which Plex has no page for) is replaced, ticked.
+      const oldSongLink = m.source === 'plexLink' && item.type === 'track' && typeof current === 'string' && !/[?&]track=/.test(current) && keys.includes(ratingKeyFromLink(current) ?? '') && current !== this.linkFor(item)
+      if (m.source === 'plexLink' && !oldSongLink) {
         const pointsAt = ratingKeyFromLink(current)
         if (pointsAt && keys.includes(pointsAt)) continue
       }
@@ -1221,7 +1265,7 @@ export class PlexSync {
       to[name] = offer.to
       // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).
       if (RATING_SOURCES.includes(m.source) && !isBlank(current)) yours.add(name)
-      if (offer.ticked || (m.source === 'plexLink' && isSearchLink(current))) ticked.add(name)
+      if (offer.ticked || (m.source === 'plexLink' && (isSearchLink(current) || oldSongLink))) ticked.add(name)
       // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
       if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)
       // A source that only knows the year (Open Library's books) is a guess against a date of yours.
@@ -1383,7 +1427,7 @@ export class PlexSync {
   private linkFor(item: PlexItem): string {
     if (item.type === 'game' && item.steamAppId) return steamStoreUrl(item.steamAppId)
     if (!fromPlex(item) && item.webLink) return item.webLink
-    return plexWebLink(this.machineId, item.ratingKey)
+    return plexWebLink(this.machineId, item.ratingKey, item.type === 'track' ? item.parentRatingKey : undefined)
   }
 
   /** The path and properties a new note would get, for the approval pop-up. */

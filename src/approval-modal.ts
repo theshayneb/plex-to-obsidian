@@ -43,6 +43,17 @@ export interface ApprovalLine {
   warn?: string
 }
 
+/** A property (or the file name) a change leaves alone; editing it in the pop-up changes it too. */
+export interface UnchangedLine {
+  label: string
+  value: string | null
+  warn?: string
+  /** Set when it can be edited: the key its edit comes back under (`own:<name>`, or `own-file`). */
+  key?: string
+  edit?: EditKind
+  items?: string[]
+}
+
 export interface ApprovalRequest {
   action: 'create' | 'change'
   /** The note's path (for a rename, its current path). */
@@ -52,7 +63,7 @@ export interface ApprovalRequest {
   /** Something to check before saying yes, shown above the lines (say, which book was found). */
   note?: string
   /** For a change: the note's other properties, which stay as they are, shown below the lines. */
-  unchanged?: { label: string, value: string | null, warn?: string }[]
+  unchanged?: UnchangedLine[]
   position: number
   total: number
 }
@@ -156,13 +167,34 @@ export class ApprovalModal extends Modal {
       })
     }
 
-    // The rest of the note, for context: nothing to tick, nothing changes.
-    for (const { label, value, warn } of this.pmnRequest.unchanged ?? []) {
+    // The rest of the note: nothing changes unless you edit it here.
+    for (const { label, value, warn, key, edit, items } of this.pmnRequest.unchanged ?? []) {
       const row = body.createEl('tr', { cls: 'pmn-approval-same' })
       row.createEl('td')
-      row.createEl('td', { cls: 'pmn-approval-name', text: label })
+      const name = row.createEl('td', { cls: 'pmn-approval-name', text: label })
       cell(row, value, 'pmn-approval-now', 'Existing', warn)
-      row.createEl('td', { cls: 'pmn-approval-new pmn-approval-empty', text: 'No change', attr: { 'data-label': 'New' } })
+      const newCell = row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': 'New' } })
+      if (!key || !edit) {
+        newCell.addClass('pmn-approval-empty')
+        newCell.setText('No change')
+        continue
+      }
+      // Edited, it's a change like the others: bold, in the accent colour.
+      const mark = () => name.toggleClass('pmn-approval-changed', key in this.pmnEdits)
+      if (edit === 'list') {
+        this.pmnListEditor(newCell, key, items ?? [], mark)
+        continue
+      }
+      const original = value ?? ''
+      const field = newCell.createEl('textarea', { cls: 'pmn-approval-input' })
+      field.value = original
+      field.placeholder = 'Empty'
+      field.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
+      field.addEventListener('input', () => {
+        if (field.value === original) delete this.pmnEdits[key]
+        else this.pmnEdits[key] = field.value
+        mark()
+      })
     }
 
     const buttons = new Setting(contentEl)
@@ -214,13 +246,14 @@ export class ApprovalModal extends Modal {
   }
 
   /** A list as removable chips, plus a box to add items (Enter or comma). Returns the add box. */
-  private pmnListEditor(td: HTMLElement, key: string, original: string[]): HTMLInputElement {
+  private pmnListEditor(td: HTMLElement, key: string, original: string[], onChange?: () => void): HTMLInputElement {
     let list = [...original]
     const chips = td.createDiv('pmn-approval-chips')
     const add = td.createEl('input', { type: 'text', cls: 'pmn-approval-add', placeholder: 'Add…' })
     const changed = () => {
       if (list.length === original.length && list.every((v, i) => v === original[i])) delete this.pmnEdits[key]
       else this.pmnEdits[key] = [...list]
+      onChange?.()
     }
     const render = () => {
       chips.empty()

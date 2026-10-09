@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.68] - 2026-10-09
+
+- Every property in a change pop-up can be edited now, including the ones it isn't changing and the file name. An edited one turns bold in the accent colour and is saved when you press Apply (an edited file name renames the note). A duration or page count typed as a number is saved as a number.
+- Song links now open the song's album in Plex (Plex has no page for a single track), with the track's key kept in the link (`&track=…`). "Check against sources: Link" offers to replace a song's old link, ticked.
+
 ## [0.0.67] - 2026-10-09
 
 - Book years are much more reliable. Open Library's "first published" year is its earliest edition's, so one miscatalogued edition (often "1900") or a duplicate record holding only a reprint gave wrong years. Now the year must be borne out by other editions, and every Open Library record of the same book by the same author is compared (taking the earliest). Book lookups by title pick the record with the most editions.

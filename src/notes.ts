@@ -152,9 +152,13 @@ export function isStarted(item: PlexItem): boolean {
   return (item.viewOffset ?? 0) > 0
 }
 
-export function plexWebLink(machineIdentifier: string, ratingKey: string): string {
-  const key = encodeURIComponent(`/library/metadata/${ratingKey}`)
-  return `https://app.plex.tv/desktop/#!/server/${machineIdentifier}/details?key=${key}`
+/**
+ * The item's page in Plex Web. Plex has no page for a track, so a song links to its album's page,
+ * with the track's own key after it (`&track=…`) for matching.
+ */
+export function plexWebLink(machineIdentifier: string, ratingKey: string, albumKey?: string): string {
+  const key = encodeURIComponent(`/library/metadata/${albumKey ?? ratingKey}`)
+  return `https://app.plex.tv/desktop/#!/server/${machineIdentifier}/details?key=${key}${albumKey ? `&track=${ratingKey}` : ''}`
 }
 
 export function steamStoreUrl(appId: number): string {
@@ -175,6 +179,9 @@ export function ratingKeyFromLink(link: unknown): string | null {
   if (openLibrary) return `ol-${openLibrary[1]}`
   const hltb = /howlongtobeat\.com\/game\/(\d+)/i.exec(link)
   if (hltb) return `hltb-${hltb[1]}`
+  // A song's link is to its album's page, with the track's key after it.
+  const track = /[?&]track=(\d+)/.exec(link)
+  if (track) return track[1]
   const match = /library(?:\/|%2F)metadata(?:\/|%2F)(\d+)/i.exec(link)
   return match ? match[1] : null
 }

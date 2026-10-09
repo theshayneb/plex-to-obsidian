@@ -149,6 +149,9 @@ function hasImage(item: PlexItem): boolean {
   return Boolean(item.type === 'track' ? item.parentThumb ?? item.thumb : item.thumb)
 }
 
+/** Sources whose properties should hold a plain number (minutes, pages). */
+const NUMBER_SOURCES: FieldSource[] = ['durationMinutes', 'pages']
+
 const POSTER_PREVIEW = 'poster downloaded from Plex'
 
 interface Entry {
@@ -213,7 +216,7 @@ export class PlexSync {
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
     if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
-    const { choice, excluded, edits, mergeWith } = await this.approve(request.action === 'change' ? { ...request, unchanged: this.unchangedOf(request) } : request)
+    const { choice, excluded, edits, mergeWith } = await this.approve(request.action === 'change' ? this.withWholeNote(request, lib) : request)
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
@@ -230,16 +233,26 @@ export class PlexSync {
     return null
   }
 
-  /** A change pop-up's view of the rest of the note: every property no line is about, in the note's order. */
-  private unchangedOf(request: ApprovalRequest): { label: string, value: string | null }[] {
+  /**
+   * A change pop-up with the rest of the note: its file name and every property no line is about,
+   * in the note's order, and a warning on each duration (or page count) that isn't a number.
+   */
+  private withWholeNote(request: ApprovalRequest, lib: LibrarySetting): ApprovalRequest {
     const file = this.app.vault.getAbstractFileByPath(request.path)
-    if (!(file instanceof TFile)) return []
+    if (!(file instanceof TFile)) return request
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-    const shown = new Set(request.lines.map(line => line.label))
+    const numbers = new Set(lib.properties.filter(m => NUMBER_SOURCES.includes(m.source)).map(m => m.name.trim()))
+    const warnOf = (name: string): string | undefined => {
+      const value: unknown = frontmatter[name]
+      return numbers.has(name) && !isBlank(value) && typeof value !== 'number' ? 'Not a number' : undefined
+    }
+    const lines = request.lines.map(line => line.key === 'rename' || !warnOf(line.label) ? line : { ...line, warn: warnOf(line.label) })
+    const shown = new Set(lines.map(line => line.label))
     const rest = Object.entries(frontmatter)
       .filter(([name]) => !shown.has(name))
-      .map(([name, value]) => ({ label: name, value: describeValue(value) }))
-    return request.lines.some(line => line.key === 'rename') ? rest : [{ label: 'File name', value: file.basename }, ...rest]
+      .map(([name, value]) => ({ label: name, value: describeValue(value), warn: warnOf(name) }))
+    const unchanged = lines.some(line => line.key === 'rename') ? rest : [{ label: 'File name', value: file.basename }, ...rest]
+    return { ...request, lines, unchanged }
   }
 
   private naming(lib: LibrarySetting): FileNaming {
@@ -1211,6 +1224,8 @@ export class PlexSync {
       if (offer.ticked || (m.source === 'plexLink' && isSearchLink(current))) ticked.add(name)
       // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
       if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)
+      // A source that only knows the year (Open Library's books) is a guess against a date of yours.
+      if (m.source === 'releaseDate' && !isBlank(current) && vagueDate(offer.to)) yours.add(name)
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to, sameLength: ticked, yours } : null

@@ -122,13 +122,16 @@ export interface OpenLibraryDoc {
   title?: string
   author_name?: string[]
   first_publish_year?: number
+  /** Every edition's year. */
+  publish_year?: number[]
+  edition_count?: number
   cover_i?: number
   subject?: string[]
   number_of_pages_median?: number
   isbn?: string[]
 }
 
-export const OPEN_LIBRARY_FIELDS = 'key,title,author_name,first_publish_year,cover_i,subject,number_of_pages_median,isbn'
+export const OPEN_LIBRARY_FIELDS = 'key,title,author_name,first_publish_year,publish_year,edition_count,cover_i,subject,number_of_pages_median,isbn'
 
 /** Open Library's subjects run long and loose; the first few are the useful ones. */
 const BOOK_GENRES = 5
@@ -149,6 +152,50 @@ export function bookGenres(subjects: string[] | undefined, limit = BOOK_GENRES):
   return genres
 }
 
+/**
+ * The year a book was first published. Open Library's own `first_publish_year` is just its
+ * earliest edition's, so one badly catalogued edition (often "1900") makes a 2019 novel a century
+ * old. Here the earliest year counts only when it's borne out: two editions that year, or another
+ * edition within five years. Failing that, Open Library's year.
+ */
+export function firstPublishYear(doc: OpenLibraryDoc, thisYear = new Date().getFullYear()): number | undefined {
+  const years = (doc.publish_year ?? []).filter(y => Number.isInteger(y) && y >= 1000 && y <= thisYear + 1)
+  if (!years.length) return doc.first_publish_year
+  const counts = new Map<number, number>()
+  for (const y of years) counts.set(y, (counts.get(y) ?? 0) + 1)
+  const distinct = [...counts.keys()].sort((a, b) => a - b)
+  if (distinct.length === 1) return distinct[0]
+  const found = distinct.find((y, i) => counts.get(y)! >= 2 || (i + 1 < distinct.length && distinct[i + 1] - y <= 5))
+  return found ?? doc.first_publish_year
+}
+
+/**
+ * The search results that are this book: the same title (or one starting the same, as with a
+ * subtitle) and, when given, by this author. Open Library often has the same book as several
+ * works, some holding only a late reprint; the one with the most editions comes first.
+ */
+export function sameBooks(docs: OpenLibraryDoc[], title: string, author?: string): OpenLibraryDoc[] {
+  const want = titleKey(title)
+  const by = author ? titleKey(author) : ''
+  return docs
+    .filter(doc => {
+      const got = titleKey(doc.title ?? '')
+      const titled = Boolean(got && want) && (got === want || got.startsWith(want) || want.startsWith(got))
+      // "Miguel de Cervantes" is "Miguel de Cervantes Saavedra" too.
+      return titled && (!by || (doc.author_name ?? []).some(name => {
+        const got = titleKey(name)
+        return Boolean(got) && (got.includes(by) || by.includes(got))
+      }))
+    })
+    .sort((a, b) => (b.edition_count ?? 0) - (a.edition_count ?? 0))
+}
+
+/** The earliest first-publication year among these records of one book (`firstPublishYear` each). */
+export function earliestYear(docs: OpenLibraryDoc[]): number | undefined {
+  const years = docs.map(doc => firstPublishYear(doc)).filter((y): y is number => y !== undefined)
+  return years.length ? Math.min(...years) : undefined
+}
+
 export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
   const work = /\/works\/(OL\d+W)/.exec(doc.key ?? '')?.[1]
   if (!work || !doc.title) return null
@@ -159,7 +206,7 @@ export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
       ratingKey: `ol-${work}`,
       type: 'book',
       title: doc.title,
-      year: doc.first_publish_year,
+      year: firstPublishYear(doc),
       authors,
       pages: doc.number_of_pages_median,
       isbn: doc.isbn?.find(isbn => isbn.length === 13) ?? doc.isbn?.[0],
@@ -167,7 +214,7 @@ export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
       portrait: cover,
       webLink: `https://openlibrary.org/works/${work}`,
     },
-    detail: [authors.join(', '), doc.first_publish_year].filter(Boolean).join(' · '),
+    detail: [authors.join(', '), firstPublishYear(doc)].filter(Boolean).join(' · '),
     thumb: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : undefined,
     source: 'Open Library',
   }
@@ -221,10 +268,28 @@ export function hltbFound(game: HltbGame): Found {
 
 /** One result of a Google Books search (only what's used). */
 export interface GoogleVolume {
-  volumeInfo?: { title?: string, subtitle?: string, authors?: string[], description?: string }
+  volumeInfo?: { title?: string, subtitle?: string, authors?: string[], description?: string, publishedDate?: string }
 }
 
 const titleKey = (title: string): string => title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+/**
+ * A book's full publication date from Google Books: the earliest exact date (not just a year)
+ * among the results that are this book (by ISBN, any; by title, only same-titled ones), and only
+ * in the year Open Library gives for its first publication, so a later edition's date isn't taken.
+ */
+export function googleDate(volumes: GoogleVolume[] | undefined, title: string, year: number | undefined, byIsbn: boolean): string | undefined {
+  const want = titleKey(title)
+  const same = (v: GoogleVolume) => {
+    const got = titleKey(v.volumeInfo?.title ?? '')
+    return byIsbn || (Boolean(got && want) && (got === want || got.startsWith(want) || want.startsWith(got)))
+  }
+  const dates = (volumes ?? []).filter(same)
+    .map(v => v.volumeInfo?.publishedDate?.trim() ?? '')
+    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date) && (!year || date.startsWith(`${year}-`)))
+    .sort()
+  return dates[0]
+}
 
 /**
  * The description (the publisher's blurb) of the Google Books result for this book, as plain

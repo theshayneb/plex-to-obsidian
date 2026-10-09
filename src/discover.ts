@@ -1,12 +1,15 @@
 import { requestUrl } from 'obsidian'
 import {
   bookGenres,
+  googleDate,
   googleDescription,
   cleanOmdbKey,
   hltbFound,
   omdbFound,
   omdbItem,
+  earliestYear,
   OPEN_LIBRARY_FIELDS,
+  sameBooks,
   openLibraryDescription,
   openLibraryFound,
   steamFound,
@@ -89,7 +92,7 @@ export async function itemDetails(found: Found, omdbKey: string, googleKey = '')
     const work = item.ratingKey.slice(3)
     const body = await getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS).catch(() => null) as
       { description?: string | { value?: string } } | null
-    return { ...item, summary: (await googleBooksSummary(item, googleKey)) ?? openLibraryDescription(body) }
+    return withGoogle(item, googleKey, openLibraryDescription(body))
   }
   return item
 }
@@ -106,9 +109,13 @@ export async function testOmdbKey(pasted: string): Promise<string> {
   }
 }
 
-async function searchBooks(query: string): Promise<OpenLibraryDoc[]> {
-  const body = await getJson(`https://openlibrary.org/search.json?${query}&limit=5&fields=${OPEN_LIBRARY_FIELDS}`, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
+async function searchBooks(query: string, limit = 5): Promise<OpenLibraryDoc[]> {
+  const body = await getJson(`https://openlibrary.org/search.json?${query}&limit=${limit}&fields=${OPEN_LIBRARY_FIELDS}`, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
   return body.docs ?? []
+}
+
+function bookQuery(title: string, author?: string): string {
+  return `title=${encodeURIComponent(title)}${author ? `&author=${encodeURIComponent(author)}` : ''}`
 }
 
 /**
@@ -129,52 +136,63 @@ export async function lookUpBook(by: { work?: string | null, title?: string, aut
     const body = await workJson(by.work).catch(() => null)
     if (!found && !body) return null
     const book: PlexItem = found?.item ?? { ratingKey: `ol-${by.work}`, type: 'book', title: body?.title ?? '', webLink: `https://openlibrary.org/works/${by.work}` }
-    return {
-      ...book,
-      Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
-      summary: (await googleBooksSummary(book, googleKey)) ?? openLibraryDescription(body) ?? found?.item.summary,
+    // The same book's other records may know an earlier first edition than the linked one.
+    const title = book.title || by.title
+    const author = book.authors?.[0] ?? by.author
+    if (title) {
+      const others = sameBooks(await searchBooks(bookQuery(title, author), 20).catch(() => []), title, author)
+      book.year = earliestYear([...doc ? [doc] : [], ...others]) ?? book.year
     }
+    const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
+    return withGoogle({ ...book, Genre: genres }, googleKey, openLibraryDescription(body) ?? found?.item.summary)
   }
   if (!by.title) return null
-  const docs = await searchBooks(`title=${encodeURIComponent(by.title)}${by.author ? `&author=${encodeURIComponent(by.author)}` : ''}`)
-  const found = docs.map(openLibraryFound).find((f): f is Found => f !== null)
+  const docs = await searchBooks(bookQuery(by.title, by.author), 20)
+  // The record with the most editions is the book itself; the earliest year among all its records counts.
+  const same = sameBooks(docs, by.title, by.author)
+  const found = [...same, ...docs].map(openLibraryFound).find((f): f is Found => f !== null)
   if (!found) return null
+  if (same.length) found.item.year = earliestYear(same) ?? found.item.year
   const work = found.item.ratingKey.slice(3)
   const body = await workJson(work).catch(() => null)
   const doc = docs.find(d => d.key === `/works/${work}`)
-  return {
-    ...found.item,
-    Genre: bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag })),
-    summary: (await googleBooksSummary(found.item, googleKey)) ?? openLibraryDescription(body) ?? found.item.summary,
-  }
+  const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
+  return withGoogle({ ...found.item, Genre: genres }, googleKey, openLibraryDescription(body) ?? found.item.summary)
 }
 
 /**
  * A book's summary from Google Books (the publisher's blurb, far better than Open Library's
- * descriptions): looked up by ISBN, then by title and author. Undefined when Google Books has none
- * or can't be reached, so Open Library's is used instead. `key` (optional) raises Google's daily limit.
+ * descriptions) and its full publication date (Open Library only has the year): looked up by
+ * ISBN, then by title and author. Either is undefined when Google Books has none or can't be
+ * reached, so Open Library's is used instead. `key` (optional) raises Google's daily limit.
  */
-export async function googleBooksSummary(book: PlexItem, key = ''): Promise<string | undefined> {
+export async function googleBooksInfo(book: PlexItem, key = ''): Promise<{ summary?: string, date?: string }> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
+  const out: { summary?: string, date?: string } = {}
   const search = async (q: string, byIsbn: boolean) => {
     const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books${withKey}`)
     if (res.status >= 400) throw new Error(`Google Books returned ${res.status}`)
-    const body = res.json as { items?: GoogleVolume[] }
-    return googleDescription(body.items, book.title, byIsbn)
+    const volumes = (res.json as { items?: GoogleVolume[] }).items
+    out.summary ??= googleDescription(volumes, book.title, byIsbn)
+    out.date ??= googleDate(volumes, book.title, book.year, byIsbn)
   }
   try {
     const isbn = book.isbn?.replace(/[^0-9X]/gi, '')
-    if (isbn) {
-      const found = await search(`isbn:${isbn}`, true)
-      if (found) return found
+    if (isbn) await search(`isbn:${isbn}`, true)
+    if ((!out.summary || !out.date) && book.title) {
+      const author = book.authors?.[0]
+      await search(`intitle:"${book.title}"${author ? ` inauthor:"${author}"` : ''}`, false)
     }
-    if (!book.title) return undefined
-    const author = book.authors?.[0]
-    return await search(`intitle:"${book.title}"${author ? ` inauthor:"${author}"` : ''}`, false)
   } catch (err) {
     console.warn('Media import and sync: Google Books lookup failed', err)
-    return undefined
   }
+  return out
+}
+
+/** A book with what Google Books adds: its summary (else `fallback`) and its full publication date. */
+async function withGoogle(book: PlexItem, key: string, fallback: string | undefined): Promise<PlexItem> {
+  const { summary, date } = await googleBooksInfo(book, key)
+  return { ...book, summary: summary ?? fallback, ...date ? { originallyAvailableAt: date } : {} }
 }
 
 /**

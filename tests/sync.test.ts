@@ -909,6 +909,20 @@ describe('PlexSync', () => {
     expect(result.unmatched).toEqual([])
   })
 
+  it('points out a duration that isn\'t a number in the pop-up', async () => {
+    const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(requests[0].unchanged?.find(u => u.label === 'Duration')).toEqual({ label: 'Duration', value: '1h 56m', warn: 'Not a number' })
+  })
+
   it('renames a note in a check only when the file name is checked, and shows the rest of the note', async () => {
     const { app, files } = makeApp({ 'Media/Movies/arrival.md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' } })
     const settings = settingsWith({})

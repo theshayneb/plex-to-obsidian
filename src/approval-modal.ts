@@ -39,6 +39,8 @@ export interface ApprovalLine {
   unticked?: boolean
   /** Images to pick from for the value (game covers). */
   choices?: CoverChoice[]
+  /** Something wrong with what's in the note now, pointed out next to it (a duration that isn't a number). */
+  warn?: string
 }
 
 export interface ApprovalRequest {
@@ -50,7 +52,7 @@ export interface ApprovalRequest {
   /** Something to check before saying yes, shown above the lines (say, which book was found). */
   note?: string
   /** For a change: the note's other properties, which stay as they are, shown below the lines. */
-  unchanged?: { label: string, value: string | null }[]
+  unchanged?: { label: string, value: string | null, warn?: string }[]
   position: number
   total: number
 }
@@ -114,7 +116,7 @@ export class ApprovalModal extends Modal {
     if (!create) head.createEl('th', { text: 'Existing' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
-    for (const { key, label, current, value, edit, items, required, choices, unticked } of lines) {
+    for (const { key, label, current, value, edit, items, required, choices, unticked, warn } of lines) {
       const row = body.createEl('tr')
       const box = row.createEl('td').createEl('input', { type: 'checkbox' })
       box.checked = !unticked
@@ -124,7 +126,7 @@ export class ApprovalModal extends Modal {
         row.addClass('pmn-approval-off')
       }
       row.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
-      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing')
+      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing', warn)
       const newLabel = create ? 'Value' : 'New'
       const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
       let input: HTMLTextAreaElement | HTMLInputElement | null = null
@@ -155,11 +157,11 @@ export class ApprovalModal extends Modal {
     }
 
     // The rest of the note, for context: nothing to tick, nothing changes.
-    for (const { label, value } of this.pmnRequest.unchanged ?? []) {
+    for (const { label, value, warn } of this.pmnRequest.unchanged ?? []) {
       const row = body.createEl('tr', { cls: 'pmn-approval-same' })
       row.createEl('td')
       row.createEl('td', { cls: 'pmn-approval-name', text: label })
-      cell(row, value, 'pmn-approval-now', 'Existing')
+      cell(row, value, 'pmn-approval-now', 'Existing', warn)
       row.createEl('td', { cls: 'pmn-approval-new pmn-approval-empty', text: 'No change', attr: { 'data-label': 'New' } })
     }
 
@@ -267,10 +269,14 @@ export function askApproval(app: App, request: ApprovalRequest): Promise<Decisio
 }
 
 /** A table cell showing a value, or "empty" in italics. */
-function cell(row: HTMLElement, value: string | null, cls: string, label: string): void {
+function cell(row: HTMLElement, value: string | null, cls: string, label: string, warn?: string): void {
   const td = row.createEl('td', { cls, attr: { 'data-label': label } })
   if (value === null) td.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
   else td.setText(value)
+  if (warn) {
+    td.addClass('pmn-approval-warn')
+    td.createDiv({ cls: 'pmn-approval-warning', text: warn })
+  }
 }
 
 /** How a property value is edited in the pop-up. */

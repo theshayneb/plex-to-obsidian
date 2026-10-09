@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.67] - 2026-10-09
+
+- Book years are much more reliable. Open Library's "first published" year is its earliest edition's, so one miscatalogued edition (often "1900") or a duplicate record holding only a reprint gave wrong years. Now the year must be borne out by other editions, and every Open Library record of the same book by the same author is compared (taking the earliest). Book lookups by title pick the record with the most editions.
+- Book dates get the day and month from Google Books when it has a full date in that first-publication year.
+- A check never makes a date vaguer: a year-only date from a source doesn't replace your full date from the same year, and one from another year starts unticked.
+- Pop-ups point out a duration (or a book's page count) that isn't a number, in red.
+
 ## [0.0.66] - 2026-10-09
 
 - Change pop-ups (Import and sync, and checks against sources) now show every property of the note, plus its file name. The ones that would change have their name in bold, in your theme's accent colour; the rest are listed below them as "No change".

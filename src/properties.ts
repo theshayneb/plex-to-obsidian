@@ -598,6 +598,9 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
   }
   if (blank(current)) return { to: value, ticked: true }
   if (sameValue(current, value)) return null
+  // A date of yours is never made vaguer: the source's year alone (or the 1st of January standing
+  // in for one, as with every Open Library book) doesn't replace a full date from that year.
+  if (source === 'releaseDate' && vagueDate(value) && !vagueDate(current) && String(current).trim().startsWith(String(value).slice(0, 4))) return null
   // A year alone (or the 1st of January standing in for one) gives way to the source's date.
   if (source === 'releaseDate' && vagueDate(current) && String(value).startsWith(String(current).trim().slice(0, 4))) return { to: value, ticked: true }
   if (source === 'durationMinutes' && typeof value === 'number') return { to: value, ticked: sameLengthOtherForm(current, value) }

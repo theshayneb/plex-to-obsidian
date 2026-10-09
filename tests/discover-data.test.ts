@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bookGenres, cleanOmdbKey, googleDescription, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { bookGenres, cleanOmdbKey, earliestYear, firstPublishYear, googleDate, googleDescription, sameBooks, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
@@ -58,6 +58,40 @@ describe('Open Library', () => {
     expect(openLibraryDescription({ description: { value: 'A desert planet.\r\n----------\r\nSee also: …' } })).toBe('A desert planet.')
     expect(openLibraryDescription({ description: 'Plain.' })).toBe('Plain.')
     expect(openLibraryDescription(null)).toBeUndefined()
+  })
+})
+
+describe('book years', () => {
+  it('ignores a stray early edition when working out the first publication year', () => {
+    // The Absolute Book (2019), with one edition catalogued as 1900.
+    expect(firstPublishYear({ first_publish_year: 1900, publish_year: [2021, 1900, 2019, 2020, 2019] }, 2026)).toBe(2019)
+    expect(firstPublishYear({ first_publish_year: 1965, publish_year: [1965, 1966, 1990] }, 2026)).toBe(1965)
+    expect(firstPublishYear({ first_publish_year: 1970, publish_year: [1970] }, 2026)).toBe(1970)
+    expect(firstPublishYear({ first_publish_year: 1605 }, 2026)).toBe(1605)
+  })
+
+  it('takes the earliest year among every record of the same book by the same author', () => {
+    const docs = [
+      { key: '/works/OL1W', title: 'A Maze of Death', author_name: ['Philip K. Dick'], publish_year: [2013, 2014], edition_count: 2 },
+      { key: '/works/OL2W', title: 'A maze of death', author_name: ['Philip K Dick'], publish_year: [1970, 1971, 1977], edition_count: 30 },
+      { key: '/works/OL3W', title: 'A Maze of Death', author_name: ['Someone Else'], publish_year: [1950, 1951] },
+      { key: '/works/OL4W', title: 'Don Quixote', author_name: ['Miguel de Cervantes Saavedra'], publish_year: [1605, 1608] },
+    ]
+    const same = sameBooks(docs, 'A Maze of Death', 'Philip K Dick')
+    expect(same.map(d => d.key)).toEqual(['/works/OL2W', '/works/OL1W'])
+    expect(earliestYear(same)).toBe(1970)
+    expect(sameBooks(docs, 'Don Quixote', 'Miguel de Cervantes').map(d => d.key)).toEqual(['/works/OL4W'])
+  })
+
+  it('takes a full date from Google Books only in the first publication year', () => {
+    const volumes = [
+      { volumeInfo: { title: 'The Absolute Book', publishedDate: '2021-03-02' } },
+      { volumeInfo: { title: 'The Absolute Book', publishedDate: '2019-09-03' } },
+      { volumeInfo: { title: 'The Absolute Book', publishedDate: '2019' } },
+      { volumeInfo: { title: 'Another book', publishedDate: '2019-01-05' } },
+    ]
+    expect(googleDate(volumes, 'The Absolute Book', 2019, false)).toBe('2019-09-03')
+    expect(googleDate(volumes, 'The Absolute Book', 2018, false)).toBeUndefined()
   })
 })
 

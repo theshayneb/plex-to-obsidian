@@ -307,4 +307,9 @@ describe('vagueDate', () => {
     expect(checkValue('releaseDate', 2016, '2016-01-01', [], 'movie')).toEqual({ to: '2016-01-01', ticked: true })
     expect(checkValue('releaseDate', '2015-01-01', '2016-11-11', [], 'movie')).toEqual({ to: '2016-11-11', ticked: false })
   })
+
+  it('never makes a date vaguer: a year-only source leaves a full date from that year alone', () => {
+    expect(checkValue('releaseDate', '2019-09-03', '2019-01-01', [], 'book')).toBeNull()
+    expect(checkValue('releaseDate', '2019-09-03', '1900-01-01', [], 'book')).toEqual({ to: '1900-01-01', ticked: false })
+  })
 })

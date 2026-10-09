@@ -24,6 +24,7 @@ import {
   plexWebLink,
   isSearchLink,
   itemKeys,
+  songNameVariants,
   ratingKeyFromLink,
   renderFileName,
   sanitizeFileName,
@@ -210,11 +211,13 @@ export class PlexSync {
    */
   /** Ask before every change even with asking switched off (for "Check existing notes against sources"). */
   private alwaysAsk = false
+  /** "Apply to the rest of this group": the lines left unticked then, by group. */
+  private readonly approvedGroups = new Map<string, Set<string>>()
 
   private async ask(request: ApprovalRequest, result: SyncResult, item: PlexItem, lib: LibrarySetting): Promise<Approval | null> {
     if (result.stopped) return null
     if ((!this.settings.askBeforeChanges && !this.alwaysAsk) || !this.approve) return { excluded: new Set(), edits: {} }
-    const remembered = this.approvedAll[request.action]
+    const remembered = this.approvedAll[request.action] ?? (request.groupKey ? this.approvedGroups.get(request.groupKey) : undefined)
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
     if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
@@ -223,8 +226,9 @@ export class PlexSync {
     const skipped = new Set(excluded)
     // "All the rest" repeats the unticked lines, not this note's edits.
     if (choice === 'all') this.approvedAll[request.action] = skipped
+    if (choice === 'group' && request.groupKey) this.approvedGroups.set(request.groupKey, skipped)
     if (choice === 'stop') result.stopped = true
-    if (choice === 'apply' || choice === 'all') {
+    if (choice === 'apply' || choice === 'all' || choice === 'group') {
       try {
         await this.applyOwnEdits(shown, edits ?? {}, result)
       } catch (err) {
@@ -408,7 +412,7 @@ export class PlexSync {
       progress('Checking existing notes…')
       // Every note's changes are worked out first, then asked about grouped by library and by which
       // properties change, so a run of the same kind of change can be approved one after another.
-      const pending: { lib: ActiveLibrary, labels: string[], decide: (position: number, total: number, group: string) => Promise<void> }[] = []
+      const pending: { lib: ActiveLibrary, labels: string[], decide: (position: number, total: number, group: string, groupKey: string, groupLeft: number) => Promise<void> }[] = []
       for (const family of FAMILIES) {
         const index = indexes[family]
         const matches = entries
@@ -515,8 +519,8 @@ export class PlexSync {
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
-          pending.push({ lib, labels: [...new Set(lines.map(line => line.label))].sort(), decide: async (position, total, group) => {
-            const approval = await this.ask({ action: 'change', path, lines, position, total, group }, result, item, lib)
+          pending.push({ lib, labels: [...new Set(lines.map(line => line.label))].sort(), decide: async (position, total, group, groupKey, groupLeft) => {
+            const approval = await this.ask({ action: 'change', path, lines, position, total, group, groupKey, groupLeft }, result, item, lib)
             if (!approval) return
             const { excluded, edits } = approval
             const sending = Boolean(toPlex) && !excluded.has('plexRating')
@@ -641,7 +645,8 @@ export class PlexSync {
         position++
         if (result.stopped) break
         const same = pending.filter(q => q.lib.title === p.lib.title && groupOf(q) === groupOf(p))
-        await p.decide(position, pending.length, `${p.lib.title} · ${groupOf(p)} (${same.indexOf(p) + 1} of ${same.length})`)
+        const place = same.indexOf(p) + 1
+        await p.decide(position, pending.length, `${p.lib.title} · ${groupOf(p)} (${place} of ${same.length})`, `${p.lib.title}|${groupOf(p)}`, same.length - place)
       }
     }
     if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress, only)
@@ -1512,6 +1517,7 @@ export class PlexSync {
     if (!libs.length) return index
     const folders = [...new Set(libs.map(lib => normalizePath(lib.folder)))]
     const linkProps = [...new Set(Object.values(this.settings.libraries).flatMap(lib => linkPropertyNames(lib.properties)))]
+    const musicFolders = [...new Set(libs.filter(lib => lib.target === 'music').map(lib => normalizePath(lib.folder)))]
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(folder => file.path.startsWith(`${folder}/`))) continue
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter
@@ -1519,6 +1525,10 @@ export class PlexSync {
         .map(prop => ratingKeyFromLink(frontmatter?.[prop]))
         .filter((key): key is string => key !== null)
       addToIndex(index, file.path, file.basename, ratingKeys)
+      // A song note named with several artists is also found under the first one alone.
+      if (musicFolders.some(folder => file.path.startsWith(`${folder}/`))) {
+        for (const name of songNameVariants(file.basename)) addToIndex(index, file.path, name)
+      }
     }
     return index
   }

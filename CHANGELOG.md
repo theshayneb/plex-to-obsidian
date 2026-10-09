@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.72] - 2026-10-09
+
+- New "Apply to the rest of this group" button in change pop-ups: it applies to the remaining notes in the same group only (same library, same properties changing), with the same lines unticked, then asks again at the next group. It shows how many are left in the group.
+- Song notes match when the artists differ beyond the first: "Juanes, Mon Laferte", "Juanes & Mon Laferte" and "Juanes ft. Mon Laferte" (or feat.) all match a note named "Juanes - …", either way round, and featured artists in the title ("Aurora (ft. Mon Laferte)") are ignored.
+
 ## [0.0.71] - 2026-10-09
 
 - While it works out the changes for existing notes (before the first pop-up), the notice now counts along ("Checking existing notes: 120 of 900 (Heat)…") instead of sitting on "Checking existing notes…".

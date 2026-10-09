@@ -11,6 +11,9 @@ import {
   isStarted,
   isWatched,
   plexWebLink,
+  firstArtist,
+  withoutFeatured,
+  songNameVariants,
   ratingKeyFromLink,
   renderFileName,
   type PlexItem,
@@ -208,5 +211,24 @@ describe('isSearchLink', () => {
     expect(isSearchLink('https://store.steampowered.com/app/620/Portal_2/')).toBe(false)
     expect(isSearchLink('https://howlongtobeat.com/game/62941')).toBe(false)
     expect(isSearchLink(undefined)).toBe(false)
+  })
+})
+
+describe('songs by several artists', () => {
+  it('keeps the first artist and drops featured ones', () => {
+    expect(['Juanes, Mon Laferte', 'Juanes & Mon Laferte', 'Juanes ft. Mon Laferte', 'Juanes feat. Mon Laferte', 'Juanes; Mon Laferte', 'Juanes'].map(firstArtist))
+      .toEqual(['Juanes', 'Juanes', 'Juanes', 'Juanes', 'Juanes', 'Juanes'])
+    expect(firstArtist('Lil Nas X')).toBe('Lil Nas X')
+    expect(['Aurora (ft. Mon Laferte)', 'Aurora ft. Mon Laferte', 'Aurora [feat. X]', 'Aurora'].map(withoutFeatured)).toEqual(['Aurora', 'Aurora', 'Aurora', 'Aurora'])
+    expect(songNameVariants('Juanes ft. Mon Laferte - Aurora')).toEqual(['Juanes - Aurora'])
+    expect(songNameVariants('Juanes - Aurora')).toEqual([])
+  })
+
+  it('matches a song whose Plex artist lists several artists to a note named with the first', () => {
+    const naming = { format: '{{artist}} - {{title}}', replacements: [] }
+    const index = emptyIndex()
+    addToIndex(index, 'Music/Juanes - Aurora.md', 'Juanes - Aurora')
+    const item = { ratingKey: '1', type: 'track', title: 'Aurora (ft. Mon Laferte)', originalTitle: 'Juanes, Mon Laferte', grandparentTitle: 'Juanes' }
+    expect(findNote(index, item, naming)?.paths).toEqual(['Music/Juanes - Aurora.md'])
   })
 })

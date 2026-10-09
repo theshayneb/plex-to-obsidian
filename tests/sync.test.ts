@@ -959,6 +959,30 @@ describe('PlexSync', () => {
     ])
   })
 
+  it('applies to the rest of a group only, then asks again for the next group', async () => {
+    // Arrival and Heat both need only a summary (one group); Free Solo needs a summary and a date.
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Date: '2016-11-11' },
+      'Media/Movies/Heat (1995).md': { Date: '1995-01-01' },
+      'Media/Movies/Free Solo (2018).md': {},
+    })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: movies } })
+    responses.set('/library/metadata/2', { MediaContainer: { Metadata: [{ ...movies[1], summary: 'Cops and robbers.' }] } })
+    responses.set('/library/metadata/3', { MediaContainer: { Metadata: [{ ...movies[2], summary: 'A climb.', originallyAvailableAt: '2018-09-28' }] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: requests.length === 1 ? 'group' : 'skip', excluded: [] })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date'])
+    expect(requests.map(r => [r.group, r.groupLeft])).toEqual([['Movies · Summary (1 of 2)', 1], ['Movies · Date, Summary (1 of 1)', 0]])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Linguist meets aliens.')
+    expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Summary).toBe('Cops and robbers.')
+    expect(frontmatter.get('Media/Movies/Free Solo (2018).md')!.Summary).toBeUndefined()
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

@@ -99,6 +99,33 @@ export function trackArtist(item: PlexItem): string | undefined {
   return item.originalTitle || item.grandparentTitle
 }
 
+/**
+ * The first of several artists: "Juanes, Mon Laferte", "Juanes & Mon Laferte" and
+ * "Juanes feat. Mon Laferte" are all "Juanes", for matching song notes.
+ */
+export function firstArtist(artist: string): string {
+  return artist.split(/\s*[,;&/]\s*|\s+(?:feat\.?|ft\.?|featuring|with|x|vs\.?)\s+/i)[0].trim() || artist.trim()
+}
+
+/** A song title without its featured artists: "Aurora (feat. Mon Laferte)" is "Aurora". */
+export function withoutFeatured(title: string): string {
+  return title.replace(/\s*[([](?:feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, '').replace(/\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, '').trim() || title
+}
+
+/**
+ * Other names a song note might have: its file name with only the first artist before " - "
+ * and the title without featured artists ("Juanes, Mon Laferte - Aurora (feat. X)" is also
+ * "Juanes - Aurora"). Names without " - " give nothing.
+ */
+export function songNameVariants(baseName: string): string[] {
+  const at = baseName.indexOf(' - ')
+  if (at < 0) return []
+  const artist = baseName.slice(0, at)
+  const title = baseName.slice(at + 3)
+  const short = `${firstArtist(artist)} - ${withoutFeatured(title)}`
+  return short === baseName ? [] : [short]
+}
+
 /** How an item is named in lists: "Title (Year)", or "Artist - Title" for a track. */
 export function displayName(item: PlexItem): string {
   if (item.type === 'track') {
@@ -269,11 +296,14 @@ export type MatchBy = 'loose' | 'format' | 'link'
 export function candidateNames(item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): string[] {
   if (matchBy === 'link') return []
   const names = [renderFileName(naming, item)]
+  // A song by several artists is also looked for under its first artist alone, without featured artists.
+  const artist = trackArtist(item)
+  if (artist) names.push(renderFileName(naming, { ...item, originalTitle: firstArtist(artist), title: withoutFeatured(item.title) }))
   if (matchBy === 'loose') {
     names.push(item.title)
     if (item.year) names.push(`${item.title} (${item.year})`)
   }
-  return names.map(normalizeTitle).filter(Boolean)
+  return [...new Set(names.map(normalizeTitle).filter(Boolean))]
 }
 
 /** Paths of existing notes, by the Plex rating key in their link property and by normalized file name. */

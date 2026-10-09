@@ -5,7 +5,7 @@ import type { CoverChoice } from './steamgriddb'
  * 'ignore' is "Skip every time": this item is passed over by every sync until un-ignored in settings.
  * 'merge' ties a new item to a note that already exists (`mergeWith`) instead of creating one.
  */
-export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'stop' | 'merge'
+export type Choice = 'apply' | 'skip' | 'ignore' | 'all' | 'group' | 'stop' | 'merge'
 
 export interface Decision {
   choice: Choice
@@ -66,6 +66,10 @@ export interface ApprovalRequest {
   unchanged?: UnchangedLine[]
   /** Which group of like changes this is in (library, what changes, and where in the group). */
   group?: string
+  /** The group's identity, for "Apply to the rest of this group". */
+  groupKey?: string
+  /** How many of the group come after this one; the button is offered while there are any. */
+  groupLeft?: number
   position: number
   total: number
 }
@@ -210,6 +214,11 @@ export class ApprovalModal extends Modal {
           this.pmnMergeWith = file.path
           this.pmnDecide('merge')
         }).open()))
+    }
+    if (this.pmnRequest.groupKey && this.pmnRequest.groupLeft) {
+      buttons.addButton(b => b.setButtonText(`Apply to the rest of this group (${this.pmnRequest.groupLeft})`)
+        .setTooltip('Every note left in this group (same library, same properties changing), with the same lines unticked')
+        .onClick(() => this.pmnDecide('group')))
     }
     buttons
       .addButton(b => b.setButtonText('Skip every time')

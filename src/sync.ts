@@ -212,6 +212,16 @@ export class PlexSync {
    */
   /** Ask before every change even with asking switched off (for "Check existing notes against sources"). */
   private alwaysAsk = false
+  /** The run in progress, and whether it was told to stop (the plugin was reloaded or updated). */
+  private running: SyncResult | null = null
+  private stopping = false
+
+  /** Stops this sync at its next step, as "Stop" in a pop-up does: nothing more is asked or written. */
+  stop(): void {
+    this.stopping = true
+    if (this.running) this.running.stopped = true
+  }
+
   /** A check of only some libraries: their settings keys (null: every library). */
   private onlyLibraries: Set<string> | null = null
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
@@ -444,7 +454,8 @@ export class PlexSync {
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
     this.onlyLibraries = mode === 'check' && libraries ? libraries : null
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    this.running = result
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -952,7 +963,8 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    this.running = result
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)
     const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position: 1, total: 1 }, result, item, lib)

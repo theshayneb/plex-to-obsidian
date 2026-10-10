@@ -38,6 +38,8 @@ class ProgressNotice {
 export default class PlexMediaNotesPlugin extends Plugin {
   settings: PlexNotesSettings = defaultSettings()
   private plexSyncRunning = false
+  /** Syncs and checks under way, stopped when the plugin is reloaded or updated. */
+  private readonly syncs = new Set<PlexSync>()
   /** Earliest time to try a background play count update again after one failed (ms). */
   private playCountRetryAt = 0
 
@@ -165,7 +167,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
     this.plexSyncRunning = true
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request)).run(() => {}, 'playCounts')
+      const result = await this.newSync().run(() => {}, 'playCounts')
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
       if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
@@ -176,7 +178,22 @@ export default class PlexMediaNotesPlugin extends Plugin {
       console.warn('Media Manager: background play count update failed', err)
     } finally {
       this.plexSyncRunning = false
+      this.syncs.clear()
     }
+  }
+
+  /** A sync that asks in pop-ups, stopped if the plugin is unloaded before it ends. */
+  private newSync(): PlexSync {
+    const sync = new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+    this.syncs.add(sync)
+    return sync
+  }
+
+  onunload(): void {
+    // A sync or check still going (say, while the plugin is updated) stops, so it can't run on
+    // alongside the reloaded plugin's.
+    for (const sync of this.syncs) sync.stop()
+    this.syncs.clear()
   }
 
   async loadSettings(): Promise<void> {
@@ -190,7 +207,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   /** Makes a note for an item picked in "Add something new", or opens the one it already has. */
   async addNew(item: PlexItem, libraryKey: string): Promise<void> {
     try {
-      const sync = new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+      const sync = this.newSync()
       const { created, existing } = await sync.addNew(item, libraryKey)
       const path = created ?? existing
       if (existing) new Notice(`It already has a note: ${existing}`)
@@ -218,7 +235,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.plexSyncRunning = true
     const notice = new ProgressNotice('Starting…')
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+      const result = await this.newSync()
         .run(message => notice.set(message), 'check', properties, only, libraries)
       notice.hide()
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
@@ -239,6 +256,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
+      this.syncs.clear()
     }
   }
 
@@ -294,7 +312,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new ProgressNotice(`Checking ${file.basename}…`)
     try {
       const properties = checkableProperties(this.settings).map(p => p.name)
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+      const result = await this.newSync()
         .run(message => notice.set(message), 'check', properties, new Set([file.path]))
       notice.hide()
       if (result.failed.length) {
@@ -309,6 +327,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
+      this.syncs.clear()
     }
   }
 
@@ -334,7 +353,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.plexSyncRunning = true
     const notice = new ProgressNotice('Starting…')
     try {
-      const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
+      const result = await this.newSync()
         .run(message => notice.set(message))
       notice.hide()
 
@@ -380,6 +399,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       new Notice(`Sync failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
+      this.syncs.clear()
     }
   }
 }

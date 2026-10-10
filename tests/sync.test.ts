@@ -1120,6 +1120,25 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Mine.')
   })
 
+  it('stops asking once told to stop (the plugin reloaded)', async () => {
+    const { app } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' },
+      'Media/Movies/Heat (1995).md': { Link: 'http://plex:32400/library/metadata/2', Summary: 'Mine too.' },
+    })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0], movies[1]] } })
+    const requests: ApprovalRequest[] = []
+    const sync: InstanceType<typeof PlexSync> = new PlexSync(app as never, settings, () => Promise.resolve(), r => {
+      requests.push(r)
+      sync.stop()
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    })
+    const result = await sync.run(() => {}, 'check', ['Summary'])
+    expect(requests).toHaveLength(1)
+    expect(result.stopped).toBe(true)
+  })
+
   it('checks only the libraries chosen', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' } })
     const settings = settingsWith({})

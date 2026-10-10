@@ -2,6 +2,7 @@
 
 ## [0.0.91] - 2026-10-10
 
+- A sync or check still running when the plugin is reloaded or updated now stops, so it can't keep going alongside the reloaded plugin's (which is how a book pop-up could appear while another check was still going through games).
 - The progress message no longer shows the last item looked at while the pop-ups are open: it says "Your choices: n of N (library)…", or for books "Checking books: n of N (title), your choice…".
 
 ## [0.0.90] - 2026-10-10

@@ -382,6 +382,16 @@ export class PlexSync {
         entries.push({ item: tags || lyrics ? { ...item, ...tags ? { fileTags: tags } : {}, ...lyrics ? { lyrics } : {} } : item, lib })
       }
     }
+    // A note whose Plex links are all to items Plex no longer lists (say, a track Plex re-added under
+    // a new key) is matched by its name again, rather than tied to nothing for good.
+    if (usePlex) {
+      const listed = new Set(entries.flatMap(({ item }) => itemKeys(item)))
+      for (const index of Object.values(indexes)) {
+        for (const [path, keys] of index.keysByPath) {
+          if (keys.every(key => /^\d+$/.test(key) && !listed.has(key))) index.keysByPath.delete(path)
+        }
+      }
+    }
     return { active, indexes, entries }
   }
 
@@ -1574,7 +1584,7 @@ export class PlexSync {
     if (!libs.length) return index
     const folders = [...new Set(libs.map(lib => normalizePath(lib.folder)))]
     const linkProps = [...new Set(Object.values(this.settings.libraries).flatMap(lib => linkPropertyNames(lib.properties)))]
-    const musicFolders = [...new Set(libs.filter(lib => lib.target === 'music').map(lib => normalizePath(lib.folder)))]
+    const musicFolders = libs.filter(lib => lib.target === 'music').map(lib => ({ folder: normalizePath(lib.folder), format: lib.fileNameFormat }))
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(folder => file.path.startsWith(`${folder}/`))) continue
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter
@@ -1583,8 +1593,9 @@ export class PlexSync {
         .filter((key): key is string => key !== null)
       addToIndex(index, file.path, file.basename, ratingKeys)
       // A song note named with several artists is also found under the first one alone.
-      if (musicFolders.some(folder => file.path.startsWith(`${folder}/`))) {
-        for (const name of songNameVariants(file.basename)) addToIndex(index, file.path, name)
+      for (const { folder, format } of musicFolders) {
+        if (!file.path.startsWith(`${folder}/`)) continue
+        for (const name of songNameVariants(file.basename, format)) addToIndex(index, file.path, name)
       }
     }
     return index

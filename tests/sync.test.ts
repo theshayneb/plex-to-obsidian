@@ -1063,6 +1063,25 @@ describe('PlexSync', () => {
     vi.mocked(readLyrics).mockReturnValue(null)
   })
 
+  it('matches a song note linked to its album, or named after a featured artist, by name', async () => {
+    const { app, files } = makeApp({
+      'Media/Music/Uptown Funk by Mark Ronson.md': { Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F72153' },
+      'Media/Music/Treasure by Bruno Mars.md': {},
+    })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].fileNameFormat = '{{title}} by {{artist}}'
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [
+      { ratingKey: '72154', parentRatingKey: '72153', type: 'track', title: 'Uptown Funk', originalTitle: 'Mark Ronson/Bruno Mars', grandparentTitle: 'Mark Ronson', parentTitle: 'Uptown Special' },
+      { ratingKey: '72200', type: 'track', title: 'Treasure (feat. Bruno Mars)', grandparentTitle: 'Somebody Else', parentTitle: 'Covers' },
+    ] } })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(result.unmatched.filter(path => path.startsWith('Media/Music/'))).toEqual([])
+    expect(result.created.filter(path => path.startsWith('Media/Music/'))).toEqual([])
+    // Matched, so renamed to the library's format rather than joined by new notes.
+    expect([...files.keys()].filter(path => path.startsWith('Media/Music/') && path.endsWith('.md'))).toHaveLength(2)
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

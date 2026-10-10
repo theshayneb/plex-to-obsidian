@@ -11,6 +11,7 @@ import {
   isStarted,
   isWatched,
   plexWebLink,
+  artistsOf,
   firstArtist,
   withoutFeatured,
   songNameVariants,
@@ -234,5 +235,30 @@ describe('songs by several artists', () => {
     addToIndex(index, 'Music/Juanes - Aurora.md', 'Juanes - Aurora')
     const item = { ratingKey: '1', type: 'track', title: 'Aurora (ft. Mon Laferte)', originalTitle: 'Juanes, Mon Laferte', grandparentTitle: 'Juanes' }
     expect(findNote(index, item, naming)?.paths).toEqual(['Music/Juanes - Aurora.md'])
+  })
+
+  it('lists every artist, featured ones too', () => {
+    expect(artistsOf('Mark Ronson/Bruno Mars')).toEqual(['Mark Ronson', 'Bruno Mars'])
+    expect(artistsOf('Mark Ronson', 'Uptown Funk (feat. Bruno Mars)')).toEqual(['Mark Ronson', 'Bruno Mars'])
+    expect(artistsOf('Mark Ronson', 'Uptown Funk ft. Bruno Mars & Someone')).toEqual(['Mark Ronson', 'Bruno Mars', 'Someone'])
+    expect(artistsOf('Lil Nas X', 'Old Town Road')).toEqual(['Lil Nas X'])
+  })
+
+  it('reads song note names in the library\'s own format', () => {
+    expect(songNameVariants('Uptown Funk (feat. Bruno Mars) by Mark Ronson, Bruno Mars', '{{title}} by {{artist}}')).toEqual(['Uptown Funk by Mark Ronson'])
+    expect(songNameVariants('Uptown Funk by Mark Ronson', '{{title}} by {{artist}}')).toEqual([])
+    expect(songNameVariants('Juanes ft. Mon Laferte - Aurora', '{{artist}} - {{title}}')).toEqual(['Juanes - Aurora'])
+    expect(songNameVariants('Just a title', '{{title}} by {{artist}}')).toEqual([])
+    expect(songNameVariants('Anything', '{{title}}')).toEqual([])
+  })
+
+  it('matches a song note named after any of its artists', () => {
+    const naming = { format: '{{title}} by {{artist}}', replacements: {} }
+    const index = emptyIndex()
+    addToIndex(index, 'Music/Uptown Funk by Bruno Mars.md', 'Uptown Funk by Bruno Mars')
+    const both = { ratingKey: '1', type: 'track', title: 'Uptown Funk', originalTitle: 'Mark Ronson/Bruno Mars', grandparentTitle: 'Mark Ronson' }
+    const featuring = { ratingKey: '2', type: 'track', title: 'Uptown Funk (feat. Bruno Mars)', grandparentTitle: 'Mark Ronson' }
+    expect(findNote(index, both, naming, 'format')?.paths).toEqual(['Music/Uptown Funk by Bruno Mars.md'])
+    expect(findNote(index, featuring, naming, 'format')?.paths).toEqual(['Music/Uptown Funk by Bruno Mars.md'])
   })
 })

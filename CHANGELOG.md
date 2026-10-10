@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.81] - 2026-10-10
+
+- Song notes match under any of the song's artists, featured ones too: "Uptown Funk by Bruno Mars" matches Mark Ronson's "Uptown Funk" with Bruno Mars.
+- Song note names with several artists are read in your music library's own file name format ("Title by Artist" too), not only "Artist - Title".
+- A note whose Plex link points to something Plex doesn't list as an item (an album page, or a track Plex re-added under a new number) is matched by its name again instead of matching nothing.
+
 ## [0.0.80] - 2026-10-10
 
 - Song lyrics (desktop only): choose "Music: lyrics from the text file beside it" as a property's source, and each song gets the lyrics from the text file named like its music file, in the same folder ("Song.mp3" → "Song.txt", or "Song.lrc"), exactly as written there, line breaks and blank lines included. Like other properties, they go in new notes, are filled in where empty, and are compared by "Check one property". The files are never changed.

@@ -105,12 +105,28 @@ export function trackArtist(item: PlexItem): string | undefined {
   return item.originalTitle || item.grandparentTitle
 }
 
+/** Where a list of artists splits: "Juanes, Mon Laferte", "Juanes & Mon Laferte", "Juanes feat. Mon Laferte"… */
+const ARTIST_SEPARATOR = /\s*[,;&/]\s*|\s+(?:feat\.?|ft\.?|featuring|with|x|vs\.?)\s+/i
+
 /**
  * The first of several artists: "Juanes, Mon Laferte", "Juanes & Mon Laferte" and
  * "Juanes feat. Mon Laferte" are all "Juanes", for matching song notes.
  */
 export function firstArtist(artist: string): string {
-  return artist.split(/\s*[,;&/]\s*|\s+(?:feat\.?|ft\.?|featuring|with|x|vs\.?)\s+/i)[0].trim() || artist.trim()
+  return artist.split(ARTIST_SEPARATOR)[0].trim() || artist.trim()
+}
+
+/**
+ * Every artist of a song: those in its artist ("Mark Ronson/Bruno Mars") and those its title
+ * features ("Uptown Funk (feat. Bruno Mars)"), first artist first.
+ */
+export function artistsOf(artist: string, title = ''): string[] {
+  const featured = [
+    ...[...title.matchAll(/[([](?:feat\.?|ft\.?|featuring|with)\s([^)\]]*)[)\]]/gi)].map(m => m[1]),
+    /\s(?:feat\.?|ft\.?|featuring)\s(?![^([]*[)\]])(.*)$/i.exec(title)?.[1] ?? '',
+  ]
+  const names = [artist, ...featured].flatMap(text => text.split(ARTIST_SEPARATOR)).map(name => name.trim()).filter(Boolean)
+  return [...new Set(names)]
 }
 
 /** A song title without its featured artists: "Aurora (feat. Mon Laferte)" is "Aurora". */
@@ -119,16 +135,25 @@ export function withoutFeatured(title: string): string {
 }
 
 /**
- * Other names a song note might have: its file name with only the first artist before " - "
- * and the title without featured artists ("Juanes, Mon Laferte - Aurora (feat. X)" is also
- * "Juanes - Aurora"). Names without " - " give nothing.
+ * Other names a song note might have: its file name, read with the library's file name format,
+ * with only the first artist and the title without featured artists ("Juanes, Mon Laferte -
+ * Aurora (feat. X)" is also "Juanes - Aurora", "Aurora (feat. X) by Juanes, Mon Laferte" also
+ * "Aurora by Juanes"). Names that don't fit the format give nothing.
  */
-export function songNameVariants(baseName: string): string[] {
-  const at = baseName.indexOf(' - ')
-  if (at < 0) return []
-  const artist = baseName.slice(0, at)
-  const title = baseName.slice(at + 3)
-  const short = `${firstArtist(artist)} - ${withoutFeatured(title)}`
+export function songNameVariants(baseName: string, format = '{{artist}} - {{title}}'): string[] {
+  const parts = format.split(/(\{\{\s*\w+\s*\}\})/)
+  const fields = parts.map(part => /^\{\{\s*(\w+)\s*\}\}$/.exec(part)?.[1].toLowerCase() ?? null)
+  if (!fields.includes('artist') || !fields.includes('title')) return []
+  const pattern = parts.map((part, i) => fields[i] ? '(.+?)' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')
+  const match = new RegExp(`^${pattern}$`).exec(baseName)
+  if (!match) return []
+  let group = 0
+  const short = parts.map((part, i) => {
+    const field = fields[i]
+    if (!field) return part
+    const value = match[++group]
+    return field === 'artist' ? firstArtist(value) : field === 'title' ? withoutFeatured(value) : value
+  }).join('')
   return short === baseName ? [] : [short]
 }
 
@@ -302,9 +327,12 @@ export type MatchBy = 'loose' | 'format' | 'link'
 export function candidateNames(item: PlexItem, naming: FileNaming, matchBy: MatchBy = 'loose'): string[] {
   if (matchBy === 'link') return []
   const names = [renderFileName(naming, item)]
-  // A song by several artists is also looked for under its first artist alone, without featured artists.
+  // A song by several artists is also looked for under each of them alone (the first, or one it
+  // features: "Uptown Funk by Bruno Mars" for Mark Ronson's), without featured artists.
   const artist = trackArtist(item)
-  if (artist) names.push(renderFileName(naming, { ...item, originalTitle: firstArtist(artist), title: withoutFeatured(item.title) }))
+  if (artist) {
+    for (const one of artistsOf(artist, item.title)) names.push(renderFileName(naming, { ...item, originalTitle: one, title: withoutFeatured(item.title) }))
+  }
   if (matchBy === 'loose') {
     names.push(item.title)
     if (item.year) names.push(`${item.title} (${item.year})`)

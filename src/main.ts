@@ -53,7 +53,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       id: 'check-notes',
       name: 'Check notes against sources…',
       callback: () => {
-        new CheckModal(this.app, this.settings, properties => void this.checkNotes(properties)).open()
+        new CheckModal(this.app, this.settings, (properties, libraries) => void this.checkNotes(properties, undefined, new Set(libraries))).open()
       },
     })
 
@@ -185,8 +185,9 @@ export default class PlexMediaNotesPlugin extends Plugin {
    * with its source and asks about each difference, then lists the notes nothing matched. Slow:
    * every item's full details are fetched, Steam's spaced out.
    * @param only just these notes, not every note.
+   * @param libraries just these libraries (settings keys), not every library.
    */
-  async checkNotes(properties: string[], only?: Set<string>): Promise<void> {
+  async checkNotes(properties: string[], only?: Set<string>, libraries?: Set<string>): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('A sync or check is already running')
       return
@@ -196,7 +197,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new Notice('Starting…', 0)
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message), 'check', properties, only)
+        .run(message => notice.setMessage(message), 'check', properties, only, libraries)
       notice.hide()
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
       if (result.renamed.length) {

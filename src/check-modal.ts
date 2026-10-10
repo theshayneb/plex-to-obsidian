@@ -6,6 +6,11 @@ import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties
 /** Not a property: a check with it renames notes whose file name doesn't follow their library's format. */
 export const FILE_NAME = 'File name'
 
+/** What each kind of library holds, as shown beside its name. */
+const KIND_NAMES: Record<string, string> = {
+  movie: 'Movies', tv: 'TV shows', documentary: 'Documentaries', music: 'Music', game: 'Games', book: 'Books',
+}
+
 /**
  * The properties a check can compare, by name: which source fills them (none for the file name)
  * and which libraries have them.
@@ -32,7 +37,7 @@ export function checkableProperties(settings: PlexNotesSettings): { name: string
  * is remembered for next time.
  */
 export class CheckModal extends Modal {
-  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (properties: string[]) => void) {
+  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (properties: string[], libraries: string[]) => void) {
     super(app)
   }
 
@@ -44,6 +49,23 @@ export class CheckModal extends Modal {
       cls: 'setting-item-description',
       text: 'Each note matched to a Plex item or Steam game, and each book note (via Open Library), is compared with its source for the properties ticked here, and you choose what to keep in the usual pop-up. A property missing or empty in a note is filled in from the source (ticked). A status only starts ticked when it moves forward; a rating that differs from Plex\'s can go either way (use Plex\'s, or send yours to Plex), both unticked; the source\'s tag is added to your tags; an image you set yourself starts unticked. It\'s slow: each item\'s details are fetched. Notes nothing matched are listed at the end.',
     })
+    // Which libraries: say, only Music, or only Books.
+    const libraries = Object.entries(this.pmnSettings.libraries).filter(([, lib]) => lib.target !== 'skip')
+    const savedLibraries = this.pmnSettings.checkLibraries
+    const checkedLibraries = new Set(savedLibraries?.filter(key => libraries.some(([k]) => k === key)) ?? libraries.map(([key]) => key))
+    new Setting(contentEl).setName('Libraries').setHeading()
+    for (const [key, lib] of libraries) {
+      new Setting(contentEl)
+        .setName(lib.title)
+        .setDesc(KIND_NAMES[lib.target] ?? '')
+        .addToggle(toggle => toggle
+          .setValue(checkedLibraries.has(key))
+          .onChange(value => {
+            if (value) checkedLibraries.add(key)
+            else checkedLibraries.delete(key)
+          }))
+    }
+    new Setting(contentEl).setName('Properties').setHeading()
     const properties = checkableProperties(this.pmnSettings)
     const saved = this.pmnSettings.checkProperties
     const chosen = new Set(saved ?? properties.map(p => p.name))
@@ -61,9 +83,11 @@ export class CheckModal extends Modal {
     new Setting(contentEl)
       .addButton(b => b.setButtonText('Start').setCta().onClick(() => {
         const names = properties.map(p => p.name).filter(name => chosen.has(name))
+        const keys = libraries.map(([key]) => key).filter(key => checkedLibraries.has(key))
         this.pmnSettings.checkProperties = names
+        this.pmnSettings.checkLibraries = keys
         this.close()
-        this.pmnStart(names)
+        this.pmnStart(names, keys)
       }))
       .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
   }

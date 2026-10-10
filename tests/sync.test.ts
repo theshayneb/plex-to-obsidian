@@ -1107,6 +1107,24 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Mine.')
   })
 
+  it('checks only the libraries chosen', async () => {
+    const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 3: newLibrary('Music', 'artist', 'music') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    }
+    requested.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'], undefined, new Set(['3']))
+    expect(requests).toEqual([])
+    expect(requested.some(url => url.includes('/library/sections/1/'))).toBe(false)
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'], undefined, new Set(['1']))
+    expect(requests.map(r => r.path)).toEqual(['Media/Movies/Arrival (2016).md'])
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

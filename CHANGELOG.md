@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.88] - 2026-10-10
+
+- "Check notes against sources…" lets you choose which libraries to check (say, only Music, or only Books), above the properties. Libraries left out aren't even read from Plex or Steam, so a check of one library is quicker. Your choice is remembered.
+
 ## [0.0.87] - 2026-10-10
 
 - "Never for this note": each line of a change pop-up has a lock. Press it and that property (say, Genre) is left as it is in that note, and never offered for it again, while everything else (like its rating) is still offered as usual. Locks follow the note when it's renamed; see and forget them in Settings → Remembered choices → Never changed.

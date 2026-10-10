@@ -212,6 +212,8 @@ export class PlexSync {
    */
   /** Ask before every change even with asking switched off (for "Check existing notes against sources"). */
   private alwaysAsk = false
+  /** A check of only some libraries: their settings keys (null: every library). */
+  private onlyLibraries: Set<string> | null = null
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
 
@@ -360,6 +362,7 @@ export class PlexSync {
     const active = Object.entries(this.settings.libraries)
       .filter((e): e is [string, ActiveLibrary] => e[1].target !== 'skip')
       .filter(([key]) => hasSource(key) && (key === STEAM_LIBRARY ? useSteam : usePlex))
+      .filter(([key]) => !this.onlyLibraries || this.onlyLibraries.has(key))
     const indexes = Object.fromEntries(FAMILIES.map(family =>
       [family, this.indexExistingNotes(active.map(([, lib]) => lib).filter(lib => familyOf(lib) === family))])) as Record<Family, ExistingNotes>
     for (const family of FAMILIES) this.addMerged(indexes[family], family)
@@ -419,8 +422,10 @@ export class PlexSync {
   /**
    * @param checking for 'check': the property names to compare (in every library that has them).
    * @param only for 'check': just these notes (say, the open one), not every note.
+   * @param libraries for 'check': just these libraries (settings keys; `books` for the books), not all.
    */
-  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>): Promise<SyncResult> {
+  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
+    this.onlyLibraries = mode === 'check' && libraries ? libraries : null
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
 
@@ -1433,6 +1438,7 @@ export class PlexSync {
   private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn, only?: Set<string>): Promise<void> {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
+    if (this.onlyLibraries && !this.onlyLibraries.has(BOOKS_LIBRARY)) return
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
     // Book ratings are converted to the star scale too: the Books library's rating property, or the
     // name the other libraries give theirs (book notes may have one the plugin doesn't fill in).

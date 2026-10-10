@@ -217,6 +217,23 @@ export class PlexSync {
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
 
+  /**
+   * Whether you chose to keep a note's value over this offer before. Remembered with the offer you
+   * turned down, so a different offer (the source corrected, say) is made again; older entries
+   * only have the value kept.
+   */
+  private isKept(key: string, current: unknown, offer: unknown): boolean {
+    const entry = this.settings.keptValues[key]
+    if (entry === undefined) return false
+    const kept = keptEntry(entry)
+    return kept ? kept.kept === String(current) && kept.offered === offerText(offer) : entry === String(current)
+  }
+
+  /** Remembers keeping a note's value over an offer (see `isKept`). */
+  private keep(key: string, current: unknown, offer: unknown): void {
+    this.settings.keptValues[key] = JSON.stringify({ kept: String(current), offered: offerText(offer) })
+  }
+
   /** The lines of a change that are about something you said never to change in that note. */
   private lockedLines(request: ApprovalRequest): string[] {
     const locked = request.action === 'change' ? this.settings.lockedProperties[request.path] : undefined
@@ -593,7 +610,7 @@ export class PlexSync {
             const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
             // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
             for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
-              this.settings.keptValues[`${item.ratingKey}|${name}`] = String(checks!.from[name])
+              this.keep(`${item.ratingKey}|${name}`, checks!.from[name], checks!.to[name])
               result.keptLinks++
             }
             const linkNames = (links?.names ?? []).filter(name => !excluded.has(`link:${name}`))
@@ -1316,7 +1333,7 @@ export class PlexSync {
       const value = sourceValue(m.source, item, ctx, m.text)
       if (typeof value !== 'number') continue
       if (current === value || (typeof current === 'string' && current.trim() === String(value))) continue
-      if (this.settings.keptValues[`${item.ratingKey}|${name}`] === String(current)) continue
+      if (this.isKept(`${item.ratingKey}|${name}`, current, value)) continue
       to[name] = value
       if (sameLengthOtherForm(current, value)) sameLength.add(name)
     }
@@ -1395,10 +1412,10 @@ export class PlexSync {
         const pointsAt = ratingKeyFromLink(current)
         if (pointsAt && keys.includes(pointsAt)) continue
       }
-      if (this.settings.keptValues[`${noteKey}|${name}`] === String(current)) continue
+      const kept = (offer: unknown) => this.isKept(`${noteKey}|${name}`, current, offer)
       if (m.source === 'poster' && fromPlex(item)) {
         // A Plex poster is downloaded, so it's only offered where the note has none.
-        if (isBlank(current) && hasImage(item)) {
+        if (isBlank(current) && hasImage(item) && !kept(POSTER_PREVIEW)) {
           to[name] = POSTER_PREVIEW
           ticked.add(name)
         }
@@ -1408,14 +1425,14 @@ export class PlexSync {
         // Open Library knows nothing of your reading; elsewhere, only a step forward starts ticked.
         if (item.type === 'book') continue
         const value = sourceValue(m.source, item, ctx, m.text)
-        if (isBlank(value) || sameValue(current, value)) continue
+        if (isBlank(value) || sameValue(current, value) || kept(value)) continue
         to[name] = value
         if (statusMovesForward(current, value, lib.values)) ticked.add(name)
         else yours.add(name)
         continue
       }
       const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx, m.text), this.settings.allowedGenres, kind, lib.leaveOutGenres)
-      if (!offer) continue
+      if (!offer || kept(offer.to)) continue
       to[name] = offer.to
       // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).
       if (RATING_SOURCES.includes(m.source) && !isBlank(current)) yours.add(name)
@@ -1526,7 +1543,7 @@ export class PlexSync {
           // Not this book's link: don't look this note up again.
           this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
         } else {
-          this.settings.keptValues[`${noteKey}|${name}`] = String(from[name])
+          this.keep(`${noteKey}|${name}`, from[name], offered.get(name))
         }
         result.keptLinks++
       }
@@ -1731,4 +1748,20 @@ function errorText(err: unknown): string {
 
 function isBlank(value: unknown): boolean {
   return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)
+}
+
+/** An offer as remembered with a kept value: text as it is, anything else as JSON. */
+function offerText(offer: unknown): string {
+  return typeof offer === 'string' ? offer : JSON.stringify(offer) ?? ''
+}
+
+/** A kept value remembered with the offer turned down (null: an older entry, the kept value alone). */
+function keptEntry(entry: string): { kept: string, offered: string } | null {
+  if (!entry.startsWith('{"kept":')) return null
+  try {
+    const parsed = JSON.parse(entry) as { kept?: unknown, offered?: unknown }
+    return typeof parsed.kept === 'string' && typeof parsed.offered === 'string' ? { kept: parsed.kept, offered: parsed.offered } : null
+  } catch {
+    return null
+  }
 }

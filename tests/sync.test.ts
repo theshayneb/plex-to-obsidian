@@ -915,8 +915,21 @@ describe('PlexSync', () => {
     // The rest of the note is shown too, unchanged.
     expect(requests[0].unchanged).toMatchObject([{ label: 'File name', value: 'Arrival (2016)', key: 'own-file' }, { label: 'Duration', value: '116', key: 'own:Duration', edit: 'number' }])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toEqual({ Summary: 'My own summary.', Date: '2016-11-11', Duration: 116, Status: 'revisit' })
-    expect(settings.keptValues).toEqual({ '1|Summary': 'My own summary.', '1|Status': 'revisit' })
+    expect(Object.keys(settings.keptValues).sort()).toEqual(['1|Status', '1|Summary'])
     expect(result.unmatched).toEqual(['Media/Movies/Old film I deleted.md'])
+
+    // Kept: not offered again while the source offers the same; offered again once it offers something else.
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(requests).toEqual([])
+    responses.set('/library/metadata/1', { MediaContainer: { Metadata: [{ ...movies[0], summary: 'A corrected summary.' }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(requests.map(r => r.lines.map(l => [l.label, l.value]))).toEqual([[['Summary', 'A corrected summary.']]])
+    // A value kept before offers were remembered stays kept whatever the offer.
+    settings.keptValues = { '1|Summary': 'My own summary.' }
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(requests).toEqual([])
   })
 
   it('checks just the notes asked for, and replaces a year-only date with the full one, ticked', async () => {

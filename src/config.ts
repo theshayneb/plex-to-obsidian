@@ -405,6 +405,15 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       lib.properties = lib.properties.map(m => m.source === 'pages' && m.name.trim() === 'Pages' ? { ...m, name: 'Duration' } : m)
     }
   })
+  migrateOnce(settings, saved, 'forget-kept-book-dates', () => {
+    // Book dates kept while the lookup still gave wrong years: forgotten, so the corrected date is
+    // offered again (newer kept values remember the offer turned down, so this needn't happen again).
+    const books = settings.libraries[BOOKS_LIBRARY]
+    const names = (books?.properties ?? []).filter(m => m.source === 'releaseDate' || m.source === 'year').map(m => m.name.trim())
+    for (const key of Object.keys(settings.keptValues)) {
+      if (key.startsWith('book:') && names.some(name => key.endsWith(`|${name}`))) delete settings.keptValues[key]
+    }
+  })
   migrateOnce(settings, saved, 'bracket-replacements', () => {
     // Square brackets have their own replacements now: round brackets.
     settings.fileNameReplacements['['] ??= '('

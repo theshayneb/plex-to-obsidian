@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.89] - 2026-10-10
+
+- A value you chose to keep in a pop-up is now remembered together with the offer you turned down, so if the source later offers something different (a corrected book date, say), it's offered again.
+- Book dates kept while the lookup still gave wrong years are forgotten once, so "Check notes against sources" offers the corrected dates.
+
 ## [0.0.88] - 2026-10-10
 
 - "Check notes against sources…" lets you choose which libraries to check (say, only Music, or only Books), above the properties. Libraries left out aren't even read from Plex or Steam, so a check of one library is quicker. Your choice is remembered.

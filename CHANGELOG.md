@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.87] - 2026-10-10
+
+- "Never for this note": each line of a change pop-up has a lock. Press it and that property (say, Genre) is left as it is in that note, and never offered for it again, while everything else (like its rating) is still offered as usual. Locks follow the note when it's renamed; see and forget them in Settings → Remembered choices → Never changed.
+
 ## [0.0.86] - 2026-10-10
 
 - Plex playlists: a song left out as a duplicate now says which note above it is the same song in Plex, and which song that is.

@@ -567,3 +567,19 @@
     flex-wrap: wrap;
   }
 }
+
+/* "Never for this note": the lock beside a line's tick box. */
+.pmn-approval-tick {
+  white-space: nowrap;
+}
+
+.pmn-approval-lock {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--size-4-1);
+  color: var(--text-faint);
+}
+
+.pmn-approval-lock.is-active {
+  color: var(--text-accent);
+}

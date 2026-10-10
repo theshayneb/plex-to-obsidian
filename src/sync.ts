@@ -215,19 +215,40 @@ export class PlexSync {
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
 
+  /** The lines of a change that are about something you said never to change in that note. */
+  private lockedLines(request: ApprovalRequest): string[] {
+    const locked = request.action === 'change' ? this.settings.lockedProperties[request.path] : undefined
+    return locked?.length ? request.lines.filter(l => locked.includes(l.label)).map(l => l.key) : []
+  }
+
   private async ask(request: ApprovalRequest, result: SyncResult, item: PlexItem, lib: LibrarySetting): Promise<Approval | null> {
     if (result.stopped) return null
-    if ((!this.settings.askBeforeChanges && !this.alwaysAsk) || !this.approve) return { excluded: new Set(), edits: {} }
+    // What you said never to change in this note is left out, unasked, however the rest is decided.
+    const locked = this.lockedLines(request)
+    if (locked.length) {
+      const lines = request.lines.filter(l => !locked.includes(l.key))
+      if (!lines.length) return { excluded: new Set(locked), edits: {} }
+      request = { ...request, lines }
+    }
+    if ((!this.settings.askBeforeChanges && !this.alwaysAsk) || !this.approve) return { excluded: new Set(locked), edits: {} }
     const remembered = this.approvedAll[request.action] ?? (request.groupKey ? this.approvedGroups.get(request.groupKey) : undefined)
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
-    if (remembered) return { excluded: new Set([...remembered, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
+    if (remembered) return { excluded: new Set([...remembered, ...locked, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
     const shown = request.action === 'change' ? this.withWholeNote(request, lib) : request
-    const { choice, excluded, edits, mergeWith } = await this.approve(shown)
-    const skipped = new Set(excluded)
-    // "All the rest" repeats the unticked lines, not this note's edits.
-    if (choice === 'all') this.approvedAll[request.action] = skipped
-    if (choice === 'group' && request.groupKey) this.approvedGroups.set(request.groupKey, skipped)
+    const { choice, excluded, edits, mergeWith, locked: lockedNow } = await this.approve(shown)
+    // "Never for this note": remembered for this note whatever was chosen.
+    const newlyLocked = request.lines.filter(l => lockedNow?.includes(l.label))
+    if (newlyLocked.length) {
+      const names = new Set([...this.settings.lockedProperties[request.path] ?? [], ...newlyLocked.map(l => l.label)])
+      this.settings.lockedProperties[request.path] = [...names]
+    }
+    const lockedKeys = new Set(newlyLocked.map(l => l.key))
+    // "All the rest" repeats the unticked lines (not ones locked for this note alone), not this note's edits.
+    const unticked = new Set(excluded.filter(key => !lockedKeys.has(key)))
+    const skipped = new Set([...excluded, ...locked])
+    if (choice === 'all') this.approvedAll[request.action] = unticked
+    if (choice === 'group' && request.groupKey) this.approvedGroups.set(request.groupKey, unticked)
     if (choice === 'stop') result.stopped = true
     if (choice === 'apply' || choice === 'all' || choice === 'group') {
       try {
@@ -548,7 +569,11 @@ export class PlexSync {
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
-          pending.push({ lib, labels: [...new Set(lines.map(line => line.label))].sort(), decide: async (position, total, group, groupKey, groupLeft) => {
+          // Lines about what you said never to change in this note are left out unasked (see `ask`).
+          const lockedHere = this.settings.lockedProperties[path] ?? []
+          const askedLines = lines.filter(line => !lockedHere.includes(line.label))
+          if (!askedLines.length) continue
+          pending.push({ lib, labels: [...new Set(askedLines.map(line => line.label))].sort(), decide: async (position, total, group, groupKey, groupLeft) => {
             const approval = await this.ask({ action: 'change', path, lines, position, total, group, groupKey, groupLeft }, result, item, lib)
             if (!approval) return
             const { excluded, edits } = approval

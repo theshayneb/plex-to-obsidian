@@ -659,7 +659,37 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Skipped every time').setHeading()
     this.displayIgnored(containerEl)
     this.displayKept(containerEl)
+    this.displayLocked(containerEl)
     this.displayNotInterested(containerEl)
+  }
+
+  /** Properties you said never to change in a note ("Never for this note" in a pop-up), each to forget. */
+  private displayLocked(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+    const entries = Object.entries(settings.lockedProperties)
+      .filter(([, names]) => names.length)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+    new Setting(containerEl).setName('Never changed').setHeading()
+    new Setting(containerEl).setDesc(entries.length
+      ? 'Properties you locked in a pop-up: syncs and checks never change them in that note. Forget one to have it offered again.'
+      : 'Nothing yet. Press the lock next to a line in a change pop-up to never change that property in that note.')
+    for (const [path, names] of entries) {
+      for (const name of names) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(name)
+          .setDesc(path.replace(/\.md$/, ''))
+          .addButton(button => button
+            .setButtonText('Forget')
+            .onClick(async () => {
+              const left = (settings.lockedProperties[path] ?? []).filter(n => n !== name)
+              if (left.length) settings.lockedProperties[path] = left
+              else delete settings.lockedProperties[path]
+              await this.save()
+              this.refresh()
+            }))
+      }
+    }
   }
 
   /** Recommendations you said "Not interested" to. */

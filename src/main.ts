@@ -29,7 +29,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       for (const m of moved) m.path = file.path
       const ignored = this.settings.unmatchedIgnored.indexOf(oldPath)
       if (ignored >= 0) this.settings.unmatchedIgnored[ignored] = file.path
-      if (moved.length || ignored >= 0) void this.saveSettings()
+      const locked = this.settings.lockedProperties[oldPath]
+      if (locked) {
+        delete this.settings.lockedProperties[oldPath]
+        this.settings.lockedProperties[file.path] = locked
+      }
+      if (moved.length || ignored >= 0 || locked) void this.saveSettings()
     }))
 
     this.addRibbonIcon('clapperboard', 'Sync with Plex and Steam', () => {

@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, Modal, Setting, TFile } from 'obsidian'
+import { App, FuzzySuggestModal, Modal, Setting, TFile, setIcon } from 'obsidian'
 import { matchValues, PropertyValueSuggest, vaultPropertyValues, type VaultValues } from './property-suggest'
 import type { CoverChoice } from './steamgriddb'
 
@@ -16,6 +16,8 @@ export interface Decision {
   edits?: Record<string, string | string[]>
   /** For 'merge': the path of the existing note chosen. */
   mergeWith?: string
+  /** Labels of the lines marked "Never for this note": never changed in this note again. */
+  locked?: string[]
 }
 
 /** How an editable value is typed: plain text, a comma-separated list, or a number. */
@@ -93,6 +95,8 @@ export class ApprovalModal extends Modal {
   private readonly pmnExcluded = new Set<string>()
   private readonly pmnEdits: Record<string, string | string[]> = {}
   private pmnMergeWith?: string
+  /** Labels marked "Never for this note". */
+  private readonly pmnLocked = new Set<string>()
   /** The vault's values for each property, read when first needed. */
   private pmnVaultValues: VaultValues | null = null
 
@@ -114,7 +118,7 @@ export class ApprovalModal extends Modal {
       cls: 'setting-item-description',
       text: create
         ? 'A new note. Edit any value (× removes an item from a list), or untick a property to leave it empty.'
-        : 'Edit any new value (× removes an item from a list), or untick anything you don\'t want changed.',
+        : 'Edit any new value (× removes an item from a list), or untick anything you don\'t want changed. The lock next to a line means never change that in this note.',
     })
 
     if (lines.some(line => line.key.startsWith('fix:'))) {
@@ -139,7 +143,8 @@ export class ApprovalModal extends Modal {
     const body = table.createEl('tbody')
     for (const { key, label, current, value, edit, items, required, choices, unticked, warn } of lines) {
       const row = body.createEl('tr')
-      const box = row.createEl('td').createEl('input', { type: 'checkbox' })
+      const tickCell = row.createEl('td', { cls: 'pmn-approval-tick' })
+      const box = tickCell.createEl('input', { type: 'checkbox' })
       box.checked = !unticked
       box.disabled = Boolean(required)
       if (unticked) {
@@ -165,6 +170,23 @@ export class ApprovalModal extends Modal {
         if (unticked) field.disabled = true
       } else {
         cell(row, value, 'pmn-approval-new', newLabel)
+      }
+      // "Never for this note": unticked now, and never offered for this note again.
+      if (!create) {
+        const lock = tickCell.createEl('button', { cls: 'pmn-approval-lock clickable-icon', attr: { 'aria-label': `Never change ${label} in this note` } })
+        setIcon(lock, 'lock-open')
+        lock.addEventListener('click', evt => {
+          evt.preventDefault()
+          const locking = !this.pmnLocked.has(label)
+          if (locking) this.pmnLocked.add(label)
+          else this.pmnLocked.delete(label)
+          setIcon(lock, locking ? 'lock' : 'lock-open')
+          lock.toggleClass('is-active', locking)
+          lock.setAttr('aria-label', locking ? `Never change ${label} in this note (undo)` : `Never change ${label} in this note`)
+          box.checked = !locking
+          box.disabled = locking || Boolean(required)
+          box.dispatchEvent(new Event('change'))
+        })
       }
       box.addEventListener('change', () => {
         row.toggleClass('pmn-approval-off', !box.checked)
@@ -342,7 +364,7 @@ export class ApprovalModal extends Modal {
 
   private pmnDecide(choice: Choice): void {
     this.pmnDecided = true
-    this.pmnResolve({ choice, excluded: [...this.pmnExcluded], edits: { ...this.pmnEdits }, mergeWith: this.pmnMergeWith })
+    this.pmnResolve({ choice, excluded: [...this.pmnExcluded], edits: { ...this.pmnEdits }, mergeWith: this.pmnMergeWith, locked: [...this.pmnLocked] })
     this.close()
   }
 }

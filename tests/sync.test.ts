@@ -1083,6 +1083,30 @@ describe('PlexSync', () => {
     expect([...files.keys()].filter(path => path.startsWith('Media/Music/') && path.endsWith('.md'))).toHaveLength(2)
   })
 
+  it('never changes a property locked for a note, and stops asking about it', async () => {
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.', Date: '1999-01-02' } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    // The first pop-up locks Summary and applies the rest.
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve(requests.length === 1
+        ? { choice: 'apply', excluded: ['fix:Summary'], locked: ['Summary'] }
+        : { choice: 'apply', excluded: [] })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date'])
+    expect(requests[0].lines.map(l => l.label).sort()).toEqual(['Date', 'Summary'])
+    expect(settings.lockedProperties).toEqual({ 'Media/Movies/Arrival (2016).md': ['Summary'] })
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Mine.')
+    // Next time Summary isn't offered, and a check of Summary alone asks nothing.
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
+    expect(requests).toEqual([])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Mine.')
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

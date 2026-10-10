@@ -94,6 +94,8 @@ export interface PlexNotesSettings {
   allowedGenres: string[]
   /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
   keptLinks: Record<string, string>
+  /** Properties never to change in a note, by note path (kept current on renames): "Never for this note" in a pop-up. */
+  lockedProperties: Record<string, string[]>
   /** Durations you chose to keep when a sync offered the source's, by "rating key|property": not offered again while unchanged. */
   keptValues: Record<string, string>
   /** Notes that match nothing but are fine as they are ("Always ignore"): not pointed out again. */
@@ -168,6 +170,7 @@ export function defaultSettings(): PlexNotesSettings {
     ignored: {},
     merged: {},
     keptLinks: {},
+    lockedProperties: {},
     keptValues: {},
     unmatchedIgnored: [],
     notInterested: [],
@@ -299,6 +302,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.ignored = { ...saved.ignored }
   settings.merged = { ...saved.merged }
   settings.keptLinks = { ...saved.keptLinks }
+  if (saved.lockedProperties && typeof saved.lockedProperties === 'object') {
+    settings.lockedProperties = Object.fromEntries(Object.entries(saved.lockedProperties)
+      .filter((e): e is [string, string[]] => Array.isArray(e[1]))
+      .map(([path, names]) => [path, names.map(String)]))
+  }
   settings.keptValues = { ...saved.keptValues }
   settings.ratingsSeen = { ...saved.ratingsSeen }
   settings.ratingsReviewed = { ...saved.ratingsReviewed }

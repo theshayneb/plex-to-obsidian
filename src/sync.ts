@@ -722,6 +722,8 @@ export class PlexSync {
         if (result.stopped) break
         const same = pending.filter(q => q.lib.title === p.lib.title && groupOf(q) === groupOf(p))
         const place = same.indexOf(p) + 1
+        // The corner message says the looking is done and it's your turn, not the last item looked at.
+        progress(`Your choices: ${position} of ${pending.length} (${p.lib.title})…`)
         await p.decide(position, pending.length, `${p.lib.title} · ${groupOf(p)} (${place} of ${same.length})`, `${p.lib.title}|${groupOf(p)}`, same.length - place)
       }
     }
@@ -1530,6 +1532,7 @@ export class PlexSync {
       const note = searched && (checks || newLink)
         ? `Found on Open Library: ${book.title}${book.authors?.length ? ` by ${book.authors.join(', ')}` : ''}${book.year ? `, ${book.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
         : undefined
+      progress(`Checking books: ${position} of ${files.length} (${file.basename}), your choice…`)
       const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total: files.length }, result, asItem, lib)
       if (!approval) continue
       const { excluded, edits } = approval

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.91] - 2026-10-10
+
+- The progress message no longer shows the last item looked at while the pop-ups are open: it says "Your choices: n of N (library)…", or for books "Checking books: n of N (title), your choice…".
+
 ## [0.0.90] - 2026-10-10
 
 - A date a check offers from another year now starts ticked, like other differences (books included), instead of unticked when the source only knows the year. A year-only source date still never replaces a full date from the same year.

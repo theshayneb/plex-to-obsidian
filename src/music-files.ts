@@ -1,7 +1,9 @@
 import { Platform } from 'obsidian'
-import { id3Size, readId3, type FileTags } from './id3'
+import { decodeText, id3Size, readId3, type FileTags } from './id3'
 
 interface NodeFs {
+  existsSync(path: string): boolean
+  readFileSync(path: string): Uint8Array
   openSync(path: string, flags: string): number
   readSync(fd: number, buffer: Uint8Array, offset: number, length: number, position: number): number
   closeSync(fd: number): void
@@ -35,4 +37,28 @@ export function readFileTags(path: string): FileTags | null {
   } finally {
     if (fd !== null) fs.closeSync(fd)
   }
+}
+
+/**
+ * The lyrics in the text file beside a music file, named the same ("Song.mp3" → "Song.txt", or
+ * "Song.lrc"), exactly as written there (only Windows line endings become plain ones). Desktop
+ * only: null on phones or when there's no such file.
+ */
+export function readLyrics(musicPath: string): string | null {
+  if (!Platform.isDesktopApp || !musicPath) return null
+  const load = (window as unknown as { require?: (id: string) => unknown }).require
+  const fs = load?.('fs') as NodeFs | undefined
+  if (!fs) return null
+  const base = musicPath.replace(/\.[^./\\]+$/, '')
+  for (const ext of ['.txt', '.TXT', '.lrc', '.LRC']) {
+    const path = base + ext
+    try {
+      if (!fs.existsSync(path)) continue
+      const text = decodeText(fs.readFileSync(path)).replace(/\r\n?/g, '\n')
+      return text.trim() ? text.replace(/\n+$/, '') : null
+    } catch (err) {
+      console.warn('Media Manager: could not read the lyrics in', path, err)
+    }
+  }
+  return null
 }

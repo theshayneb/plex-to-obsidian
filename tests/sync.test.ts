@@ -51,14 +51,14 @@ vi.mock('obsidian', () => {
 // Steam's local files (desktop only) are read through this; each test says what it finds.
 vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
 // Music files' own tags (desktop only) are read through this; each test says what it finds.
-vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null) }))
+vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), readLyrics: vi.fn(() => null) }))
 
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
 const { readSteamCollections } = await import('../src/steam-local')
-const { readFileTags } = await import('../src/music-files')
+const { readFileTags, readLyrics } = await import('../src/music-files')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
 const { HltbClient } = await import('../src/hltb')
@@ -1046,6 +1046,21 @@ describe('PlexSync', () => {
     expect(readFileTags).not.toHaveBeenCalled()
     vi.mocked(readFileTags).mockReset()
     vi.mocked(readFileTags).mockReturnValue(null)
+  })
+
+  it('fills a song\'s lyrics from the text file beside its music file, exactly as written', async () => {
+    const lyrics = 'Karma police, arrest this man\nHe talks in maths\n\n  (chorus)\nThis is what you get'
+    vi.mocked(readLyrics).mockImplementation(path => path === '/music/Radiohead/Karma Police.mp3' ? lyrics : null)
+    const { app, frontmatter } = makeApp({ 'Media/Music/Radiohead - Karma Police.md': { Link: 'http://plex:32400/library/metadata/100' } })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Lyrics', source: 'lyricsFile', fill: true })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Radiohead/Karma Police.mp3' }] }] }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')!.Lyrics).toBe(lyrics)
+    expect(readFileTags).not.toHaveBeenCalled()
+    vi.mocked(readLyrics).mockReset()
+    vi.mocked(readLyrics).mockReturnValue(null)
   })
 
   it('points out a duration that isn\'t a number in the pop-up', async () => {

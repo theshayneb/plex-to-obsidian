@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.80] - 2026-10-10
+
+- Song lyrics (desktop only): choose "Music: lyrics from the text file beside it" as a property's source, and each song gets the lyrics from the text file named like its music file, in the same folder ("Song.mp3" → "Song.txt", or "Song.lrc"), exactly as written there, line breaks and blank lines included. Like other properties, they go in new notes, are filled in where empty, and are compared by "Check one property". The files are never changed.
+
 ## [0.0.79] - 2026-10-10
 
 - Song properties can come from the tags in the music files themselves (desktop only): choose "Music: a tag in the file, by name" as a property's source and type the tag's name, such as songs-db_tempo, TXXX/Mood, TBPM or Tempo. The file is the one Plex has for the track, and only its tags at the start are read; the files are never changed. These properties work like any other: in new notes, filled in where empty, and compared by "Check one property". Background updates don't read the files.

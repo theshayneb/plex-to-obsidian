@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { id3Size, readId3, tagValue } from '../src/id3'
+import { decodeText, id3Size, readId3, tagValue } from '../src/id3'
 
 const latin = (text: string) => [...text].map(c => c.charCodeAt(0))
 const utf16 = (text: string) => [0xff, 0xfe, ...[...text].flatMap(c => [c.charCodeAt(0) & 0xff, c.charCodeAt(0) >> 8])]
@@ -47,5 +47,13 @@ describe('MP3 tags', () => {
   it('gives nothing for a file without a tag', () => {
     expect(id3Size(Uint8Array.from(latin('RIFF......')))).toBe(0)
     expect(readId3(Uint8Array.from(latin('nothing here')))).toEqual({})
+  })
+})
+
+describe('lyrics files', () => {
+  it('reads UTF-8, UTF-16 and Windows text', () => {
+    expect(decodeText(new TextEncoder().encode('\uFEFFCafé\nline'))).toBe('Café\nline')
+    expect(decodeText(Uint8Array.from([0xff, 0xfe, 0x48, 0, 0x69, 0]))).toBe('Hi')
+    expect(decodeText(Uint8Array.from([0x43, 0x61, 0x66, 0xe9]))).toBe('Café')
   })
 })

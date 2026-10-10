@@ -41,7 +41,7 @@ import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
-import { readFileTags } from './music-files'
+import { readFileTags, readLyrics } from './music-files'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -371,11 +371,15 @@ export class PlexSync {
       // A music file's own tags (tempo and the like) are read from the file Plex has for each track,
       // only when a property uses them (and never in background updates).
       const fileTags = music && readTags && usesSource(lib.properties, 'fileTag')
+      // So are the lyrics, from the text file beside each music file.
+      const lyricsFiles = music && readTags && usesSource(lib.properties, 'lyricsFile')
       for (const item of await this.plex!.libraryItems(key, music)) {
         const wanted = music ? item.type === 'track' : item.type === 'movie' || item.type === 'show'
         if (!wanted) continue
-        const tags = fileTags ? readFileTags(item.Media?.[0]?.Part?.[0]?.file ?? '') : null
-        entries.push({ item: tags ? { ...item, fileTags: tags } : item, lib })
+        const file = item.Media?.[0]?.Part?.[0]?.file ?? ''
+        const tags = fileTags ? readFileTags(file) : null
+        const lyrics = lyricsFiles ? readLyrics(file) : null
+        entries.push({ item: tags || lyrics ? { ...item, ...tags ? { fileTags: tags } : {}, ...lyrics ? { lyrics } : {} } : item, lib })
       }
     }
     return { active, indexes, entries }

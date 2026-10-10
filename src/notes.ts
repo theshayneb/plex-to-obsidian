@@ -64,6 +64,8 @@ export interface PlexItem {
   Media?: { Part?: { file?: string }[] }[]
   /** A music file's own tags (desktop only), read from the file Plex has for the track. */
   fileTags?: Record<string, string[]>
+  /** A song's lyrics, from the text file beside its music file (desktop only). */
+  lyrics?: string
   /** Total playtime, in minutes. */
   playtimeMinutes?: number
   /** Playtime in the last two weeks, in minutes. */

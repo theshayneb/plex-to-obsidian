@@ -15,7 +15,7 @@ export type FieldSource =
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
   | 'hltbMain' | 'hltbLink' | 'steamCollections'
   | 'authors' | 'pages' | 'isbn'
-  | 'text' | 'fileTag'
+  | 'text' | 'fileTag' | 'lyricsFile'
 
 export interface PropertyMapping {
   /** Frontmatter property name. */
@@ -72,6 +72,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   styles: 'Music: styles',
   moods: 'Music: moods',
   fileTag: 'Music: a tag in the file, by name (desktop only)',
+  lyricsFile: 'Music: lyrics from the text file beside it (desktop only)',
   playtime: 'Games: total playtime (hours)',
   recentPlaytime: 'Games: playtime in the last 2 weeks (hours)',
   developers: 'Games: developers',
@@ -497,6 +498,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'isbn': return item.isbn
     case 'text': return text
     case 'fileTag': return item.fileTags && text ? tagValue(item.fileTags, text) : undefined
+    case 'lyricsFile': return item.lyrics
   }
 }
 

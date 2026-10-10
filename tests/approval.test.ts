@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('obsidian', () => ({ Modal: class {}, Setting: class {}, FuzzySuggestModal: class {} }))
+vi.mock('obsidian', () => ({ Modal: class {}, Setting: class {}, FuzzySuggestModal: class {}, AbstractInputSuggest: class {} }))
 
 const { describeValue, editKind, parseEdit } = await import('../src/approval-modal')
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.84] - 2026-10-10
+
+- The create and change pop-ups suggest values as you type, like Obsidian's own properties: a list's "Add…" box (genres, tags…) offers the items that property already has in your vault's notes, and a short text value (like Status) gets a one-line box offering that property's values. Pick one with the mouse or the arrow keys and Enter.
+
 ## [0.0.83] - 2026-10-10
 
 - Removed the "Check one property: …" commands. "Check notes against sources…" still lets you pick any one property to check.

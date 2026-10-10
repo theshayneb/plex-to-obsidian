@@ -25,6 +25,7 @@ vi.mock('obsidian', () => {
     Notice: Unused,
     Modal: Unused,
     FuzzySuggestModal: Unused,
+    AbstractInputSuggest: Unused,
     Platform: { isDesktopApp: false },
     PluginSettingTab: Unused,
     Setting: Unused,

@@ -1,4 +1,5 @@
 import { App, FuzzySuggestModal, Modal, Setting, TFile } from 'obsidian'
+import { matchValues, PropertyValueSuggest, vaultPropertyValues, type VaultValues } from './property-suggest'
 import type { CoverChoice } from './steamgriddb'
 
 /**
@@ -92,6 +93,8 @@ export class ApprovalModal extends Modal {
   private readonly pmnExcluded = new Set<string>()
   private readonly pmnEdits: Record<string, string | string[]> = {}
   private pmnMergeWith?: string
+  /** The vault's values for each property, read when first needed. */
+  private pmnVaultValues: VaultValues | null = null
 
   constructor(app: App, private readonly pmnRequest: ApprovalRequest, private readonly pmnResolve: (d: Decision) => void) {
     super(app)
@@ -149,13 +152,10 @@ export class ApprovalModal extends Modal {
       const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
       let input: HTMLTextAreaElement | HTMLInputElement | null = null
       if (edit === 'list') {
-        input = this.pmnListEditor(newCell(), key, items ?? [])
+        input = this.pmnListEditor(newCell(), key, items ?? [], undefined, label)
       } else if (edit) {
         const original = value ?? ''
-        input = newCell().createEl('textarea', { cls: 'pmn-approval-input' })
-        input.value = original
-        input.placeholder = 'Empty'
-        input.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
+        input = this.pmnTextField(newCell(), label, original, edit, Boolean(choices?.length) || key === 'file')
         const field = input
         field.addEventListener('input', () => {
           if (field.value === original) delete this.pmnEdits[key]
@@ -189,14 +189,11 @@ export class ApprovalModal extends Modal {
       // Edited, it's a change like the others: bold, in the accent colour.
       const mark = () => name.toggleClass('pmn-approval-changed', key in this.pmnEdits)
       if (edit === 'list') {
-        this.pmnListEditor(newCell, key, items ?? [], mark)
+        this.pmnListEditor(newCell, key, items ?? [], mark, label)
         continue
       }
       const original = value ?? ''
-      const field = newCell.createEl('textarea', { cls: 'pmn-approval-input' })
-      field.value = original
-      field.placeholder = 'Empty'
-      field.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
+      const field = this.pmnTextField(newCell, label, original, edit, key === 'own-file')
       field.addEventListener('input', () => {
         if (field.value === original) delete this.pmnEdits[key]
         else this.pmnEdits[key] = field.value
@@ -236,7 +233,7 @@ export class ApprovalModal extends Modal {
   }
 
   /** Thumbnails under a cover's link: clicking one puts its address in the box. */
-  private pmnCoverPicker(field: HTMLTextAreaElement, choices: CoverChoice[]): void {
+  private pmnCoverPicker(field: HTMLTextAreaElement | HTMLInputElement, choices: CoverChoice[]): void {
     const picker = field.parentElement!.createDiv('pmn-approval-covers')
     const tiles: HTMLElement[] = []
     const mark = () => tiles.forEach((tile, i) => tile.toggleClass('is-selected', choices[i].url === field.value.trim()))
@@ -258,10 +255,18 @@ export class ApprovalModal extends Modal {
   }
 
   /** A list as removable chips, plus a box to add items (Enter or comma). Returns the add box. */
-  private pmnListEditor(td: HTMLElement, key: string, original: string[], onChange?: () => void): HTMLInputElement {
+  private pmnListEditor(td: HTMLElement, key: string, original: string[], onChange?: () => void, property?: string): HTMLInputElement {
     let list = [...original]
     const chips = td.createDiv('pmn-approval-chips')
     const add = td.createEl('input', { type: 'text', cls: 'pmn-approval-add', placeholder: 'Add…' })
+    // Items already used for this property elsewhere in the vault, as you type.
+    const values = property ? this.pmnValuesOf(property) : []
+    const suggest = values.length
+      ? new PropertyValueSuggest(this.app, add, values, value => {
+        add.value = value
+        commit()
+      }, () => list)
+      : null
     const changed = () => {
       if (list.length === original.length && list.every((v, i) => v === original[i])) delete this.pmnEdits[key]
       else this.pmnEdits[key] = [...list]
@@ -292,6 +297,8 @@ export class ApprovalModal extends Modal {
       render()
     }
     add.addEventListener('keydown', evt => {
+      // With suggestions showing, Enter picks the highlighted one instead.
+      if (evt.key === 'Enter' && suggest?.pmnShowing && matchValues(values, add.value, list).length) return
       if (evt.key === 'Enter' || evt.key === ',') {
         evt.preventDefault()
         commit()
@@ -300,6 +307,37 @@ export class ApprovalModal extends Modal {
     add.addEventListener('blur', commit)
     render()
     return add
+  }
+
+  /** The vault's values for a property, most used first (none for links, images and such). */
+  private pmnValuesOf(property: string): string[] {
+    this.pmnVaultValues ??= vaultPropertyValues(this.app)
+    const values = this.pmnVaultValues.get(property.toLowerCase()) ?? []
+    return values.filter(v => !/^(https?:\/\/|\[\[|!\[)/i.test(v))
+  }
+
+  /**
+   * A box for a text value: a one-line box offering the values the property already has in the
+   * vault (as Obsidian's properties do) when those are short, else a text area for long text.
+   */
+  private pmnTextField(td: HTMLElement, property: string, original: string, edit: EditKind, plain: boolean): HTMLTextAreaElement | HTMLInputElement {
+    const values = plain || edit === 'number' ? [] : this.pmnValuesOf(property)
+    const short = (text: string) => text.length <= 80 && !text.includes('\n')
+    if (values.length && short(original) && values.every(short)) {
+      const field = td.createEl('input', { type: 'text', cls: 'pmn-approval-input' })
+      field.value = original
+      field.placeholder = 'Empty'
+      new PropertyValueSuggest(this.app, field, values, value => {
+        field.value = value
+        field.dispatchEvent(new Event('input'))
+      })
+      return field
+    }
+    const field = td.createEl('textarea', { cls: 'pmn-approval-input' })
+    field.value = original
+    field.placeholder = 'Empty'
+    field.rows = Math.min(10, Math.max(1, Math.ceil(original.length / 70)))
+    return field
   }
 
   private pmnDecide(choice: Choice): void {

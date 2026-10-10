@@ -301,16 +301,17 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           dropdown
             .setValue(mapping.source)
             .onChange(async value => {
-              const textChanged = (mapping.source === 'text') !== (value === 'text')
+              const typed = (source: string) => source === 'text' || source === 'fileTag'
+              const textChanged = typed(mapping.source) !== typed(value)
               mapping.source = value as FieldSource
               await this.save()
               // Only the "Fixed text" choice changes the row's layout.
               if (textChanged) this.refresh()
             })
         })
-      if (mapping.source === 'text') {
+      if (mapping.source === 'text' || mapping.source === 'fileTag') {
         row.addText(text => text
-          .setPlaceholder('Value')
+          .setPlaceholder(mapping.source === 'fileTag' ? 'Tag, e.g. songs-db_tempo' : 'Value')
           .setValue(mapping.text ?? '')
           .onChange(async value => {
             mapping.text = value

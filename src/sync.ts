@@ -41,6 +41,7 @@ import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
+import { readFileTags } from './music-files'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -316,7 +317,7 @@ export class PlexSync {
    * Connects to Plex and Steam, refreshes the library list (unless only play counts are wanted),
    * reads every active library and indexes the notes already in their folders.
    */
-  private async prepare(progress: ProgressFn, refresh: boolean): Promise<{ active: [string, ActiveLibrary][], indexes: Record<Family, ExistingNotes>, entries: Entry[] }> {
+  private async prepare(progress: ProgressFn, refresh: boolean, readTags = true): Promise<{ active: [string, ActiveLibrary][], indexes: Record<Family, ExistingNotes>, entries: Entry[] }> {
     const usePlex = plexReady(this.settings)
     const useSteam = steamReady(this.settings)
     if (!usePlex && !useSteam) throw new Error('Set up Plex or Steam in the plugin settings first')
@@ -367,9 +368,14 @@ export class PlexSync {
         continue
       }
       const music = lib.target === 'music'
+      // A music file's own tags (tempo and the like) are read from the file Plex has for each track,
+      // only when a property uses them (and never in background updates).
+      const fileTags = music && readTags && usesSource(lib.properties, 'fileTag')
       for (const item of await this.plex!.libraryItems(key, music)) {
         const wanted = music ? item.type === 'track' : item.type === 'movie' || item.type === 'show'
-        if (wanted) entries.push({ item, lib })
+        if (!wanted) continue
+        const tags = fileTags ? readFileTags(item.Media?.[0]?.Part?.[0]?.file ?? '') : null
+        entries.push({ item: tags ? { ...item, fileTags: tags } : item, lib })
       }
     }
     return { active, indexes, entries }
@@ -380,7 +386,7 @@ export class PlexSync {
    * @param only for 'check': just these notes (say, the open one), not every note.
    */
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>): Promise<SyncResult> {
-    const { active, indexes, entries } = await this.prepare(progress, mode === 'full')
+    const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: false, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
@@ -729,7 +735,7 @@ export class PlexSync {
     withNotes: { item: PlexItem, path: string, kind: MediaKind }[]
     withoutNotes: { item: PlexItem, libraryKey: string, kind: MediaKind }[]
   }> {
-    const { active, indexes, entries } = await this.prepare(progress, false)
+    const { active, indexes, entries } = await this.prepare(progress, false, false)
     const withNotes: { item: PlexItem, path: string, kind: MediaKind }[] = []
     const withoutNotes: { item: PlexItem, libraryKey: string, kind: MediaKind }[] = []
     for (const { item, lib } of entries) {
@@ -742,7 +748,7 @@ export class PlexSync {
   }
 
   async explain(query: string, progress: ProgressFn): Promise<string[][]> {
-    const { indexes, entries } = await this.prepare(progress, true)
+    const { indexes, entries } = await this.prepare(progress, true, false)
     const key = ratingKeyFromLink(query)
     if (key) {
       const found = entries.filter(e => e.item.ratingKey === key)
@@ -1237,7 +1243,7 @@ export class PlexSync {
     const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
     for (const m of mappings) {
       const name = m.name.trim()
-      const value = sourceValue(m.source, item, ctx)
+      const value = sourceValue(m.source, item, ctx, m.text)
       if (value === undefined || from[name] === value || (Array.isArray(value) && sameValue(from[name], value))) continue
       // A status only ever moves forward, and one of your own is left alone.
       if (STATUS_SOURCES.includes(m.source) && !statusMovesForward(from[name], value, lib.values)) continue
@@ -1263,7 +1269,7 @@ export class PlexSync {
       const name = m.name.trim()
       const current: unknown = from[name]
       if (!CHECKED_SOURCES.includes(m.source) || !name || isBlank(current)) continue
-      const value = sourceValue(m.source, item, ctx)
+      const value = sourceValue(m.source, item, ctx, m.text)
       if (typeof value !== 'number') continue
       if (current === value || (typeof current === 'string' && current.trim() === String(value))) continue
       if (this.settings.keptValues[`${item.ratingKey}|${name}`] === String(current)) continue
@@ -1357,14 +1363,14 @@ export class PlexSync {
       if (STATUS_SOURCES.includes(m.source)) {
         // Open Library knows nothing of your reading; elsewhere, only a step forward starts ticked.
         if (item.type === 'book') continue
-        const value = sourceValue(m.source, item, ctx)
+        const value = sourceValue(m.source, item, ctx, m.text)
         if (isBlank(value) || sameValue(current, value)) continue
         to[name] = value
         if (statusMovesForward(current, value, lib.values)) ticked.add(name)
         else yours.add(name)
         continue
       }
-      const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx), this.settings.allowedGenres, kind, lib.leaveOutGenres)
+      const offer = checkValue(m.source, current, sourceValue(m.source, item, ctx, m.text), this.settings.allowedGenres, kind, lib.leaveOutGenres)
       if (!offer) continue
       to[name] = offer.to
       // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).

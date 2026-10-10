@@ -60,6 +60,10 @@ export interface PlexItem {
   album?: PlexItem
   // Steam games (type 'game'; ratingKey is "steam-<appid>")
   steamAppId?: number
+  /** Where Plex has the item's file (a track's MP3), in the listing. */
+  Media?: { Part?: { file?: string }[] }[]
+  /** A music file's own tags (desktop only), read from the file Plex has for the track. */
+  fileTags?: Record<string, string[]>
   /** Total playtime, in minutes. */
   playtimeMinutes?: number
   /** Playtime in the last two weeks, in minutes. */

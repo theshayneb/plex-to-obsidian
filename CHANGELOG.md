@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.79] - 2026-10-10
+
+- Song properties can come from the tags in the music files themselves (desktop only): choose "Music: a tag in the file, by name" as a property's source and type the tag's name, such as songs-db_tempo, TXXX/Mood, TBPM or Tempo. The file is the one Plex has for the track, and only its tags at the start are read; the files are never changed. These properties work like any other: in new notes, filled in where empty, and compared by "Check one property". Background updates don't read the files.
+
 ## [0.0.78] - 2026-10-09
 
 - Steam games counted from your notes' links (ones Steam's list leaves out) no longer slow down every sync: they aren't looked up on the Steam Store each time, only when a check or fill-in needs their details. They're named as their note is, so they're never renamed for it.

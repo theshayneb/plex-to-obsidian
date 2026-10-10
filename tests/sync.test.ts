@@ -50,12 +50,15 @@ vi.mock('obsidian', () => {
 
 // Steam's local files (desktop only) are read through this; each test says what it finds.
 vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
+// Music files' own tags (desktop only) are read through this; each test says what it finds.
+vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null) }))
 
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
 const { readSteamCollections } = await import('../src/steam-local')
+const { readFileTags } = await import('../src/music-files')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
 const { HltbClient } = await import('../src/hltb')
@@ -1025,6 +1028,24 @@ describe('PlexSync', () => {
       Summary: 'Cops and robbers.',
       Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2',
     })
+  })
+
+  it('fills song properties from the tags in the file Plex has for the track', async () => {
+    vi.mocked(readFileTags).mockImplementation(path => path === '/music/Radiohead/Karma Police.mp3'
+      ? { 'TXXX:songs-db_tempo': ['76'], 'TXXX:mood': ['Brooding'] } : null)
+    const { app, frontmatter } = makeApp({ 'Media/Music/Radiohead - Karma Police.md': { Link: 'http://plex:32400/library/metadata/100' } })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Tempo', source: 'fileTag', text: 'songs-db_tempo', fill: true }, { name: 'Mood', source: 'fileTag', text: 'TXXX/Mood', fill: true })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Radiohead/Karma Police.mp3' }] }] }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')).toMatchObject({ Tempo: 76, Mood: 'Brooding' })
+    // Background updates never read the files.
+    vi.mocked(readFileTags).mockClear()
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
+    expect(readFileTags).not.toHaveBeenCalled()
+    vi.mocked(readFileTags).mockReset()
+    vi.mocked(readFileTags).mockReturnValue(null)
   })
 
   it('points out a duration that isn\'t a number in the pop-up', async () => {

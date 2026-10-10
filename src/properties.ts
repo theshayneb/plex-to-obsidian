@@ -1,4 +1,5 @@
 // Which Plex field fills which frontmatter property. No Obsidian imports, so it can be unit tested.
+import { tagValue } from './id3'
 import { genresOf, isDocumentaryGenre, isStarted, isWatched, trackArtist, yearOf, type MediaKind, type PlexItem, type PlexTag } from './notes'
 
 export type FieldSource =
@@ -14,13 +15,13 @@ export type FieldSource =
   | 'playtime' | 'recentPlaytime' | 'developers' | 'publishers' | 'platforms' | 'metacritic' | 'wideImage'
   | 'hltbMain' | 'hltbLink' | 'steamCollections'
   | 'authors' | 'pages' | 'isbn'
-  | 'text'
+  | 'text' | 'fileTag'
 
 export interface PropertyMapping {
   /** Frontmatter property name. */
   name: string
   source: FieldSource
-  /** Only for the 'text' source: the fixed value written to every note. */
+  /** For the 'text' source: the fixed value written to every note; for 'fileTag', the tag's name. */
   text?: string
   /** Also fill this property in on existing notes that match a Plex item, when it's empty there. */
   fill?: boolean
@@ -70,6 +71,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   discNumber: 'Music: disc number',
   styles: 'Music: styles',
   moods: 'Music: moods',
+  fileTag: 'Music: a tag in the file, by name (desktop only)',
   playtime: 'Games: total playtime (hours)',
   recentPlaytime: 'Games: playtime in the last 2 weeks (hours)',
   developers: 'Games: developers',
@@ -494,6 +496,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'pages': return item.pages
     case 'isbn': return item.isbn
     case 'text': return text
+    case 'fileTag': return item.fileTags && text ? tagValue(item.fileTags, text) : undefined
   }
 }
 

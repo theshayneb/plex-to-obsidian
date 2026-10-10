@@ -167,6 +167,11 @@ export class PlexClient {
     await this.send('DELETE', `/playlists/${encodeURIComponent(playlistKey)}/items/${playlistItemID}`)
   }
 
+  /** What's inside an item: an album's tracks, a show's seasons. */
+  async children(ratingKey: string): Promise<PlexItem[]> {
+    return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}/children`)).Metadata ?? []
+  }
+
   /** Full metadata; the library listing can leave out some genres. */
   async item(ratingKey: string): Promise<PlexItem | null> {
     return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}?includeGuids=1`)).Metadata?.[0] ?? null

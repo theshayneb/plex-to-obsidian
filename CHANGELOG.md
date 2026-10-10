@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.82] - 2026-10-10
+
+- New command "Tie this note to a Plex item…": paste the item's Plex link (for a song, its album's page, then pick the song) and syncs and checks treat the open note as that item's, whatever its name. Undo it in Settings → Remembered choices.
+
 ## [0.0.81] - 2026-10-10
 
 - Song notes match under any of the song's artists, featured ones too: "Uptown Funk by Bruno Mars" matches Mark Ronson's "Uptown Funk" with Bruno Mars.

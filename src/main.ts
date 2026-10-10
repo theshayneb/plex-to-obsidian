@@ -3,9 +3,12 @@ import { AddModal } from './add-modal'
 import { CheckModal, checkableProperties, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
+import { TieModal } from './tie-modal'
+import { plexReady } from './config'
+import { PlexClient } from './plex'
 import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
-import type { PlexItem } from './notes'
+import { displayName, ratingKeyFromLink, type PlexItem } from './notes'
 import { PlexSync } from './sync'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
@@ -83,6 +86,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
       name: 'Add a movie, show, game or book…',
       callback: () => {
         new AddModal(this.app, this.settings, () => this.saveSettings(), (item, libraryKey) => this.addNew(item, libraryKey)).open()
+      },
+    })
+
+    this.addCommand({
+      id: 'tie-note',
+      name: 'Tie this note to a Plex item…',
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile()
+        if (!file || file.extension !== 'md') return false
+        if (!checking) new TieModal(this.app, file.basename, link => this.tieCandidates(link), item => this.tieNote(file, item)).open()
+        return true
       },
     })
 
@@ -235,6 +249,45 @@ export default class PlexMediaNotesPlugin extends Plugin {
    * "Check this note against sources": the full check (every property) of the open note alone.
    * Its source is still found by listing Plex and Steam, so it takes as long as their listings do.
    */
+  /** What a pasted Plex link can tie a note to: the item, or an album's songs. */
+  private async tieCandidates(link: string): Promise<PlexItem[]> {
+    if (!plexReady(this.settings)) throw new Error('Set up Plex in the plugin settings first.')
+    const key = /^\s*\d+\s*$/.test(link) ? link.trim() : ratingKeyFromLink(link.trim())
+    if (!key || !/^\d+$/.test(key)) throw new Error('That isn\'t a Plex link. Open the item in Plex Web and copy the address from the address bar.')
+    const plex = new PlexClient(this.settings.serverUrl, this.settings.token)
+    const item = await plex.item(key)
+    if (!item) throw new Error('Plex has no item with that link. Check that it\'s from the server set up in the plugin.')
+    if (item.type === 'album') {
+      // An album's songs don't always say which library they're in; the album does.
+      const tracks = (await plex.children(key))
+        .filter(track => track.type === 'track')
+        .map(track => ({ ...track, librarySectionID: track.librarySectionID ?? item.librarySectionID, librarySectionTitle: track.librarySectionTitle ?? item.librarySectionTitle }))
+      if (!tracks.length) throw new Error(`Plex lists no songs on ${item.title}.`)
+      return tracks
+    }
+    if (item.type === 'artist') throw new Error('That\'s an artist\'s page. Paste the album\'s page instead, and pick the song.')
+    if (item.type === 'season' || item.type === 'episode') throw new Error('Notes are for whole shows: paste the show\'s page instead.')
+    return [item]
+  }
+
+  /** Ties a note to a Plex item from now on, as "Use an existing note" does (undone in Settings → Remembered choices). */
+  private async tieNote(file: TFile, item: PlexItem): Promise<void> {
+    const libraryKey = item.librarySectionID === undefined ? '' : String(item.librarySectionID)
+    // One item per note: an earlier tie of this note gives way.
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      if (merged.path === file.path) delete this.settings.merged[key]
+    }
+    this.settings.merged[item.ratingKey] = {
+      name: displayName(item),
+      library: this.settings.libraries[libraryKey]?.title ?? item.librarySectionTitle ?? '',
+      libraryKey,
+      path: file.path,
+      since: Date.now(),
+    }
+    await this.saveSettings()
+    new Notice(`Tied "${file.basename}" to ${displayName(item)}. The next sync or check treats it as that item's note.`)
+  }
+
   async checkThisNote(file: TFile): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('A sync or check is already running')

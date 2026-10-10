@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.83] - 2026-10-10
+
+- Removed the "Check one property: …" commands. "Check notes against sources…" still lets you pick any one property to check.
+
 ## [0.0.82] - 2026-10-10
 
 - New command "Tie this note to a Plex item…": paste the item's Plex link (for a song, its album's page, then pick the song) and syncs and checks treat the open note as that item's, whatever its name. Undo it in Settings → Remembered choices.

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.86] - 2026-10-10
+
+- Plex playlists: a song left out as a duplicate now says which note above it is the same song in Plex, and which song that is.
+
 ## [0.0.85] - 2026-10-10
 
 - Plex playlists from a Base: a song note whose Link is to its album's page now goes in as the song on that album named like the note ("Uptown Funk by Mark Ronson" → Uptown Funk), instead of being left out.

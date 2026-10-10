@@ -59,7 +59,7 @@ describe('Plex playlists from a Base', () => {
     expect(plan.songs.map(s => s.title)).toEqual(['Karma Police (Radiohead)', 'Airbag (Radiohead)'])
     expect(plan.leftOut).toEqual([
       { path: 'Music/No link.md', reason: 'no Plex link' },
-      { path: 'Music/Airbag again.md', reason: 'same song as a note above' },
+      { path: 'Music/Airbag again.md', reason: 'same song in Plex as "Airbag", above it (Airbag)' },
       { path: 'Movies/Heat.md', reason: 'its Link is to a movie in Plex, not a song' },
     ])
     expect(plan.existing).toBeNull()

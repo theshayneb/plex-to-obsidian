@@ -76,7 +76,8 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
   const found = new Map((keys.length ? await plex.items(keys) : []).map(item => [item.ratingKey, item]))
   const albums = new Map<string, PlexItem[]>()
   const songs: PlaylistSong[] = []
-  const seen = new Set<string>()
+  /** Which note each song went in for. */
+  const seen = new Map<string, string>()
   for (const { path, ratingKey } of wanted) {
     let item = found.get(ratingKey)
     if (item?.type === 'album') {
@@ -91,9 +92,11 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
     }
     if (!item) leftOut.push({ path, reason: 'not in Plex any more' })
     else if (item.type !== 'track') leftOut.push({ path, reason: `its Link is to ${item.type === 'artist' ? 'an artist' : `a ${item.type}`} in Plex, not a song` })
-    else if (seen.has(item.ratingKey)) leftOut.push({ path, reason: 'same song as a note above' })
-    else {
-      seen.add(item.ratingKey)
+    else if (seen.has(item.ratingKey)) {
+      const other = seen.get(item.ratingKey)!.split('/').pop()!.replace(/\.md$/, '')
+      leftOut.push({ path, reason: `same song in Plex as "${other}", above it (${item.title})` })
+    } else {
+      seen.set(item.ratingKey, path)
       songs.push({ path, ratingKey: item.ratingKey, title: item.grandparentTitle ? `${item.title} (${item.grandparentTitle})` : item.title })
     }
   }

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.90] - 2026-10-10
+
+- A date a check offers from another year now starts ticked, like other differences (books included), instead of unticked when the source only knows the year. A year-only source date still never replaces a full date from the same year.
+- The progress message in the corner comes back if it was closed, and the books part of a check shows "Checking books: n of N (title)…".
+
 ## [0.0.89] - 2026-10-10
 
 - A value you chose to keep in a pop-up is now remembered together with the offer you turned down, so if the source later offers something different (a corrected book date, say), it's offered again.

@@ -1439,8 +1439,6 @@ export class PlexSync {
       if (offer.ticked || (m.source === 'plexLink' && (isSearchLink(current) || oldSongLink))) ticked.add(name)
       // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
       if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)
-      // A source that only knows the year (Open Library's books) is a guess against a date of yours.
-      if (m.source === 'releaseDate' && !isBlank(current) && vagueDate(offer.to)) yours.add(name)
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to, sameLength: ticked, yours } : null
@@ -1498,7 +1496,7 @@ export class PlexSync {
       }
       let book: PlexItem | null
       try {
-        progress(`Checking ${file.basename}…`)
+        progress(`Checking books: ${position} of ${files.length} (${file.basename})…`)
         const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
         // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
         const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename

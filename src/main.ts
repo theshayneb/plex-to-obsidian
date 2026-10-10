@@ -13,6 +13,28 @@ import { PlexSync } from './sync'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 
+/**
+ * The progress message in the corner during a sync or check. It comes back if it was closed (a
+ * click hides a notice) or pushed out, so the progress stays in view to the end.
+ */
+class ProgressNotice {
+  private notice: Notice
+
+  constructor(message: string) {
+    this.notice = new Notice(message, 0)
+  }
+
+  set(message: string): void {
+    const el = (this.notice as { messageEl?: HTMLElement }).messageEl
+    if (el && !el.isConnected) this.notice = new Notice(message, 0)
+    else this.notice.setMessage(message)
+  }
+
+  hide(): void {
+    this.notice.hide()
+  }
+}
+
 export default class PlexMediaNotesPlugin extends Plugin {
   settings: PlexNotesSettings = defaultSettings()
   private plexSyncRunning = false
@@ -194,10 +216,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
     await this.saveSettings()
     this.plexSyncRunning = true
-    const notice = new Notice('Starting…', 0)
+    const notice = new ProgressNotice('Starting…')
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message), 'check', properties, only, libraries)
+        .run(message => notice.set(message), 'check', properties, only, libraries)
       notice.hide()
       const parts = [`Changed ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`]
       if (result.renamed.length) {
@@ -269,11 +291,11 @@ export default class PlexMediaNotesPlugin extends Plugin {
       return
     }
     this.plexSyncRunning = true
-    const notice = new Notice(`Checking ${file.basename}…`, 0)
+    const notice = new ProgressNotice(`Checking ${file.basename}…`)
     try {
       const properties = checkableProperties(this.settings).map(p => p.name)
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message), 'check', properties, new Set([file.path]))
+        .run(message => notice.set(message), 'check', properties, new Set([file.path]))
       notice.hide()
       if (result.failed.length) {
         console.error('Media Manager: failed items', result.failed)
@@ -310,10 +332,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       return
     }
     this.plexSyncRunning = true
-    const notice = new Notice('Starting…', 0)
+    const notice = new ProgressNotice('Starting…')
     try {
       const result = await new PlexSync(this.app, this.settings, () => this.saveSettings(), request => askApproval(this.app, request), request => askOwner(this.app, request))
-        .run(message => notice.setMessage(message))
+        .run(message => notice.set(message))
       notice.hide()
 
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]

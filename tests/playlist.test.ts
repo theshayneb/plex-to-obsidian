@@ -13,7 +13,7 @@ vi.mock('obsidian', () => ({
   }),
 }))
 
-const { planPlaylist, sendPlaylist, songKeyOf } = await import('../src/playlist')
+const { planPlaylist, sendPlaylist, songKeyOf, trackForNote } = await import('../src/playlist')
 const { defaultSettings, newLibrary } = await import('../src/config')
 
 function setup(notes: Record<string, Record<string, unknown>>) {
@@ -66,6 +66,28 @@ describe('Plex playlists from a Base', () => {
     sent.length = 0
     await sendPlaylist(settings, plan)
     expect(sent).toEqual(['GET /identity', 'POST /playlists?type=audio&smart=0&title=Road trip&uri=server://abc/com.plexapp.plugins.library/library/metadata/100,101'])
+  })
+
+  it('takes the song named like the note from an album its link is to, and a tie over a link', async () => {
+    const { files, app, settings } = setup({
+      'Music/Uptown Funk by Bruno Mars.md': { Link: link('72153') },
+      'Music/Mystery by Nobody.md': { Link: link('72153') },
+      'Music/Karma Police.md': { Link: link('7') },
+    })
+    settings.merged = { 100: { path: 'Music/Karma Police.md' } } as never
+    responses.set('/library/metadata/72153,100', { MediaContainer: { Metadata: [
+      { ratingKey: '72153', type: 'album', title: 'Uptown Special', parentTitle: 'Mark Ronson' },
+      { ratingKey: '100', type: 'track', title: 'Karma Police', grandparentTitle: 'Radiohead' },
+    ] } })
+    responses.set('/library/metadata/72153/children', { MediaContainer: { Metadata: [
+      { ratingKey: '72150', type: 'track', title: 'Uptown\'s First Finale' },
+      { ratingKey: '72154', type: 'track', title: 'Uptown Funk (feat. Bruno Mars)', grandparentTitle: 'Mark Ronson' },
+    ] } })
+    const plan = await planPlaylist(app as never, settings, 'Funk', files as never)
+    expect(plan.songs.map(s => s.ratingKey)).toEqual(['72154', '100'])
+    expect(plan.leftOut.map(l => l.path)).toEqual(['Music/Mystery by Nobody.md'])
+    expect(trackForNote('Mark Ronson - Uptown Funk', [{ ratingKey: '1', type: 'track', title: 'Uptown Funk' }])?.ratingKey).toBe('1')
+    expect(trackForNote('Intro', [{ ratingKey: '1', type: 'track', title: 'Intro' }, { ratingKey: '2', type: 'track', title: 'Intro' }])).toBeNull()
   })
 
   it('empties and refills a playlist of that name that Plex already has', async () => {

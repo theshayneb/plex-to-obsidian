@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.85] - 2026-10-10
+
+- Plex playlists from a Base: a song note whose Link is to its album's page now goes in as the song on that album named like the note ("Uptown Funk by Mark Ronson" → Uptown Funk), instead of being left out.
+- A note tied with "Tie this note to a Plex item…" uses that song, whatever its Link says.
+
 ## [0.0.84] - 2026-10-10
 
 - The create and change pop-ups suggest values as you type, like Obsidian's own properties: a list's "Add…" box (genres, tags…) offers the items that property already has in your vault's notes, and a short text value (like Status) gets a one-line box offering that property's values. Pick one with the mouse or the arrow keys and Enter.

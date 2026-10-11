@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.104] - 2026-10-11
+
+- Book checks read a "Title by Author" file name as title and author even when the note has no author property (before, the whole name was searched for as the title, so nothing was found), and try the whole name if that finds nothing (for titles like "Stand by Me").
+- When Google Books is busy or limiting requests, the book is listed as failed, with the reason, instead of "matches nothing". The check's summary now shows why up to three notes failed.
+- A Google Books link of any form (including books/about/….html?id=…) counts as the note's link, so pasting one into a book note's Link makes checks use that book.
+
 ## [0.0.103] - 2026-10-11
 
 - Steam collections can set a game's status: a game in "revisit", "pending", "abandoned" or "completed" gets that status, and one in "Right Now" gets "planned" (the first that applies wins, over the played or not played status). A sync asks before changing a note's status this way, even backwards; one you leave unticked isn't offered again until the collection changes. Checks offer it ticked. The pairs are editable in the Steam library's settings ("Status from Steam collections", one "collection: status" per line). Desktop only, like collections.

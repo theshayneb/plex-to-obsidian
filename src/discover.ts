@@ -219,17 +219,18 @@ export async function googleBooksInfo(book: PlexItem, key = ''): Promise<{ summa
   return out
 }
 
-/** Google Books' search results (the whole volumes); empty when it can't be reached. */
+/** Google Books' search results (the whole volumes). Throws when Google Books is busy or limiting requests, so a book isn't called missing when it couldn't be looked for. */
 async function googleVolumes(query: string, key: string): Promise<GoogleVolume[]> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
-  try {
-    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&printType=books${withKey}`)
-    if (res.status >= 400) return []
-    return (res.json as { items?: GoogleVolume[] } | null)?.items ?? []
-  } catch (err) {
-    console.warn('Media Manager: Google Books search failed', err)
+  const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&printType=books${withKey}`)
+  if (res.status === 429 || res.status === 503) {
+    throw new Error(`Google Books is busy or limiting requests (${res.status})${key.trim() ? '' : '; a free Google Books API key (in the settings) raises the limit'}`)
+  }
+  if (res.status >= 400) {
+    console.warn(`Media Manager: Google Books returned ${res.status} for`, query)
     return []
   }
+  return (res.json as { items?: GoogleVolume[] } | null)?.items ?? []
 }
 
 /** A book's title and first author, for not listing the same book from both sources. */

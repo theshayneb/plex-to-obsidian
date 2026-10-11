@@ -1581,9 +1581,13 @@ export class PlexSync {
       try {
         progress(`Checking books: ${looked} of ${files.length} (${file.basename})…`)
         const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
-        // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
-        const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
-        book = await lookUpBook({ work, volume, title, author: authors[0] }, this.settings.googleBooksKey ?? '')
+        // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert, whether or
+        // not the note has an author; failing that (say, "Stand by Me"), as the whole name.
+        const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
+        const title = byName ? byName[1] : file.basename
+        const googleKey = this.settings.googleBooksKey ?? ''
+        book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2] }, googleKey)
+        if (!book && byName && !work && !volume) book = await lookUpBook({ title: file.basename, author: authors[0] }, googleKey)
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
         rescaleOnly()

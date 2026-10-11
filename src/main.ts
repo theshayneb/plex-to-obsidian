@@ -247,7 +247,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.declined) parts.push(`${result.declined} skipped`)
       if (result.stopped) parts.push('stopped')
       if (result.failed.length) {
-        parts.push(`${result.failed.length} failed (see the developer console)`)
+        const shown = result.failed.slice(0, 3).map(f => `${f.title}: ${f.error}`).join('; ')
+        parts.push(`${result.failed.length} failed (${shown}${result.failed.length > 3 ? '; the rest are in the developer console' : ''})`)
         console.error('Media Manager: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()

@@ -1421,7 +1421,8 @@ describe('PlexSync', () => {
       'https://www.googleapis.com/books/v1/volumes?q=intitle': { items: [{ id: 'x', volumeInfo: { title: 'Something else', authors: ['Libby Edwardson'] } }, volume] },
     }
     const path = 'Media/Books/We Sent Them Down Singing by Libby Edwardson.md'
-    const { app, frontmatter } = makeApp({ [path]: { Author: ['Libby Edwardson'], Duration: 100 } })
+    // No author property: the file name's "by Libby Edwardson" is the author.
+    const { app, frontmatter } = makeApp({ [path]: { Duration: 100 } })
     const settings = settingsWith()
     settings.libraries = {}
     const { addLibrary } = await import('../src/config')
@@ -1429,6 +1430,7 @@ describe('PlexSync', () => {
     const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'apply' as const, excluded: [] }))
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
     expect(result.unmatched).toEqual([])
+    expect(requested).toContain(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('intitle:"We Sent Them Down Singing" inauthor:"Libby Edwardson"')}&maxResults=10&printType=books`)
     expect(frontmatter.get(path)).toMatchObject({ Duration: 320, Link: 'https://books.google.com/books?id=abc-1' })
 
     // Linked: that volume, looked up directly.

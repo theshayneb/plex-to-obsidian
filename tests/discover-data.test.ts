@@ -189,5 +189,6 @@ describe('Google Books as a source of books', () => {
   it('reads a Google Books link', () => {
     expect(ratingKeyFromLink('https://books.google.com/books?id=abc-1')).toBe('gb-abc-1')
     expect(ratingKeyFromLink('https://books.google.co.uk/books/about/X.html?hl=en&id=Q_7xEAAAQBAJ')).toBe('gb-Q_7xEAAAQBAJ')
+    expect(ratingKeyFromLink('https://books.google.com/books/about/The_City_of_Stardust.html?id=Q6C8EAAAQBAJ&source=kp_book_description')).toBe('gb-Q6C8EAAAQBAJ')
   })
 })

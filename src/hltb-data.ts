@@ -8,6 +8,8 @@ export interface HltbGame {
   game_alias?: string
   release_world?: number
   comp_main?: number
+  /** Main story plus extras. */
+  comp_plus?: number
   game_image?: string
   review_score?: number
   profile_platform?: string
@@ -17,7 +19,7 @@ export interface HltbGame {
 export interface HltbTimes {
   id: number
   name: string
-  /** Main story, in minutes. */
+  /** Main story, in minutes (main story plus extras when there's no main story time). */
   main?: number
   url: string
   image?: string
@@ -95,7 +97,8 @@ export function hltbTimes(game: HltbGame): HltbTimes {
   return {
     id: game.game_id,
     name: game.game_name,
-    main: hltbMinutes(game.comp_main),
+    // Without a main story time, main story plus extras stands in.
+    main: hltbMinutes(game.comp_main) ?? hltbMinutes(game.comp_plus),
     url: `${HLTB}/game/${game.game_id}`,
     image: game.game_image ? `${HLTB}/games/${encodeURIComponent(game.game_image)}` : undefined,
   }

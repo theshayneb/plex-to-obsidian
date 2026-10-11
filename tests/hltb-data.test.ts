@@ -37,4 +37,9 @@ describe('HowLongToBeat', () => {
     expect(titleVariants('Disco Elysium - The Final Cut')).toEqual(['Disco Elysium - The Final Cut', 'Disco Elysium'])
     expect(titleVariants('Portal 2')).toEqual(['Portal 2'])
   })
+
+  it('falls back to main story plus extras when there is no main story time', () => {
+    expect(hltbTimes({ game_id: 3, game_name: 'Frog Island', comp_main: 0, comp_plus: 12600 }).main).toBe(210)
+    expect(hltbTimes({ game_id: 3, game_name: 'Frog Island' }).main).toBeUndefined()
+  })
 })

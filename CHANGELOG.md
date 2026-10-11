@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.98] - 2026-10-11
+
+- When HowLongToBeat has no main story time for a game, its main story plus extras time (in minutes) is used instead, for Duration and Main Story.
+
 ## [0.0.97] - 2026-10-11
 
 - HowLongToBeat lookups also try a game's name without its subtitle or edition when the full name finds nothing, so a game Steam has renamed ("Slay the Princess — The Pristine Cut", "Hades: Definitive Edition", "Disco Elysium - The Final Cut") still gets its times. Still only exact name matches.

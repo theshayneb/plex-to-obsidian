@@ -11,7 +11,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel, fullDate } from '../src/properties'
+  type NoteContext, collectionStatus, parseCollectionStatus, DEFAULT_COLLECTION_STATUS, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel, fullDate } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -325,5 +325,27 @@ describe('playtime', () => {
     expect([playtimeShrinks(12.5, 10), playtimeShrinks('12.5', 10), playtimeShrinks(8, 10), playtimeShrinks('', 10), playtimeShrinks(undefined, 10)]).toEqual([true, true, false, false, false])
     expect(checkValue('playtime', 12.5, 10, [], 'game')).toBeNull()
     expect(checkValue('playtime', 8, 10, [], 'game')).toEqual({ to: 10, ticked: false })
+  })
+})
+
+describe('collectionStatus', () => {
+  it('gives the first listed collection\'s status, any case', () => {
+    expect(collectionStatus(['right now', 'Completed'], DEFAULT_COLLECTION_STATUS)).toBe('completed')
+    expect(collectionStatus(['Right Now'], DEFAULT_COLLECTION_STATUS)).toBe('planned')
+    expect(collectionStatus(['Cozy'], DEFAULT_COLLECTION_STATUS)).toBeUndefined()
+    expect(collectionStatus(undefined, DEFAULT_COLLECTION_STATUS)).toBeUndefined()
+  })
+
+  it('sets a game\'s status over its playtime one', () => {
+    const game: PlexItem = { ratingKey: 'steam-1', type: 'game', title: 'G', playtimeMinutes: 10, steamCollections: ['abandoned'] }
+    const ctx: NoteContext = { kind: 'game', link: '', image: null, values: defaultValues('game') }
+    expect(sourceValue('status', game, ctx)).toBe('abandoned')
+    expect(sourceValue('status', { ...game, steamCollections: [] }, ctx)).toBe('started')
+  })
+
+  it('reads the settings\' lines', () => {
+    expect(parseCollectionStatus('revisit: revisit\nRight Now:planned\n\nnonsense\nA: b: c')).toEqual([
+      { collection: 'revisit', status: 'revisit' }, { collection: 'Right Now', status: 'planned' }, { collection: 'A: b', status: 'c' },
+    ])
   })
 })

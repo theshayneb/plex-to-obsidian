@@ -38,7 +38,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics } from './music-files'
@@ -405,7 +405,8 @@ export class PlexSync {
         const games = await this.steam!.ownedGames()
         // Your collections are only on this computer's Steam files (desktop only), so a game gets
         // them only when they could be read; otherwise its collections property is left alone.
-        const collections = usesSource(lib.properties, 'steamCollections')
+        // Collections are also read when they set games' statuses.
+        const collections = usesSource(lib.properties, 'steamCollections') || (usesSource(lib.properties, 'status') && lib.values.collectionStatus?.length)
           ? readSteamCollections(await this.steam!.steamId(), this.settings.steam.folder ?? '')
           : null
         // Steam leaves free games you haven't played out of your list, so a note already linked to a
@@ -556,9 +557,18 @@ export class PlexSync {
           const rating = this.ratingPlan(file, item, lib)
           const notOverwritten = new Set([...beingFilled, ...rescale?.names ?? []])
           if (rating && rating.direction !== 'toNote') rating.names.forEach(name => notOverwritten.add(name))
-          const plays = counting ? this.planUpdates(file, item, lib, updating, notOverwritten) : null
+          let plays = counting ? this.planUpdates(file, item, lib, updating, notOverwritten) : null
           // Only offered when there's a pop-up to choose in: a link already there is never replaced unasked.
           const asking = full && this.settings.askBeforeChanges && Boolean(this.approve)
+          // A game's Steam collection sets its status, even backwards, but only when asked.
+          const byCollection = asking ? this.planCollectionStatus(file, item, lib, notOverwritten) : null
+          if (byCollection) {
+            plays = {
+              names: [...new Set([...plays?.names ?? [], ...byCollection.names])],
+              from: byCollection.from,
+              to: { ...plays?.to, ...byCollection.to },
+            }
+          }
           // A check offers sending your rating to Plex whenever the two differ (you pick which wins);
           // a sync only when the note's is the one that changed.
           const offerToPlex = genreCheck ? ratingChecked && Boolean(rating?.note && rating.note !== rating.plex) : asking && this.settings.sendRatings && rating?.direction === 'toPlex'
@@ -664,6 +674,10 @@ export class PlexSync {
               }
             }
             const playNames = (plays?.names ?? []).filter(name => !excluded.has(`update:${name}`))
+            // A status from a collection you left unticked isn't offered again while both stay the same.
+            for (const name of (byCollection?.names ?? []).filter(n => excluded.has(`update:${n}`))) {
+              this.keep(`${item.ratingKey}|${name}`, byCollection!.from[name], byCollection!.to[name])
+            }
             const playValue = (name: string): unknown => {
               const edited = edits[`update:${name}`]
               return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
@@ -872,7 +886,7 @@ export class PlexSync {
         result.unmatchedWhy[path] = `Its link is to ${displayName(item)}, but another note is matched to that.`
         continue
       }
-      if (key.startsWith('imdb-') || key.startsWith('ol-') || key.startsWith('hltb-')) continue
+      if (key.startsWith('imdb-') || key.startsWith('ol-') || key.startsWith('gb-') || key.startsWith('hltb-')) continue
       progress(`Looking into ${file.basename}…`)
       try {
         result.unmatchedWhy[path] = (await this.explainMissing(key)).join(': ')
@@ -1317,6 +1331,27 @@ export class PlexSync {
   }
 
   /**
+   * The status a game's Steam collections give it (`collectionStatus`), for each status property
+   * whose value differs (any case) and wasn't kept: offered even when it's a step back.
+   */
+  private planCollectionStatus(file: TFile, item: PlexItem, lib: ActiveLibrary, skip: Set<string>): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
+    const status = collectionStatus(item.steamCollections, lib.values.collectionStatus)
+    if (!status) return null
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const to: Record<string, unknown> = {}
+    for (const m of lib.properties) {
+      const name = m.name.trim()
+      if (!STATUS_SOURCES.includes(m.source) || !name || skip.has(name)) continue
+      const current: unknown = from[name]
+      if (typeof current === 'string' && current.trim().toLowerCase() === status.toLowerCase()) continue
+      if (this.isKept(`${item.ratingKey}|${name}`, current, status)) continue
+      to[name] = status
+    }
+    const names = Object.keys(to)
+    return names.length ? { names, from, to } : null
+  }
+
+  /**
    * The note's properties with these sources (play counts, playtime, ratings) that differ from the
    * current values: the one case where a value already in a note is replaced. Nothing is cleared
    * when Plex has no value.
@@ -1452,7 +1487,7 @@ export class PlexSync {
         const value = sourceValue(m.source, item, ctx, m.text)
         if (isBlank(value) || sameValue(current, value) || kept(value)) continue
         to[name] = value
-        if (statusMovesForward(current, value, lib.values)) ticked.add(name)
+        if (statusMovesForward(current, value, lib.values) || collectionStatus(item.steamCollections, lib.values.collectionStatus)) ticked.add(name)
         else yours.add(name)
         continue
       }
@@ -1531,7 +1566,9 @@ export class PlexSync {
       const link: unknown = linkProp ? from[linkProp] : undefined
       const linked = ratingKeyFromLink(link)
       const work = linked?.startsWith('ol-') ? linked.slice(3) : null
-      if (!work && noteKey in this.settings.keptLinks) {
+      // Books Open Library doesn't have are linked to Google Books instead.
+      const volume = linked?.startsWith('gb-') ? linked.slice(3) : null
+      if (!work && !volume && noteKey in this.settings.keptLinks) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
         rescaleOnly()
         continue
@@ -1546,7 +1583,7 @@ export class PlexSync {
         const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
         // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
         const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
-        book = await lookUpBook({ work, title, author: authors[0] }, this.settings.googleBooksKey ?? '')
+        book = await lookUpBook({ work, volume, title, author: authors[0] }, this.settings.googleBooksKey ?? '')
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
         rescaleOnly()
@@ -1558,7 +1595,7 @@ export class PlexSync {
         continue
       }
       result.checked.push(file.path)
-      const searched = !work
+      const searched = !work && !volume
       const checks = this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
       const lines: ApprovalLine[] = this.rescaleLines(rescale)
       for (const name of checks?.names ?? []) {

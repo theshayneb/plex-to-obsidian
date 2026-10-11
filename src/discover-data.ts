@@ -268,7 +268,18 @@ export function hltbFound(game: HltbGame): Found {
 
 /** One result of a Google Books search (only what's used). */
 export interface GoogleVolume {
-  volumeInfo?: { title?: string, subtitle?: string, authors?: string[], description?: string, publishedDate?: string }
+  id?: string
+  volumeInfo?: {
+    title?: string
+    subtitle?: string
+    authors?: string[]
+    description?: string
+    publishedDate?: string
+    pageCount?: number
+    categories?: string[]
+    imageLinks?: { thumbnail?: string, smallThumbnail?: string }
+    industryIdentifiers?: { type?: string, identifier?: string }[]
+  }
 }
 
 const titleKey = (title: string): string => title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
@@ -307,4 +318,64 @@ export function googleDescription(volumes: GoogleVolume[] | undefined, title: st
   const html = best?.volumeInfo?.description
   if (!html) return undefined
   return plainText(html.replace(/<\/p>\s*/gi, '\n\n'))?.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Google Books' categories ("Fiction / Literary"), each part once, without "General". */
+function googleGenres(categories: string[] | undefined): string[] {
+  const genres: string[] = []
+  for (const part of (categories ?? []).flatMap(c => c.split('/'))) {
+    const genre = part.trim()
+    if (genre && !/^general$/i.test(genre) && !genres.some(g => g.toLowerCase() === genre.toLowerCase())) genres.push(genre)
+  }
+  return genres
+}
+
+/**
+ * A Google Books volume as a book, for books Open Library doesn't have: key `gb-<volume id>`, its
+ * Google Books page as its link, and the edition's date (Google Books has no first-publication date).
+ */
+export function googleFound(volume: GoogleVolume): Found | null {
+  const info = volume.volumeInfo
+  if (!volume.id || !info?.title) return null
+  const title = info.title.trim()
+  const date = info.publishedDate?.trim() ?? ''
+  const year = /^\d{4}/.test(date) ? Number(date.slice(0, 4)) : undefined
+  const ids = info.industryIdentifiers ?? []
+  const isbn = ids.find(i => i.type === 'ISBN_13')?.identifier ?? ids.find(i => i.type === 'ISBN_10')?.identifier
+  const image = (info.imageLinks?.thumbnail ?? info.imageLinks?.smallThumbnail)?.replace(/^http:/, 'https:').replace(/&edge=curl/, '')
+  const authors = info.authors ?? []
+  const html = info.description
+  return {
+    item: {
+      ratingKey: `gb-${volume.id}`,
+      type: 'book',
+      title,
+      year,
+      ...(/^\d{4}-\d{2}-\d{2}$/.test(date) ? { originallyAvailableAt: date } : {}),
+      authors,
+      pages: info.pageCount || undefined,
+      isbn,
+      Genre: tags(googleGenres(info.categories)),
+      summary: html ? plainText(html.replace(/<\/p>\s*/gi, '\n\n'))?.replace(/\n{3,}/g, '\n\n').trim() : undefined,
+      portrait: image,
+      webLink: `https://books.google.com/books?id=${volume.id}`,
+    },
+    detail: [authors.join(', '), year].filter(Boolean).join(' · '),
+    thumb: image,
+    source: 'Google Books',
+  }
+}
+
+/** The Google Books volumes that are this book (same title, or one starting the same; by this author when given). */
+export function googleSameBooks(volumes: GoogleVolume[] | undefined, title: string, author?: string): GoogleVolume[] {
+  const want = titleKey(title)
+  const by = author ? titleKey(author) : ''
+  return (volumes ?? []).filter(v => {
+    const got = titleKey(v.volumeInfo?.title ?? '')
+    const titled = Boolean(got && want) && (got === want || got.startsWith(want) || want.startsWith(got))
+    return titled && (!by || (v.volumeInfo?.authors ?? []).some(name => {
+      const a = titleKey(name)
+      return Boolean(a) && (a.includes(by) || by.includes(a))
+    }))
+  })
 }

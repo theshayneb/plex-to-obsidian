@@ -156,6 +156,38 @@ export interface PropertyValues {
   unwatched: string
   /** For the "Type tag" source. */
   tag: string
+  /** Games: the status a game in each Steam collection gets, the first that applies winning (over playtime too). */
+  collectionStatus?: CollectionStatus[]
+}
+
+/** A Steam collection and the status its games get. */
+export interface CollectionStatus { collection: string, status: string }
+
+/** The owner's: these collections set a game's status, in this order. */
+export const DEFAULT_COLLECTION_STATUS: CollectionStatus[] = [
+  { collection: 'revisit', status: 'revisit' },
+  { collection: 'pending', status: 'pending' },
+  { collection: 'abandoned', status: 'abandoned' },
+  { collection: 'completed', status: 'completed' },
+  { collection: 'Right Now', status: 'planned' },
+]
+
+/**
+ * The status a game's Steam collections give it: the first pair whose collection it's in (any
+ * case), or undefined when it's in none of them or its collections couldn't be read.
+ */
+export function collectionStatus(collections: string[] | undefined, pairs: CollectionStatus[] | undefined): string | undefined {
+  if (!collections?.length || !pairs?.length) return undefined
+  const mine = new Set(collections.map(c => c.trim().toLowerCase()))
+  return pairs.find(p => p.status.trim() && mine.has(p.collection.trim().toLowerCase()))?.status.trim()
+}
+
+/** Pairs as written in the settings, one per line: "collection: status". */
+export function parseCollectionStatus(text: string): CollectionStatus[] {
+  return text.split('\n').map(line => {
+    const at = line.lastIndexOf(':')
+    return at < 0 ? null : { collection: line.slice(0, at).trim(), status: line.slice(at + 1).trim() }
+  }).filter((p): p is CollectionStatus => Boolean(p?.collection && p.status))
 }
 
 export const DEFAULT_TAGS: Record<MediaKind, string> = {
@@ -168,7 +200,10 @@ export const DEFAULT_TAGS: Record<MediaKind, string> = {
 }
 
 export function defaultValues(kind: MediaKind): PropertyValues {
-  return { watched: 'completed', started: 'started', unwatched: 'pending', tag: DEFAULT_TAGS[kind] }
+  return {
+    watched: 'completed', started: 'started', unwatched: 'pending', tag: DEFAULT_TAGS[kind],
+    ...kind === 'game' ? { collectionStatus: DEFAULT_COLLECTION_STATUS.map(p => ({ ...p })) } : {},
+  }
 }
 
 /** Per-note values that come from outside the Plex item itself. */
@@ -460,7 +495,8 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'durationMinutes': { const ms = lengthOf(item); return ms ? Math.round(ms / 60000) : undefined }
     case 'durationText': return durationText(lengthOf(item))
     case 'durationClock': return durationClock(lengthOf(item))
-    case 'status': return isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched
+    case 'status': return collectionStatus(item.steamCollections, ctx.values.collectionStatus)
+      ?? (isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched)
     case 'plexLink': return ctx.link
     case 'poster': return ctx.image ?? undefined
     case 'typeTag': return ctx.values.tag ? [ctx.values.tag] : undefined

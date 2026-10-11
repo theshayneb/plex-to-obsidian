@@ -86,7 +86,7 @@ export interface PlexItem {
   hltb?: import('./hltb-data').HltbTimes
   /** Other covers to choose from in the approval pop-up. */
   coverChoices?: import('./steamgriddb').CoverChoice[]
-  // Found with "Add something new" (not from Plex or Steam): ratingKey "imdb-…", "ol-…" or "hltb-…"
+  // Found with "Add something new" (not from Plex or Steam): ratingKey "imdb-…", "ol-…", "gb-…" (Google Books) or "hltb-…"
   /** The item's page (IMDb, Open Library, HowLongToBeat), used as its Link. */
   webLink?: string
   // Books
@@ -225,7 +225,7 @@ export function steamStoreUrl(appId: number): string {
 
 /**
  * Reads the item's key back out of a note's Link property: a Plex rating key, or "steam-<appid>",
- * "imdb-<id>", "ol-<work id>" or "hltb-<id>" for Steam Store, IMDb, Open Library and HowLongToBeat pages.
+ * "imdb-<id>", "ol-<work id>", "gb-<volume id>" or "hltb-<id>" for Steam Store, IMDb, Open Library, Google Books and HowLongToBeat pages.
  */
 export function ratingKeyFromLink(link: unknown): string | null {
   if (typeof link !== 'string') return null
@@ -237,6 +237,8 @@ export function ratingKeyFromLink(link: unknown): string | null {
   if (openLibrary) return `ol-${openLibrary[1]}`
   const hltb = /howlongtobeat\.com\/game\/(\d+)/i.exec(link)
   if (hltb) return `hltb-${hltb[1]}`
+  const google = /books\.google\.[a-z.]+\/books[^\s)\]]*?[?&]id=([\w-]+)/i.exec(link)
+  if (google) return `gb-${google[1]}`
   // A song's link is to its album's page, with the track's key after it.
   const track = /[?&]track=(\d+)/.exec(link)
   if (track) return track[1]

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.103] - 2026-10-11
+
+- Steam collections can set a game's status: a game in "revisit", "pending", "abandoned" or "completed" gets that status, and one in "Right Now" gets "planned" (the first that applies wins, over the played or not played status). A sync asks before changing a note's status this way, even backwards; one you leave unticked isn't offered again until the collection changes. Checks offer it ticked. The pairs are editable in the Steam library's settings ("Status from Steam collections", one "collection: status" per line). Desktop only, like collections.
+- Books Open Library doesn't have are looked up on Google Books: checks fall back to it (same title by the same author only) and offer its Google Books page as the note's link, which later checks use; "Add a movie, show, game or book" lists Google Books results after Open Library's.
+
 ## [0.0.102] - 2026-10-11
 
 - Recommendations: the Last.fm card ("Songs you don't have, from Last.fm") now only suggests songs you don't have, by any artist, that are like your 🩷 and ⭐⭐⭐⭐ songs. It no longer suggests artists or songs you already have. It asks about up to 40 loved songs (was 30), 50 similar songs each, and shows the best 15.

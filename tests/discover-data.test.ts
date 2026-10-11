@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bookGenres, cleanOmdbKey, earliestYear, firstPublishYear, googleDate, googleDescription, sameBooks, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { bookGenres, cleanOmdbKey, earliestYear, firstPublishYear, googleDate, googleDescription, googleFound, googleSameBooks, type GoogleVolume, sameBooks, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
@@ -145,5 +145,49 @@ describe('Google Books summaries', () => {
   it('accepts a subtitle, and any result found by ISBN', () => {
     expect(googleDescription([volume('Dune: Deluxe Edition', 'Desert.')], 'Dune', false)).toBe('Desert.')
     expect(googleDescription([volume('Dune (Movie Tie-In)', 'Desert.')], 'Something', true)).toBe('Desert.')
+  })
+})
+
+describe('Google Books as a source of books', () => {
+  const volume: GoogleVolume = {
+    id: 'abc-1',
+    volumeInfo: {
+      title: 'We Sent Them Down Singing',
+      authors: ['Libby Edwardson'],
+      publishedDate: '2025-03-04',
+      pageCount: 320,
+      categories: ['Fiction / Literary', 'Fiction / General'],
+      description: '<p>A novel.</p>',
+      imageLinks: { thumbnail: 'http://books.google.com/books/content?id=abc-1&printsec=frontcover&img=1&zoom=1&edge=curl' },
+      industryIdentifiers: [{ type: 'ISBN_10', identifier: '123' }, { type: 'ISBN_13', identifier: '9781234567890' }],
+    },
+  }
+
+  it('makes a book from a volume', () => {
+    expect(googleFound(volume)?.item).toEqual({
+      ratingKey: 'gb-abc-1',
+      type: 'book',
+      title: 'We Sent Them Down Singing',
+      year: 2025,
+      originallyAvailableAt: '2025-03-04',
+      authors: ['Libby Edwardson'],
+      pages: 320,
+      isbn: '9781234567890',
+      Genre: [{ tag: 'Fiction' }, { tag: 'Literary' }],
+      summary: 'A novel.',
+      portrait: 'https://books.google.com/books/content?id=abc-1&printsec=frontcover&img=1&zoom=1',
+      webLink: 'https://books.google.com/books?id=abc-1',
+    })
+    expect(googleFound({ volumeInfo: { title: 'No id' } })).toBeNull()
+  })
+
+  it('only takes the same title by the same author', () => {
+    const other: GoogleVolume = { id: 'x', volumeInfo: { title: 'We Sent Them Down Singing', authors: ['Someone Else'] } }
+    expect(googleSameBooks([other, volume], 'We Sent Them Down Singing', 'Libby Edwardson')).toEqual([volume])
+  })
+
+  it('reads a Google Books link', () => {
+    expect(ratingKeyFromLink('https://books.google.com/books?id=abc-1')).toBe('gb-abc-1')
+    expect(ratingKeyFromLink('https://books.google.co.uk/books/about/X.html?hl=en&id=Q_7xEAAAQBAJ')).toBe('gb-Q_7xEAAAQBAJ')
   })
 })

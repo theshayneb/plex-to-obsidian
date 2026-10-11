@@ -89,7 +89,7 @@ export class AddModal extends Modal {
       results.empty()
       results.createEl('p', { cls: 'setting-item-description', text: 'Searching…' })
       try {
-        const found = await findItems(this.pmnKind, this.pmnQuery.trim(), this.pmnSettings.omdbKey ?? '')
+        const found = await findItems(this.pmnKind, this.pmnQuery.trim(), this.pmnSettings.omdbKey ?? '', this.pmnSettings.googleBooksKey ?? '')
         this.pmnShowResults(results, found)
       } catch (err) {
         results.empty()

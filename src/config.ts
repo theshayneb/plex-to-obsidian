@@ -242,6 +242,7 @@ export function retarget(lib: LibrarySetting, target: LibraryTarget): LibrarySet
     started: lib.values.started || values.started,
     unwatched: lib.values.unwatched || values.unwatched,
     tag: was(lib.values.tag, k => DEFAULT_TAGS[k]) ? values.tag : lib.values.tag,
+    ...values.collectionStatus ? { collectionStatus: lib.values.collectionStatus ?? values.collectionStatus } : {},
   }
   return lib
 }
@@ -364,6 +365,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
           m.source === 'plexLink' || m.source === 'summary' ? { ...m, fill: true } : m)
       }
       migrated.values = {
+        ...migrated.values,
         watched: saved.values?.watched || migrated.values.watched,
         started: saved.values?.started || migrated.values.started,
         unwatched: saved.values?.unwatched || migrated.values.unwatched,

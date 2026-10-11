@@ -20,7 +20,7 @@ import { PlexClient } from './plex'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { PropertyNameSuggest } from './property-suggest'
-import { defaultProperties, defaultValues, FIELD_SOURCES, linkPropertyNames, type FieldSource } from './properties'
+import { defaultProperties, defaultValues, FIELD_SOURCES, linkPropertyNames, parseCollectionStatus, type FieldSource } from './properties'
 import { groupByKind, keptEntries, kindOfLibrary, kindOfPath, OTHER_KIND, type KeptEntry } from './remembered'
 
 const noteName = (path: string): string => path.split('/').pop()!.replace(/\.md$/, '')
@@ -270,6 +270,18 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         () => lib.values.started, v => { lib.values.started = v || defaults.started })
       this.addValueSetting(el, 'Not played', 'For "Watched or played status": a game never played.',
         () => lib.values.unwatched, v => { lib.values.unwatched = v || defaults.unwatched })
+      new Setting(el)
+        .setName('Status from Steam collections')
+        .setDesc('One per line, "collection: status". A game in one of these Steam collections gets that status instead of the played or not played one, the first line that applies winning. A sync asks before changing a note\'s status this way, even backwards (say, completed to revisit); one you leave unticked isn\'t offered again until the collection changes. Collections are only read on a computer with Steam.')
+        .addTextArea(text => {
+          text.inputEl.rows = 6
+          text.setPlaceholder('Collection: status')
+            .setValue((lib.values.collectionStatus ?? []).map(p => `${p.collection}: ${p.status}`).join('\n'))
+            .onChange(async value => {
+              lib.values.collectionStatus = parseCollectionStatus(value)
+              await this.save()
+            })
+        })
     } else if (!music) {
       this.addValueSetting(el, 'Watched', 'For "Watched or played status": a movie that has been played, or a show with every episode watched.',
         () => lib.values.watched, v => { lib.values.watched = v || defaults.watched })

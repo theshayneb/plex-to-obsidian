@@ -3,6 +3,8 @@ import {
   bookGenres,
   googleDate,
   googleDescription,
+  googleFound,
+  googleSameBooks,
   cleanOmdbKey,
   hltbFound,
   omdbFound,
@@ -49,7 +51,7 @@ async function getJson(url: string, headers: Record<string, string> = {}): Promi
 }
 
 /** Searches the databases for a kind of item. */
-export async function findItems(kind: FindKind, query: string, omdbKey: string): Promise<Found[]> {
+export async function findItems(kind: FindKind, query: string, omdbKey: string, googleKey = ''): Promise<Found[]> {
   if (kind === 'movie' || kind === 'show') {
     omdbKey = cleanOmdbKey(omdbKey)
     if (!omdbKey) throw new Error('Add an OMDb API key in the settings first (Adding things not in Plex or Steam)')
@@ -62,9 +64,24 @@ export async function findItems(kind: FindKind, query: string, omdbKey: string):
     return (body.Search ?? []).map(omdbFound)
   }
   if (kind === 'book') {
+    // Open Library first; Google Books after it, for books Open Library doesn't have.
     const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${OPEN_LIBRARY_FIELDS}`
-    const body = await getJson(url, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
-    return (body.docs ?? []).map(openLibraryFound).filter((f): f is Found => f !== null)
+    const [open, google] = await Promise.allSettled([
+      getJson(url, OPEN_LIBRARY_HEADERS) as Promise<{ docs?: OpenLibraryDoc[] }>,
+      googleVolumes(query, googleKey),
+    ])
+    const found = open.status === 'fulfilled' ? (open.value.docs ?? []).map(openLibraryFound).filter((f): f is Found => f !== null) : []
+    const known = new Set(found.map(f => bookKey(f.item)))
+    if (google.status === 'fulfilled') {
+      for (const f of google.value.map(googleFound)) {
+        if (f && !known.has(bookKey(f.item))) {
+          known.add(bookKey(f.item))
+          found.push(f)
+        }
+      }
+    }
+    if (!found.length && open.status === 'rejected') throw open.reason
+    return found
   }
   // Games: Steam first, then HowLongToBeat for games on other platforms.
   const steamUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=english&cc=US`
@@ -120,11 +137,12 @@ function bookQuery(title: string, author?: string): string {
 
 /**
  * A book's Open Library details, for checking a book note: by its work (from the note's Open
- * Library link) or, failing that, the likeliest match for its title and author. Its genres are all
- * the work's subjects (cleaned of tags) and its summary the work's description. Null when nothing
- * is found.
+ * Library link), its Google Books volume (from a Google Books link) or, failing those, the likeliest
+ * Open Library match for its title and author, and then Google Books' (for books Open Library
+ * doesn't have). Its genres are all the work's subjects (cleaned of tags) and its summary the work's
+ * description. Null when nothing is found.
  */
-export async function lookUpBook(by: { work?: string | null, title?: string, author?: string }, googleKey = ''): Promise<PlexItem | null> {
+export async function lookUpBook(by: { work?: string | null, volume?: string | null, title?: string, author?: string }, googleKey = ''): Promise<PlexItem | null> {
   type Work = { title?: string, subjects?: string[], description?: string | { value?: string } }
   const workJson = (work: string) => getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as Promise<Work>
   if (by.work) {
@@ -146,12 +164,24 @@ export async function lookUpBook(by: { work?: string | null, title?: string, aut
     const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
     return withGoogle({ ...book, Genre: genres }, googleKey, openLibraryDescription(body) ?? found?.item.summary)
   }
+  if (by.volume) {
+    // Linked to Google Books: that volume.
+    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(by.volume)}${googleKey.trim() ? `?key=${encodeURIComponent(googleKey.trim())}` : ''}`)
+    if (res.status === 404) return null
+    if (res.status >= 400) throw new Error(`Google Books returned ${res.status}`)
+    return googleFound(res.json as GoogleVolume)?.item ?? null
+  }
   if (!by.title) return null
   const docs = await searchBooks(bookQuery(by.title, by.author), 20)
   // The record with the most editions is the book itself; the earliest year among all its records counts.
   const same = sameBooks(docs, by.title, by.author)
   const found = [...same, ...docs].map(openLibraryFound).find((f): f is Found => f !== null)
-  if (!found) return null
+  if (!found) {
+    // Not on Open Library (say, a new book): Google Books, only the same title by the same author.
+    const volumes = await googleVolumes(`intitle:"${by.title}"${by.author ? ` inauthor:"${by.author}"` : ''}`, googleKey)
+    const volume = googleSameBooks(volumes, by.title, by.author)[0]
+    return volume ? googleFound(volume)?.item ?? null : null
+  }
   if (same.length) found.item.year = earliestYear(same) ?? found.item.year
   const work = found.item.ratingKey.slice(3)
   const body = await workJson(work).catch(() => null)
@@ -188,6 +218,23 @@ export async function googleBooksInfo(book: PlexItem, key = ''): Promise<{ summa
   }
   return out
 }
+
+/** Google Books' search results (the whole volumes); empty when it can't be reached. */
+async function googleVolumes(query: string, key: string): Promise<GoogleVolume[]> {
+  const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
+  try {
+    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&printType=books${withKey}`)
+    if (res.status >= 400) return []
+    return (res.json as { items?: GoogleVolume[] } | null)?.items ?? []
+  } catch (err) {
+    console.warn('Media Manager: Google Books search failed', err)
+    return []
+  }
+}
+
+/** A book's title and first author, for not listing the same book from both sources. */
+const bookKey = (item: PlexItem): string =>
+  `${item.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')}|${(item.authors?.[0] ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')}`
 
 /** A book with what Google Books adds: its summary (else `fallback`) and its full publication date. */
 async function withGoogle(book: PlexItem, key: string, fallback: string | undefined): Promise<PlexItem> {

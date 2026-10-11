@@ -1356,6 +1356,47 @@ describe('PlexSync', () => {
     expect(vi.mocked(readSteamCollections)).toHaveBeenLastCalledWith('76561197960287930', '')
   })
 
+  it('sets a game\'s status from its Steam collection when asked, even backwards, and remembers a refusal', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 300 }] } },
+    }
+    const { app, frontmatter } = makeApp({ 'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/', Status: 'completed' } })
+    const settings = settingsWith({ serverUrl: '', token: '', askBeforeChanges: true, updateStatus: false, steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    settings.libraries.steam.properties = [{ name: 'Link', source: 'plexLink' }, { name: 'Status', source: 'status' }]
+    const requests: ApprovalRequest[] = []
+    let untick = true
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: untick ? r.lines.map(l => l.key) : [] })
+    })
+
+    // In "revisit" (and "Right Now"): revisit wins, being first. Left unticked: kept.
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Right Now', 'Revisit']]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.map(r => r.lines.map(l => [l.label, l.current, l.value]))).toEqual([[['Status', 'completed', 'revisit']]])
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Status).toBe('completed')
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests).toEqual([])
+
+    // Moved to "Right Now": offered again, and applied.
+    untick = false
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Right Now']]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.map(r => r.lines.map(l => [l.label, l.value]))).toEqual([[['Status', 'planned']]])
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Status).toBe('planned')
+
+    // In none of them: the playtime status, only ever forwards (and only with updating statuses on).
+    requests.length = 0
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Cozy']]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests).toEqual([])
+    vi.mocked(readSteamCollections).mockReturnValue(null)
+  })
+
   it('takes a book\'s summary from Google Books, else Open Library\'s', async () => {
     steamResponses = {
       'https://openlibrary.org/search.json?q=': { docs: [{ key: '/works/OL893415W', title: 'Dune', author_name: ['Frank Herbert'], first_publish_year: 1965, isbn: ['9780441172719'] }] },
@@ -1371,6 +1412,29 @@ describe('PlexSync', () => {
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary'])
     expect(frontmatter.get('Media/Books/Dune by Frank Herbert.md')!.Summary).toBe('Set on the desert planet Arrakis…')
     expect(requested.some(u => u.startsWith('https://www.googleapis.com/books/v1/volumes?q=isbn%3A9780441172719'))).toBe(true)
+  })
+
+  it('finds a book Open Library doesn\'t have on Google Books, and then by its Google Books link', async () => {
+    const volume = { id: 'abc-1', volumeInfo: { title: 'We Sent Them Down Singing', authors: ['Libby Edwardson'], publishedDate: '2025-03-04', pageCount: 320 } }
+    steamResponses = {
+      'https://openlibrary.org/search.json?': { docs: [] },
+      'https://www.googleapis.com/books/v1/volumes?q=intitle': { items: [{ id: 'x', volumeInfo: { title: 'Something else', authors: ['Libby Edwardson'] } }, volume] },
+    }
+    const path = 'Media/Books/We Sent Them Down Singing by Libby Edwardson.md'
+    const { app, frontmatter } = makeApp({ [path]: { Author: ['Libby Edwardson'], Duration: 100 } })
+    const settings = settingsWith()
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'apply' as const, excluded: [] }))
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
+    expect(result.unmatched).toEqual([])
+    expect(frontmatter.get(path)).toMatchObject({ Duration: 320, Link: 'https://books.google.com/books?id=abc-1' })
+
+    // Linked: that volume, looked up directly.
+    steamResponses = { 'https://www.googleapis.com/books/v1/volumes/abc-1': { ...volume, volumeInfo: { ...volume.volumeInfo, pageCount: 330 } } }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
+    expect(frontmatter.get(path)!.Duration).toBe(330)
   })
 
   it('offers a cover you set yourself (a [[link]] to a vault image) unticked in a check', async () => {

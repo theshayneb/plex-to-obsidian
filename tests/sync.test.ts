@@ -1143,9 +1143,15 @@ describe('PlexSync', () => {
         ? { choice: 'apply', excluded: ['fix:Summary'], locked: ['Summary'] }
         : { choice: 'apply', excluded: [] })
     }
-    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Summary', 'Date'])
+    const saved: string[] = []
+    await new PlexSync(app as never, settings, () => {
+      saved.push(JSON.stringify(settings.lockedProperties))
+      return Promise.resolve()
+    }, approve).run(() => {}, 'check', ['Summary', 'Date'])
     expect(requests[0].lines.map(l => l.label).sort()).toEqual(['Date', 'Summary'])
     expect(settings.lockedProperties).toEqual({ 'Media/Movies/Arrival (2016).md': ['Summary'] })
+    // Saved to the plugin's settings at once.
+    expect(saved).toContain(JSON.stringify({ 'Media/Movies/Arrival (2016).md': ['Summary'] }))
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Summary).toBe('Mine.')
     // Next time Summary isn't offered, and a check of Summary alone asks nothing.
     requests.length = 0

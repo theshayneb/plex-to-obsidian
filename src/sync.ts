@@ -271,6 +271,8 @@ export class PlexSync {
     if (newlyLocked.length) {
       const names = new Set([...this.settings.lockedProperties[request.path] ?? [], ...newlyLocked.map(l => l.label)])
       this.settings.lockedProperties[request.path] = [...names]
+      // Saved straight away, so the lock holds even if Obsidian is closed before the run ends.
+      await this.saveSettings()
     }
     const lockedKeys = new Set(newlyLocked.map(l => l.key))
     // "All the rest" repeats the unticked lines (not ones locked for this note alone), not this note's edits.

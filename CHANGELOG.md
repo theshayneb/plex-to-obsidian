@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.94] - 2026-10-11
+
+- Fixed: locks ("Never change this in this note") were only remembered until Obsidian closed, so locked properties came back in later checks. A lock is now saved the moment the pop-up is answered, and also when the pop-up is closed with its ×.
+
 ## [0.0.93] - 2026-10-11
 
 - Sending a Base to an existing Plex playlist replaces its songs: the playlist is emptied in one go first (anything left is removed one by one), then filled with the Base's songs in order. Afterwards the plugin checks Plex holds exactly those songs, and says so if it doesn't.

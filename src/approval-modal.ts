@@ -251,7 +251,8 @@ export class ApprovalModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty()
-    if (!this.pmnDecided) this.pmnResolve({ choice: 'skip', excluded: [] })
+    // Closed without choosing: skipped, but a lock pressed still counts.
+    if (!this.pmnDecided) this.pmnResolve({ choice: 'skip', excluded: [], locked: [...this.pmnLocked] })
   }
 
   /** Thumbnails under a cover's link: clicking one puts its address in the box. */

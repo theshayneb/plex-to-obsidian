@@ -1382,12 +1382,18 @@ describe('PlexSync', () => {
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     expect(requests).toEqual([])
 
-    // Moved to "Right Now": offered again, and applied.
+    // Moved to "abandoned": offered again, and applied.
     untick = false
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Abandoned']]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.map(r => r.lines.map(l => [l.label, l.value]))).toEqual([[['Status', 'abandoned']]])
+    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Status).toBe('abandoned')
+
+    // "Right Now" (planned, until started): never for a game you've played.
+    requests.length = 0
     vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Right Now']]]))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
-    expect(requests.map(r => r.lines.map(l => [l.label, l.value]))).toEqual([[['Status', 'planned']]])
-    expect(frontmatter.get('Media/Video Games/Portal 2.md')!.Status).toBe('planned')
+    expect(requests).toEqual([])
 
     // In none of them: the playtime status, only ever forwards (and only with updating statuses on).
     requests.length = 0

@@ -11,7 +11,7 @@ import {
   linkPropertyNames,
   sourceValue,
   type FieldSource,
-  type NoteContext, collectionStatus, parseCollectionStatus, DEFAULT_COLLECTION_STATUS, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel, fullDate } from '../src/properties'
+  type NoteContext, collectionStatus, collectionStatusText, gameStarted, parseCollectionStatus, DEFAULT_COLLECTION_STATUS, keepGenres, noteMinutes, sameLengthOtherForm, statusMovesForward, noteStars, ratingDirection, fictionOnlyAlone, ratingLabel, fullDate } from '../src/properties'
 
 const movie: PlexItem = {
   ratingKey: '1234',
@@ -347,5 +347,39 @@ describe('collectionStatus', () => {
     expect(parseCollectionStatus('revisit: revisit\nRight Now:planned\n\nnonsense\nA: b: c')).toEqual([
       { collection: 'revisit', status: 'revisit' }, { collection: 'Right Now', status: 'planned' }, { collection: 'A: b', status: 'c' },
     ])
+  })
+})
+
+describe('until started collections', () => {
+  const values = defaultValues('game')
+  const fresh: PlexItem = { ratingKey: 'steam-2', type: 'game', title: 'New', playtimeMinutes: 0, steamCollections: ['Right Now'] }
+
+  it('plans a game not started yet, and not one with playtime or a status past not played', () => {
+    const ctx: NoteContext = { kind: 'game', link: '', image: null, values }
+    expect(sourceValue('status', fresh, ctx)).toBe('planned')
+    expect(sourceValue('status', { ...fresh, playtimeMinutes: 5 }, ctx)).toBe('started')
+    expect(gameStarted(fresh, values, 'pending')).toBe(false)
+    expect(gameStarted(fresh, values, 'planned')).toBe(false)
+    expect(gameStarted(fresh, values, 'started')).toBe(true)
+    expect(collectionStatus(['Right Now'], values.collectionStatus, true)).toBeUndefined()
+    expect(collectionStatus(['Right Now', 'revisit'], values.collectionStatus, true)).toBe('revisit')
+  })
+
+  it('reads and shows "(until started)"', () => {
+    const pairs = parseCollectionStatus('Right Now: planned (until started)\nrevisit: revisit')
+    expect(pairs).toEqual([{ collection: 'Right Now', status: 'planned', untilStarted: true }, { collection: 'revisit', status: 'revisit' }])
+    expect(collectionStatusText(pairs)).toBe('Right Now: planned (until started)\nrevisit: revisit')
+  })
+})
+
+describe('saved collection pairs', () => {
+  it('marks a saved "planned" pair as until started, once', async () => {
+    const { loadSettings } = await import('../src/config')
+    const saved = { libraries: { steam: { title: 'Steam', type: 'game', target: 'game', folder: 'Games', fileNameFormat: '{{title}}', matchBy: 'loose', properties: [], values: { watched: 'completed', started: 'started', unwatched: 'pending', tag: 'video_game', collectionStatus: [{ collection: 'Right Now', status: 'planned' }, { collection: 'revisit', status: 'revisit' }] } } } }
+    const settings = loadSettings(saved)
+    expect(settings.libraries.steam.values.collectionStatus).toEqual([{ collection: 'Right Now', status: 'planned', untilStarted: true }, { collection: 'revisit', status: 'revisit' }])
+    // Undone by hand afterwards: left alone.
+    settings.libraries.steam.values.collectionStatus = [{ collection: 'Right Now', status: 'planned' }]
+    expect(loadSettings(JSON.parse(JSON.stringify(settings))).libraries.steam.values.collectionStatus).toEqual([{ collection: 'Right Now', status: 'planned' }])
   })
 })

@@ -38,7 +38,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics } from './music-files'
@@ -1335,14 +1335,15 @@ export class PlexSync {
    * whose value differs (any case) and wasn't kept: offered even when it's a step back.
    */
   private planCollectionStatus(file: TFile, item: PlexItem, lib: ActiveLibrary, skip: Set<string>): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
-    const status = collectionStatus(item.steamCollections, lib.values.collectionStatus)
-    if (!status) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const to: Record<string, unknown> = {}
     for (const m of lib.properties) {
       const name = m.name.trim()
       if (!STATUS_SOURCES.includes(m.source) || !name || skip.has(name)) continue
       const current: unknown = from[name]
+      // A game you've started is never set back to an "until started" status (say, planned).
+      const status = collectionStatus(item.steamCollections, lib.values.collectionStatus, gameStarted(item, lib.values, current))
+      if (!status) continue
       if (typeof current === 'string' && current.trim().toLowerCase() === status.toLowerCase()) continue
       if (this.isKept(`${item.ratingKey}|${name}`, current, status)) continue
       to[name] = status
@@ -1484,10 +1485,12 @@ export class PlexSync {
       if (STATUS_SOURCES.includes(m.source)) {
         // Open Library knows nothing of your reading; elsewhere, only a step forward starts ticked.
         if (item.type === 'book') continue
-        const value = sourceValue(m.source, item, ctx, m.text)
+        const byCollection = collectionStatus(item.steamCollections, lib.values.collectionStatus, gameStarted(item, lib.values, current))
+        // A collection's "until started" status (say, planned) isn't offered for a game you've started.
+        const value = byCollection ?? (collectionStatus(item.steamCollections, lib.values.collectionStatus) ? undefined : sourceValue(m.source, item, ctx, m.text))
         if (isBlank(value) || sameValue(current, value) || kept(value)) continue
         to[name] = value
-        if (statusMovesForward(current, value, lib.values) || collectionStatus(item.steamCollections, lib.values.collectionStatus)) ticked.add(name)
+        if (statusMovesForward(current, value, lib.values) || byCollection) ticked.add(name)
         else yours.add(name)
         continue
       }

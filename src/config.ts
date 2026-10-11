@@ -407,6 +407,12 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     // other way round.
     settings.ratingsSeen = {}
   })
+  migrateOnce(settings, saved, 'collection-planned-until-started', () => {
+    // A started game isn't set back to "planned" by its Right Now collection.
+    for (const lib of Object.values(settings.libraries)) {
+      lib.values.collectionStatus = lib.values.collectionStatus?.map(p => p.status.trim().toLowerCase() === 'planned' ? { ...p, untilStarted: true } : p)
+    }
+  })
   migrateOnce(settings, saved, 'check-everything', () => {
     // The check now compares every property: start from all of them ticked again.
     settings.checkProperties = null

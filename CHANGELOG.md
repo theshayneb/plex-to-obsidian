@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.106] - 2026-10-11
+
+- A started game is never set back to "planned" by its Right Now collection: that pair is now "until started", only counting for a game with no playtime whose status is empty, not played (pending) or planned. A game you've played that's still in Right Now keeps its status (or gets its played status). Your saved pairs are updated; in the settings it shows as "Right Now: planned (until started)", and "(until started)" can be added to any other line.
+
 ## [0.0.105] - 2026-10-11
 
 - Book checks use far fewer Google Books requests: Google Books is only asked for summaries and exact dates when Summary or Date is among the properties checked, and its answers are reused while Obsidian runs. Before, every book in a check used up some of the key's daily allowance whatever was checked.

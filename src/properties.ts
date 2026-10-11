@@ -160,8 +160,11 @@ export interface PropertyValues {
   collectionStatus?: CollectionStatus[]
 }
 
-/** A Steam collection and the status its games get. */
-export interface CollectionStatus { collection: string, status: string }
+/**
+ * A Steam collection and the status its games get. `untilStarted`: only for a game not started yet
+ * (no playtime, and the note's status empty or not played), such as "planned".
+ */
+export interface CollectionStatus { collection: string, status: string, untilStarted?: boolean }
 
 /** The owner's: these collections set a game's status, in this order. */
 export const DEFAULT_COLLECTION_STATUS: CollectionStatus[] = [
@@ -169,25 +172,47 @@ export const DEFAULT_COLLECTION_STATUS: CollectionStatus[] = [
   { collection: 'pending', status: 'pending' },
   { collection: 'abandoned', status: 'abandoned' },
   { collection: 'completed', status: 'completed' },
-  { collection: 'Right Now', status: 'planned' },
+  { collection: 'Right Now', status: 'planned', untilStarted: true },
 ]
 
 /**
  * The status a game's Steam collections give it: the first pair whose collection it's in (any
- * case), or undefined when it's in none of them or its collections couldn't be read.
+ * case), passing over "until started" pairs once it's `started`; undefined when none applies or
+ * its collections couldn't be read.
  */
-export function collectionStatus(collections: string[] | undefined, pairs: CollectionStatus[] | undefined): string | undefined {
+export function collectionStatus(collections: string[] | undefined, pairs: CollectionStatus[] | undefined, started = false): string | undefined {
   if (!collections?.length || !pairs?.length) return undefined
   const mine = new Set(collections.map(c => c.trim().toLowerCase()))
-  return pairs.find(p => p.status.trim() && mine.has(p.collection.trim().toLowerCase()))?.status.trim()
+  return pairs.find(p => p.status.trim() && mine.has(p.collection.trim().toLowerCase()) && !(started && p.untilStarted))?.status.trim()
 }
 
-/** Pairs as written in the settings, one per line: "collection: status". */
+/**
+ * Whether a game counts as started: it has playtime, or its note's status is past not played
+ * (anything but empty, the not-played value or an "until started" status, such as "planned").
+ */
+export function gameStarted(item: PlexItem, values: PropertyValues, noteStatus?: unknown): boolean {
+  if (isStarted(item) || isWatched(item)) return true
+  if (typeof noteStatus !== 'string' || !noteStatus.trim()) return false
+  const status = noteStatus.trim().toLowerCase()
+  const before = [values.unwatched, ...(values.collectionStatus ?? []).filter(p => p.untilStarted).map(p => p.status)]
+  return !before.some(v => v.trim().toLowerCase() === status)
+}
+
+const UNTIL_STARTED = /\s*\(until started\)\s*$/i
+
+/** Pairs as written in the settings, one per line: "collection: status", with "(until started)" after the status for a pair only for games not started yet. */
 export function parseCollectionStatus(text: string): CollectionStatus[] {
-  return text.split('\n').map(line => {
-    const at = line.lastIndexOf(':')
-    return at < 0 ? null : { collection: line.slice(0, at).trim(), status: line.slice(at + 1).trim() }
+  return text.split('\n').map((line): CollectionStatus | null => {
+    const untilStarted = UNTIL_STARTED.test(line)
+    const plain = line.replace(UNTIL_STARTED, '')
+    const at = plain.lastIndexOf(':')
+    return at < 0 ? null : { collection: plain.slice(0, at).trim(), status: plain.slice(at + 1).trim(), ...untilStarted ? { untilStarted } : {} }
   }).filter((p): p is CollectionStatus => Boolean(p?.collection && p.status))
+}
+
+/** Pairs as the settings show them. */
+export function collectionStatusText(pairs: CollectionStatus[] | undefined): string {
+  return (pairs ?? []).map(p => `${p.collection}: ${p.status}${p.untilStarted ? ' (until started)' : ''}`).join('\n')
 }
 
 export const DEFAULT_TAGS: Record<MediaKind, string> = {
@@ -495,7 +520,7 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'durationMinutes': { const ms = lengthOf(item); return ms ? Math.round(ms / 60000) : undefined }
     case 'durationText': return durationText(lengthOf(item))
     case 'durationClock': return durationClock(lengthOf(item))
-    case 'status': return collectionStatus(item.steamCollections, ctx.values.collectionStatus)
+    case 'status': return collectionStatus(item.steamCollections, ctx.values.collectionStatus, gameStarted(item, ctx.values))
       ?? (isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched)
     case 'plexLink': return ctx.link
     case 'poster': return ctx.image ?? undefined

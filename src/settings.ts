@@ -3,6 +3,7 @@ import type PlexMediaNotesPlugin from './main'
 import { cleanOmdbKey } from './discover-data'
 import { testGoogleBooks, testOmdbKey } from './discover'
 import { steamGridCovers } from './steamgriddb'
+import { testLastfmKey } from './lastfm'
 import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
@@ -623,7 +624,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Other sources').setHeading()
     containerEl.createEl('p', {
       cls: 'setting-item-description',
-      text: '"Add a movie, show, game or book" searches OMDb (movies and shows), Steam and HowLongToBeat (games) and Open Library (books, with summaries and dates from Google Books). Checks use them too.',
+      text: '"Add a movie, show, game or book" searches OMDb (movies and shows), Steam and HowLongToBeat (games) and Open Library (books, with summaries and dates from Google Books). Checks use them too. Last.fm is only used by the recommendations page.',
     })
     new Setting(containerEl)
       .setName('OMDb API key')
@@ -652,6 +653,21 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       .addButton(button => button.setButtonText('Test').onClick(async () => {
         button.setDisabled(true)
         new Notice(await testGoogleBooks(settings.googleBooksKey ?? ''), 10_000)
+        button.setDisabled(false)
+      }))
+    new Setting(containerEl)
+      .setName('Last.fm API key')
+      .setDesc('Optional. The recommendations page asks Last.fm what\'s like your ⭐⭐⭐⭐ and 🩷 songs: songs you have but haven\'t rated, and songs and artists you don\'t have. Get a free key by creating an API account at last.fm/api.')
+      .addText(text => text
+        .setPlaceholder('Optional')
+        .setValue(settings.lastfmKey ?? '')
+        .onChange(async value => {
+          settings.lastfmKey = value.trim()
+          await this.save()
+        }))
+      .addButton(button => button.setButtonText('Test').onClick(async () => {
+        button.setDisabled(true)
+        new Notice(await testLastfmKey(settings.lastfmKey ?? ''), 10_000)
         button.setDisabled(false)
       }))
   }
@@ -758,7 +774,25 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             }))
       }
     }
-    const items = settings.notInterested.length - paths.length
+    const lastfm = settings.notInterested.filter(id => id.startsWith('lastfm:'))
+    if (lastfm.length) {
+      this.kindHeading(containerEl, 'Last.fm', lastfm.length)
+      const label = (id: string) => id.replace(/^lastfm:(track|artist):/, '')
+      for (const id of [...lastfm].sort((a, b) => label(a).localeCompare(label(b), undefined, { sensitivity: 'base' }))) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(label(id))
+          .setDesc(id.startsWith('lastfm:artist:') ? 'Artist' : 'Song')
+          .addButton(button => button
+            .setButtonText('Forget')
+            .onClick(async () => {
+              settings.notInterested = settings.notInterested.filter(n => n !== id)
+              await this.save()
+              this.refresh()
+            }))
+      }
+    }
+    const items = settings.notInterested.length - paths.length - lastfm.length
     if (items) {
       new Setting(containerEl)
         .setName(`${items} item${items === 1 ? '' : 's'} without a note`)

@@ -612,3 +612,22 @@
   cursor: pointer;
   font-weight: var(--font-semibold);
 }
+
+/* Recommendations: music from Last.fm, below the other cards, in three columns. */
+.pmn-lastfm {
+  margin-top: var(--size-4-3);
+}
+
+.pmn-lastfm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--size-4-4);
+  align-items: start;
+}
+
+.pmn-lastfm-heading {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-accent);
+  margin-bottom: var(--size-4-1);
+}

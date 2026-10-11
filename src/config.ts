@@ -76,6 +76,8 @@ export interface PlexNotesSettings {
   omdbKey: string
   /** Optional Google Books API key, for book summaries (it works without one, within a daily limit). */
   googleBooksKey: string
+  /** Last.fm API key, for music suggestions from outside your library on the recommendations page. */
+  lastfmKey: string
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -167,6 +169,7 @@ export function defaultSettings(): PlexNotesSettings {
     steam: { apiKey: '', account: '', includeFreeGames: true, gridKey: '', folder: '' },
     omdbKey: '',
     googleBooksKey: '',
+    lastfmKey: '',
     imagesSubfolder: 'Images',
     fileNameReplacements: { '[': '(', ']': ')' },
     renameExistingNotes: true,
@@ -300,7 +303,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

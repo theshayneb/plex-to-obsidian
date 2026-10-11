@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.100] - 2026-10-11
+
+- Recommendations: a "Music from Last.fm" card. With a Last.fm API key (Settings → Connections → Other sources, with a Test button), the page asks Last.fm what's like up to 30 of your 🩷 and ⭐⭐⭐⭐ songs (🩷 first, a different mix on each refresh) and their artists, and lists songs you have but haven't rated yet, songs you don't have and artists you have nothing by, each with the loved songs it came from. Songs and artists you don't have link to their Last.fm page and can be marked "Not interested" (listed under Remembered choices → Not interested → Last.fm). Last.fm's answers are kept for a day while Obsidian runs.
+
 ## [0.0.99] - 2026-10-11
 
 - Settings → Remembered choices: each kind of choice (notes you chose for items, skipped every time, notes that match nothing, kept as they were, never changed, not interested) is its own collapsible section with a count, its entries under their kind of media (Movies, TV shows, Documentaries, Music, Games, Books) in alphabetical order. Kept values and links are now listed one by one (note, property, what was kept over what), each to forget, as are "Not interested" notes.

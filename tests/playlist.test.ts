@@ -64,8 +64,16 @@ describe('Plex playlists from a Base', () => {
     ])
     expect(plan.existing).toBeNull()
     sent.length = 0
+    responses.set('/playlists/900/items', { MediaContainer: { Metadata: [{ playlistItemID: 1 }, { playlistItemID: 2 }] } })
     await sendPlaylist(settings, plan)
-    expect(sent).toEqual(['GET /identity', 'POST /playlists?type=audio&smart=0&title=Road trip&uri=server://abc/com.plexapp.plugins.library/library/metadata/100,101'])
+    expect(sent).toEqual([
+      'GET /identity',
+      'POST /playlists?type=audio&smart=0&title=Road trip&uri=server://abc/com.plexapp.plugins.library/library/metadata/100,101',
+      'GET /playlists/900/items',
+    ])
+    // Plex ending up with other songs than these (say, old ones not removed) is reported.
+    responses.set('/playlists/900/items', { MediaContainer: { Metadata: [{ playlistItemID: 1 }, { playlistItemID: 2 }, { playlistItemID: 3 }] } })
+    await expect(sendPlaylist(settings, plan)).rejects.toThrow('now has 3 songs instead of 2')
   })
 
   it('takes the song named like the note from an album its link is to, and a tie over a link', async () => {
@@ -93,7 +101,7 @@ describe('Plex playlists from a Base', () => {
   it('empties and refills a playlist of that name that Plex already has', async () => {
     const { files, app, settings } = setup({ 'Music/Airbag.md': { Link: link('101') }, 'Music/Karma Police.md': { Link: link('100') } })
     responses.set('/library/metadata/101,100', responses.get('/library/metadata/100,101,7'))
-    responses.set('/playlists', { MediaContainer: { Metadata: [{ ratingKey: '55', title: 'Road trip', smart: false, leafCount: 2 }] } })
+    responses.set('/playlists', { MediaContainer: { Metadata: [{ ratingKey: '55', title: 'Road Trip ', smart: false, leafCount: 2 }] } })
     responses.set('/playlists/55/items', { MediaContainer: { Metadata: [{ playlistItemID: 1 }, { playlistItemID: 2 }] } })
     const plan = await planPlaylist(app as never, settings, 'Road trip', files as never)
     expect(plan.existing).toEqual({ ratingKey: '55', count: 2 })
@@ -101,10 +109,13 @@ describe('Plex playlists from a Base', () => {
     await sendPlaylist(settings, plan)
     expect(sent).toEqual([
       'GET /identity',
+      'DELETE /playlists/55/items',
+      // (This test's Plex always answers with the same two entries, so they're removed one by one too.)
       'GET /playlists/55/items',
       'DELETE /playlists/55/items/1',
       'DELETE /playlists/55/items/2',
       'PUT /playlists/55/items?uri=server://abc/com.plexapp.plugins.library/library/metadata/101,100',
+      'GET /playlists/55/items',
     ])
   })
 

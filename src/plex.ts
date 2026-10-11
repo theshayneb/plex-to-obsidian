@@ -163,6 +163,11 @@ export class PlexClient {
     await this.send('PUT', `/playlists/${encodeURIComponent(playlistKey)}/items?uri=${encodeURIComponent(itemsUri(machineId, ratingKeys))}`)
   }
 
+  /** Empties a playlist (its title, poster and description stay). */
+  async clearPlaylist(playlistKey: string): Promise<void> {
+    await this.send('DELETE', `/playlists/${encodeURIComponent(playlistKey)}/items`)
+  }
+
   async removeFromPlaylist(playlistKey: string, playlistItemID: number): Promise<void> {
     await this.send('DELETE', `/playlists/${encodeURIComponent(playlistKey)}/items/${playlistItemID}`)
   }

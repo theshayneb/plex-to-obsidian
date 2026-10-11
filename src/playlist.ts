@@ -100,7 +100,8 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
       songs.push({ path, ratingKey: item.ratingKey, title: item.grandparentTitle ? `${item.title} (${item.grandparentTitle})` : item.title })
     }
   }
-  const same = (await plex.audioPlaylists()).filter(p => p.title === name)
+  // The same name, give or take capitals and spaces at the ends.
+  const same = (await plex.audioPlaylists()).filter(p => p.title.trim().toLowerCase() === name.trim().toLowerCase())
   if (same.some(p => p.smart === true || p.smart === 1 || p.smart === '1')) {
     throw new Error(`"${name}" is a smart playlist in Plex, which can't be filled from a note list. Give this view another playlist name.`)
   }
@@ -121,11 +122,18 @@ export async function sendPlaylist(settings: PlexNotesSettings, plan: PlaylistPl
   let playlist: string
   let start = 0
   if (plan.existing) {
+    // Emptied first, so it ends up holding just these songs rather than gaining them at the end;
+    // anything a clear-out left behind is removed one by one.
     playlist = plan.existing.ratingKey
+    await plex.clearPlaylist(playlist)
     for (const entry of await plex.playlistEntries(playlist)) await plex.removeFromPlaylist(playlist, entry.playlistItemID)
   } else {
     playlist = await plex.createAudioPlaylist(plan.name, machineId, keys.slice(0, BATCH))
     start = BATCH
   }
   for (; start < keys.length; start += BATCH) await plex.addToPlaylist(playlist, machineId, keys.slice(start, start + BATCH))
+  const count = (await plex.playlistEntries(playlist)).length
+  if (count !== keys.length) {
+    throw new Error(`Plex's "${plan.name}" now has ${count} song${count === 1 ? '' : 's'} instead of ${keys.length}. Its old songs may not have been removed; try sending it again.`)
+  }
 }

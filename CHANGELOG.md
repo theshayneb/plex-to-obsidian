@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.93] - 2026-10-11
+
+- Sending a Base to an existing Plex playlist replaces its songs: the playlist is emptied in one go first (anything left is removed one by one), then filled with the Base's songs in order. Afterwards the plugin checks Plex holds exactly those songs, and says so if it doesn't.
+- A playlist in Plex counts as the same one whatever its capitals or stray spaces ("Road Trip " is "Road trip").
+
 ## [0.0.92] - 2026-10-11
 
 - Checking books now works like the rest: every book is looked up first ("Checking books: n of N…"), then the pop-ups come grouped by what changes (fewest changes first), with "Apply to the rest of this group".

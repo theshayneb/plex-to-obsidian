@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.107] - 2026-10-11
+
+- Locks (and every other remembered choice) no longer get lost to another device: the plugin reads its settings again when Obsidian Sync changes them, and before each background update of play counts, ratings and statuses. Before, Obsidian on another device (a phone, another computer) kept its older copy of the settings and saved it over the newer one on its next background update, so a lock made here vanished after the next restart.
+
 ## [0.0.106] - 2026-10-11
 
 - A started game is never set back to "planned" by its Right Now collection: that pair is now "until started", only counting for a game with no playtime whose status is empty, not played (pending) or planned. A game you've played that's still in Right Now keeps its status (or gets its played status). Your saved pairs are updated; in the settings it shows as "Right Now: planned (until started)", and "(until started)" can be added to any other line.

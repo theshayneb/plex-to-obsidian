@@ -161,6 +161,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   async updatePlayCountsIfDue(): Promise<void> {
+    if (this.plexSyncRunning) return
+    // Another device may have changed the settings (say, a lock): start from what's saved, so this
+    // run's save doesn't put back an older copy.
+    await this.reloadSettings()
     const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate } = this.settings
     if (!(updatePlayCounts || updateRatings || updateStatus) || !playCountHours || this.plexSyncRunning) return
     const now = Date.now()
@@ -198,6 +202,21 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = loadSettings(await this.loadData())
+  }
+
+  /**
+   * Reads the saved settings again into the same object (so the settings page and anything holding
+   * it see them), for when Obsidian Sync brings another device's changes. Not while a sync or check
+   * runs: it saves its own copy as it goes.
+   */
+  async reloadSettings(): Promise<void> {
+    if (this.plexSyncRunning) return
+    Object.assign(this.settings, loadSettings(await this.loadData()))
+  }
+
+  /** Obsidian calls this when the settings file changes on disk, say through Obsidian Sync. */
+  async onExternalSettingsChange(): Promise<void> {
+    await this.reloadSettings()
   }
 
   async saveSettings(): Promise<void> {

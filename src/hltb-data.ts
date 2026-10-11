@@ -30,6 +30,21 @@ export function searchTitle(title: string): string {
   return title.replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * The names to look a game up by: its own, then without a subtitle or edition, since stores often
+ * rename a game ("Slay the Princess — The Pristine Cut", "Hades: Definitive Edition") while
+ * HowLongToBeat keeps the plain name.
+ */
+export function titleVariants(title: string): string[] {
+  const own = searchTitle(title)
+  const base = own
+    .split(/\s+[—–-]\s+|:\s+/)[0]
+    .replace(/\s+(?:-\s*)?(?:the\s+)?(?:definitive|complete|enhanced|anniversary|deluxe|ultimate|special|remastered|game of the year|goty)(?:\s+edition)?$/i, '')
+    .replace(/\s+(?:director'?s|pristine|final)\s+cut$/i, '')
+    .trim()
+  return base && base !== own ? [own, base] : [own]
+}
+
 /** The body HowLongToBeat's own search page sends. */
 export function searchBody(title: string): Record<string, unknown> {
   return {

@@ -1,5 +1,5 @@
 import { Platform, requestUrl } from 'obsidian'
-import { HLTB, hltbTimes, pickMatch, searchBody, type HltbGame, type HltbTimes } from './hltb-data'
+import { HLTB, hltbTimes, pickMatch, searchBody, titleVariants, type HltbGame, type HltbTimes } from './hltb-data'
 
 interface Response {
   status: number
@@ -24,9 +24,12 @@ export class HltbClient {
 
   /** The game's times, or null when HowLongToBeat has no game with that exact name. */
   async times(title: string, year?: number): Promise<HltbTimes | null> {
-    const results = await this.searchGames(title)
-    const match = pickMatch(results, title, year)
-    return match ? hltbTimes(match) : null
+    // Its own name first, then without a subtitle or edition (still only an exact match).
+    for (const name of titleVariants(title)) {
+      const match = pickMatch(await this.searchGames(name), name, year)
+      if (match) return hltbTimes(match)
+    }
+    return null
   }
 
   /** HowLongToBeat's search results for a title (up to 20). */

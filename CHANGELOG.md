@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.97] - 2026-10-11
+
+- HowLongToBeat lookups also try a game's name without its subtitle or edition when the full name finds nothing, so a game Steam has renamed ("Slay the Princess — The Pristine Cut", "Hades: Definitive Edition", "Disco Elysium - The Final Cut") still gets its times. Still only exact name matches.
+
 ## [0.0.96] - 2026-10-11
 
 - "Check notes against sources" now offers to empty a length (Duration, Main Story, page count) that the source has nothing for, such as a game HowLongToBeat doesn't know, instead of silently leaving it. It starts unticked: tick it to empty the property (or type minutes in yourself); left unticked, it isn't offered again.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hltbMinutes, hltbTimes, pickMatch, searchBody, searchTitle, type HltbGame } from '../src/hltb-data'
+import { hltbMinutes, hltbTimes, pickMatch, searchBody, searchTitle, titleVariants, type HltbGame } from '../src/hltb-data'
 
 const results: HltbGame[] = [
   { game_id: 2, game_name: 'Portal 2: Peer Review', release_world: 2011, comp_main: 11784 },
@@ -29,5 +29,12 @@ describe('HowLongToBeat', () => {
       id: 1, name: 'Portal 2', main: 515,
       url: 'https://howlongtobeat.com/game/1', image: 'https://howlongtobeat.com/games/Portal2cover.jpg',
     })
+  })
+
+  it('also looks a game up without its subtitle or edition', () => {
+    expect(titleVariants('Slay the Princess — The Pristine Cut')).toEqual(['Slay the Princess — The Pristine Cut', 'Slay the Princess'])
+    expect(titleVariants('Hades: Definitive Edition')).toEqual(['Hades: Definitive Edition', 'Hades'])
+    expect(titleVariants('Disco Elysium - The Final Cut')).toEqual(['Disco Elysium - The Final Cut', 'Disco Elysium'])
+    expect(titleVariants('Portal 2')).toEqual(['Portal 2'])
   })
 })

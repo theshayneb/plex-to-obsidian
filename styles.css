@@ -613,23 +613,10 @@
   font-weight: var(--font-semibold);
 }
 
-/* Recommendations: music from Last.fm, in the music card's cell, below it, its lists stacked. */
+/* Recommendations: songs from Last.fm, in the music card's cell, below it. */
 .pmn-dash-stack {
   display: flex;
   flex-direction: column;
   gap: var(--size-4-3);
   min-width: 0;
-}
-
-.pmn-lastfm-sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size-4-3);
-}
-
-.pmn-lastfm-heading {
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-semibold);
-  color: var(--text-accent);
-  margin-bottom: var(--size-4-1);
 }

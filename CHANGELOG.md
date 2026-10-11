@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.102] - 2026-10-11
+
+- Recommendations: the Last.fm card ("Songs you don't have, from Last.fm") now only suggests songs you don't have, by any artist, that are like your 🩷 and ⭐⭐⭐⭐ songs. It no longer suggests artists or songs you already have. It asks about up to 40 loved songs (was 30), 50 similar songs each, and shows the best 15.
+
 ## [0.0.101] - 2026-10-11
 
 - Recommendations: the "Music from Last.fm" card now sits right below the Music card, with its three lists (songs you have, songs you don't have, artists you don't have) one above the other.

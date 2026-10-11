@@ -1,10 +1,9 @@
-// Last.fm's similar tracks and artists, turned into music suggestions. No Obsidian imports, so it
+// Last.fm's similar tracks, turned into music suggestions. No Obsidian imports, so it
 // can be unit tested; the requests are in lastfm.ts.
 
 import { firstArtist, withoutFeatured } from './notes'
 
 export interface SimilarTrack { artist: string, title: string, match: number, url: string }
-export interface SimilarArtist { name: string, match: number, url: string }
 
 /** Last.fm's error message in a response, if it is one (it answers errors as JSON `{error, message}`). */
 export function lastfmError(body: unknown): { code: number, message: string } | null {
@@ -31,15 +30,6 @@ export function parseSimilarTracks(body: unknown): SimilarTrack[] {
   }).filter(t => t.artist && t.title)
 }
 
-/** `artist.getSimilar`'s answer. */
-export function parseSimilarArtists(body: unknown): SimilarArtist[] {
-  const artists = (body as { similarartists?: { artist?: unknown } } | null)?.similarartists?.artist
-  return listOf(artists).map(raw => {
-    const a = raw as { name?: unknown, match?: unknown, url?: unknown }
-    return { name: text(a.name), match: num(a.match), url: text(a.url) }
-  }).filter(a => a.name)
-}
-
 /** An artist's name for comparing: lower case, letters and digits only ("The" kept). */
 export const artistKey = (artist: string): string =>
   firstArtist(artist).normalize('NFKD').toLowerCase().replace(/&/g, 'and').replace(/[^\p{L}\p{N}]+/gu, '')
@@ -60,86 +50,44 @@ export function songKey(artist: string, title: string): string {
 export interface Seed { title: string, artist: string, track: string, weight: number }
 
 export interface LastfmSuggestion {
-  /** The library entry's id for a song you have, else `lastfm:track:<artist> – <title>` or `lastfm:artist:<name>`. */
+  /** `lastfm:track:<artist> – <title>`, for "Not interested". */
   id: string
+  /** "<artist> – <title>". */
   title: string
   url: string
   score: number
-  /** The loved songs (or their artists) it came from, best first. */
+  /** The loved songs it came from, best first. */
   because: string[]
 }
 
-export interface LastfmSuggestions {
-  /** Songs you have but haven't rated or played yet, most like your loved ones first. */
-  owned: LastfmSuggestion[]
-  /** Songs you don't have. */
-  songs: LastfmSuggestion[]
-  /** Artists you have nothing by. */
-  artists: LastfmSuggestion[]
-}
-
-/** Adds what one seed says about one suggestion. */
-function add(into: Map<string, LastfmSuggestion & { from: Map<string, number> }>, id: string, title: string, url: string, value: number, from: string): void {
-  const found = into.get(id) ?? { id, title, url, score: 0, because: [], from: new Map<string, number>() }
-  found.score += value
-  found.from.set(from, (found.from.get(from) ?? 0) + value)
-  into.set(id, found)
-}
-
-function ranked(from: Map<string, LastfmSuggestion & { from: Map<string, number> }>, count: number): LastfmSuggestion[] {
-  return [...from.values()]
-    .map(({ from: sources, ...s }) => ({ ...s, because: [...sources.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name) }))
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
-    .slice(0, count)
-}
-
 /**
- * Suggestions from what Last.fm finds similar to your loved songs and their artists. A similar
- * song you have counts only while it's open (no rating, or not played), under the id it has in
- * your library (`owned`: song key → id); one you don't have is a new song; a similar artist with
- * nothing in your library (`ownedArtists`, artist keys) is a new artist.
+ * The songs you don't have (`owned`: song keys) that Last.fm finds most like your loved ones, by
+ * any artist: each counts its match with every loved song it came from, 🩷 ones twice.
  */
 export function lastfmSuggestions(
   tracks: { seed: Seed, similar: SimilarTrack[] }[],
-  artists: { seed: Seed, similar: SimilarArtist[] }[],
-  owned: Map<string, { id: string, title: string }>,
-  ownedArtists: Set<string>,
-  open: Set<string>,
+  owned: Set<string>,
   notInterested: Set<string>,
-  perList = 10,
-): LastfmSuggestions {
-  const mine = new Map<string, LastfmSuggestion & { from: Map<string, number> }>()
-  const songs = new Map<string, LastfmSuggestion & { from: Map<string, number> }>()
-  const newArtists = new Map<string, LastfmSuggestion & { from: Map<string, number> }>()
-  const loved = new Set(tracks.map(({ seed }) => songKey(seed.artist, seed.track)))
+  count = 15,
+): LastfmSuggestion[] {
+  const found = new Map<string, LastfmSuggestion & { from: Map<string, number> }>()
   for (const { seed, similar } of tracks) {
     for (const t of similar) {
       const key = songKey(t.artist, t.title)
-      if (loved.has(key)) continue
-      const have = owned.get(key)
+      const title = `${t.artist} – ${t.title}`
+      const id = `lastfm:track:${title}`
+      if (owned.has(key) || notInterested.has(id)) continue
       const value = t.match * seed.weight
-      if (have) {
-        if (open.has(have.id) && !notInterested.has(have.id)) add(mine, have.id, have.title, t.url, value, seed.title)
-        continue
-      }
-      const id = `lastfm:track:${t.artist} – ${t.title}`
-      if (!notInterested.has(id)) add(songs, key, `${t.artist} – ${t.title}`, t.url, value, seed.title)
+      const entry = found.get(key) ?? { id, title, url: t.url, score: 0, because: [], from: new Map<string, number>() }
+      entry.score += value
+      entry.from.set(seed.title, (entry.from.get(seed.title) ?? 0) + value)
+      found.set(key, entry)
     }
   }
-  for (const { seed, similar } of artists) {
-    for (const a of similar) {
-      const key = artistKey(a.name)
-      if (!key || ownedArtists.has(key)) continue
-      const id = `lastfm:artist:${a.name}`
-      if (!notInterested.has(id)) add(newArtists, key, a.name, a.url, a.match * seed.weight, seed.artist)
-    }
-  }
-  const withIds = (list: LastfmSuggestion[], prefix: string) => list.map(s => ({ ...s, id: `${prefix}${s.title}` }))
-  return {
-    owned: ranked(mine, perList),
-    songs: withIds(ranked(songs, perList), 'lastfm:track:'),
-    artists: withIds(ranked(newArtists, perList), 'lastfm:artist:'),
-  }
+  return [...found.values()]
+    .map(({ from, ...s }) => ({ ...s, because: [...from.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name) }))
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .slice(0, count)
 }
 
 /** Up to `count` seeds: every 🩷 song before any ⭐⭐⭐⭐ one, in a random order within each, so a refresh tries others. */

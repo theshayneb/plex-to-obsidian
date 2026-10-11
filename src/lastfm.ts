@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian'
-import { lastfmError, parseSimilarArtists, parseSimilarTracks, type SimilarArtist, type SimilarTrack } from './lastfm-data'
+import { lastfmError, parseSimilarTracks, type SimilarTrack } from './lastfm-data'
 
 const API = 'https://ws.audioscrobbler.com/2.0/'
 
@@ -41,17 +41,12 @@ export async function similarTracks(key: string, artist: string, track: string, 
   return parseSimilarTracks(await call(key, { method: 'track.getsimilar', artist, track, limit: String(limit), autocorrect: '1' }))
 }
 
-/** Artists Last.fm finds like this one. */
-export async function similarArtists(key: string, artist: string, limit = 20): Promise<SimilarArtist[]> {
-  return parseSimilarArtists(await call(key, { method: 'artist.getsimilar', artist, limit: String(limit), autocorrect: '1' }))
-}
-
 /** Tries the key, for the Test button in the settings. */
 export async function testLastfmKey(key: string): Promise<string> {
   if (!key.trim()) return 'Add a Last.fm API key first.'
   try {
-    const found = await similarArtists(key, 'Radiohead', 3)
-    return found.length ? `Last.fm works with the key: it found ${found.map(a => a.name).join(', ')}.` : 'Last.fm answered, but found nothing for a test artist.'
+    const found = await similarTracks(key, 'Radiohead', 'Karma Police', 3)
+    return found.length ? `Last.fm works with the key: it found ${found.map(t => `${t.artist} – ${t.title}`).join(', ')}.` : 'Last.fm answered, but found nothing for a test song.'
   } catch (err) {
     return err instanceof Error ? err.message : String(err)
   }

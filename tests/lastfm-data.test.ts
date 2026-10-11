@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { artistKey, lastfmError, lastfmSuggestions, parseSimilarArtists, parseSimilarTracks, pickSeeds, songKey, type Seed } from '../src/lastfm-data'
+import { artistKey, lastfmError, lastfmSuggestions, parseSimilarTracks, pickSeeds, songKey, type Seed } from '../src/lastfm-data'
 
 describe('parsing Last.fm', () => {
   it('reads similar tracks, one or several', () => {
@@ -12,10 +12,6 @@ describe('parsing Last.fm', () => {
     expect(parseSimilarTracks(null)).toEqual([])
   })
 
-  it('reads similar artists, with matches given as text', () => {
-    expect(parseSimilarArtists({ similarartists: { artist: [{ name: 'Muse', match: '0.75', url: 'u' }] } }))
-      .toEqual([{ name: 'Muse', match: 0.75, url: 'u' }])
-  })
 
   it('recognises errors', () => {
     expect(lastfmError({ error: 10, message: 'Invalid API key' })).toEqual({ code: 10, message: 'Invalid API key' })
@@ -41,35 +37,28 @@ describe('lastfmSuggestions', () => {
   const heart: Seed = { title: 'Mark Ronson - Uptown Funk', artist: 'Mark Ronson', track: 'Uptown Funk', weight: 2 }
   const star: Seed = { title: 'Daft Punk - Get Lucky', artist: 'Daft Punk', track: 'Get Lucky', weight: 1 }
 
-  it('splits songs you have (only open ones) from new songs and new artists, 🩷 counting twice', () => {
-    const owned = new Map([
-      [songKey('Bruno Mars', 'Treasure'), { id: 'note:Music/Treasure.md', title: 'Bruno Mars - Treasure' }],
-      [songKey('Pharrell Williams', 'Happy'), { id: 'note:Music/Happy.md', title: 'Pharrell Williams - Happy' }],
-      [songKey('Daft Punk', 'Get Lucky'), { id: 'note:Music/Get Lucky.md', title: 'Daft Punk - Get Lucky' }],
-    ])
+  it('lists songs you don\'t have, by anyone, 🩷 counting twice, best first', () => {
+    const owned = new Set([songKey('Bruno Mars', 'Treasure'), songKey('Daft Punk', 'Get Lucky')])
     const result = lastfmSuggestions(
       [
         { seed: heart, similar: [
-          { artist: 'Bruno Mars', title: 'Treasure', match: 0.5, url: 'a' },
-          { artist: 'Pharrell Williams', title: 'Happy', match: 0.9, url: 'b' },
+          { artist: 'Bruno Mars', title: 'Treasure (Remastered)', match: 0.5, url: 'a' },
           { artist: 'Chic', title: 'Le Freak', match: 0.4, url: 'c' },
           { artist: 'Daft Punk', title: 'Get Lucky', match: 1, url: 'd' },
+          { artist: 'Bruno Mars', title: 'Locked Out of Heaven', match: 0.3, url: 'h' },
         ] },
         { seed: star, similar: [
           { artist: 'Chic', title: 'Le Freak', match: 0.5, url: 'c' },
           { artist: 'Nile Rodgers', title: 'Good Times', match: 0.6, url: 'e' },
         ] },
       ],
-      [{ seed: heart, similar: [{ name: 'Chic', match: 0.5, url: 'f' }, { name: 'Bruno Mars', match: 1, url: 'g' }] }],
       owned,
-      new Set([artistKey('Bruno Mars'), artistKey('Pharrell Williams'), artistKey('Daft Punk')]),
-      new Set(['note:Music/Treasure.md']),
       new Set(['lastfm:track:Nile Rodgers – Good Times']),
     )
-    // Happy is yours but rated, Get Lucky is a loved one itself.
-    expect(result.owned).toEqual([{ id: 'note:Music/Treasure.md', title: 'Bruno Mars - Treasure', url: 'a', score: 1, because: [heart.title] }])
-    expect(result.songs).toEqual([{ id: 'lastfm:track:Chic – Le Freak', title: 'Chic – Le Freak', url: 'c', score: 1.3, because: [heart.title, star.title] }])
-    expect(result.artists).toEqual([{ id: 'lastfm:artist:Chic', title: 'Chic', url: 'f', score: 1, because: ['Mark Ronson'] }])
+    expect(result).toEqual([
+      { id: 'lastfm:track:Chic – Le Freak', title: 'Chic – Le Freak', url: 'c', score: 1.3, because: [heart.title, star.title] },
+      { id: 'lastfm:track:Bruno Mars – Locked Out of Heaven', title: 'Bruno Mars – Locked Out of Heaven', url: 'h', score: 0.6, because: [heart.title] },
+    ])
   })
 })
 

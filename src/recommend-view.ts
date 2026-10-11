@@ -1,8 +1,8 @@
 import { ItemView, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import { artistsOf, type PlexItem } from './notes'
-import { similarArtists, similarTracks } from './lastfm'
-import { artistKey, lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type LastfmSuggestions, type Seed, type SimilarArtist, type SimilarTrack } from './lastfm-data'
+import { similarTracks } from './lastfm'
+import { lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
 import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
@@ -29,10 +29,10 @@ export class RecommendView extends ItemView {
   private pmnMatched = new Map<string, RecEntry>()
   private pmnLooking = false
   private pmnLookupError: string | null = null
-  /** The Plex track behind each music entry (`note:<path>` or `item:<key>`), for asking Last.fm. */
+  /** The Plex track behind each music entry (`note:<path>` or `item:<key>`), for asking Last.fm and knowing what you have. */
   private pmnTracks = new Map<string, PlexItem>()
   /** Last.fm's suggestions, once asked (null: not yet). */
-  private pmnLastfm: LastfmSuggestions | null = null
+  private pmnLastfm: LastfmSuggestion[] | null = null
   /** How asking Last.fm is going, or why it failed (null: done, or not asked). */
   private pmnLastfmState: string | null = null
   private pmnLastfmError = false
@@ -91,59 +91,45 @@ export class RecommendView extends ItemView {
   }
 
   /**
-   * Asks Last.fm what's like your loved songs (up to 30, 🩷 first) and their artists (up to 15),
-   * then redraws with what it found.
+   * Asks Last.fm for songs like your loved ones (up to 40, 🩷 first), then redraws with those you
+   * don't have.
    */
   private async pmnAskLastfm(): Promise<void> {
     const key = this.pmnPlugin.settings.lastfmKey?.trim()
     if (!key || this.pmnLastfmState) return
     const music = this.pmnEntries().filter(e => e.group === 'music')
-    const seeds: (Seed & { id: string })[] = []
+    const seeds: Seed[] = []
     for (const entry of music.filter(isLoved)) {
       const item = this.pmnTracks.get(entry.id)
       const artist = item?.originalTitle || item?.grandparentTitle
       if (!item || !artist) continue
-      seeds.push({ id: entry.id, title: entry.title, artist, track: item.title, weight: entry.level === 5 ? 2 : 1 })
+      seeds.push({ title: entry.title, artist, track: item.title, weight: entry.level === 5 ? 2 : 1 })
     }
     if (!seeds.length) return
-    const songSeeds = pickSeeds(seeds, 30)
-    const artistSeeds = [...new Map(songSeeds.map(seed => [artistKey(seed.artist), seed])).values()].slice(0, 15)
-    const total = songSeeds.length + artistSeeds.length
+    const chosen = pickSeeds(seeds, 40)
     let done = 0
     this.pmnLastfmError = false
     const step = () => {
-      this.pmnLastfmState = `Asking Last.fm: ${done} of ${total}…`
+      this.pmnLastfmState = `Asking Last.fm: ${done} of ${chosen.length}…`
       this.pmnRender()
     }
     step()
     try {
       const tracks: { seed: Seed, similar: SimilarTrack[] }[] = []
-      for (const seed of songSeeds) {
-        tracks.push({ seed, similar: await similarTracks(key, seed.artist, seed.track) })
+      for (const seed of chosen) {
+        tracks.push({ seed, similar: await similarTracks(key, seed.artist, seed.track, 50) })
         done++
         step()
       }
-      const artists: { seed: Seed, similar: SimilarArtist[] }[] = []
-      for (const seed of artistSeeds) {
-        artists.push({ seed, similar: await similarArtists(key, seed.artist) })
-        done++
-        step()
-      }
-      // What you have: every song (under each of its artists) and every artist.
-      const owned = new Map<string, { id: string, title: string }>()
-      const ownedArtists = new Set<string>()
+      // Every song you have, under each of its artists.
+      const owned = new Set<string>()
       for (const entry of music) {
-        entry.people.forEach(person => ownedArtists.add(artistKey(person)))
         const item = this.pmnTracks.get(entry.id)
         if (!item) continue
         const names = [item.originalTitle, item.grandparentTitle].filter((a): a is string => Boolean(a))
-        for (const name of new Set(names.flatMap(n => artistsOf(n, item.title)))) {
-          owned.set(songKey(name, item.title), { id: entry.id, title: entry.title })
-          ownedArtists.add(artistKey(name))
-        }
+        for (const name of new Set(names.flatMap(n => artistsOf(n, item.title)))) owned.add(songKey(name, item.title))
       }
-      const open = new Set(music.filter(isOpen).map(e => e.id))
-      this.pmnLastfm = lastfmSuggestions(tracks, artists, owned, ownedArtists, open, new Set(this.pmnPlugin.settings.notInterested))
+      this.pmnLastfm = lastfmSuggestions(tracks, owned, new Set(this.pmnPlugin.settings.notInterested))
       this.pmnLastfmState = null
     } catch (err) {
       this.pmnLastfmError = true
@@ -193,7 +179,7 @@ export class RecommendView extends ItemView {
       // Music's cell also holds the Last.fm card, below it.
       const cell = group === 'music' ? grid.createDiv('pmn-dash-stack') : grid
       const card = cell.createDiv('pmn-card')
-      if (group === 'music') this.pmnLastfmCard(cell, entries, items)
+      if (group === 'music') this.pmnLastfmCard(cell)
       card.createDiv({ cls: 'pmn-card-title', text: GROUP_TITLES[group] })
       const list = recs[group]
       if (!list.length) {
@@ -209,12 +195,12 @@ export class RecommendView extends ItemView {
     }
   }
 
-  /** Music from Last.fm: songs you have but haven't rated, and songs and artists you don't have. */
-  private pmnLastfmCard(parent: HTMLElement, entries: RecEntry[], items: { entry: RecEntry, item: PlexItem, libraryKey: string }[]): void {
+  /** Music from Last.fm: songs you don't have, like the ones you loved, whoever they're by. */
+  private pmnLastfmCard(parent: HTMLElement): void {
     const card = parent.createDiv('pmn-card pmn-lastfm')
-    card.createDiv({ cls: 'pmn-card-title', text: 'Music from Last.fm' })
+    card.createDiv({ cls: 'pmn-card-title', text: 'Songs you don\'t have, from Last.fm' })
     if (!this.pmnPlugin.settings.lastfmKey?.trim()) {
-      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add a Last.fm API key in this plugin\'s settings, under other sources, to get songs and artists like your ⭐⭐⭐⭐ and 🩷 songs, from outside your library too.' })
+      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add a Last.fm API key in this plugin\'s settings, under other sources, to get songs like your ⭐⭐⭐⭐ and 🩷 ones that you don\'t have yet.' })
       return
     }
     if (this.pmnLastfmState) {
@@ -232,28 +218,12 @@ export class RecommendView extends ItemView {
       return
     }
     const notInterested = new Set(this.pmnPlugin.settings.notInterested)
-    const sections: [string, string, LastfmSuggestion[]][] = [
-      ['Songs you have, not rated yet', 'Nothing you have and haven\'t rated is like your loved songs, as far as Last.fm knows.', found.owned],
-      ['Songs you don\'t have', 'No new songs found.', found.songs],
-      ['Artists you don\'t have', 'No new artists found.', found.artists],
-    ]
-    const stack = card.createDiv('pmn-lastfm-sections')
-    for (const [title, empty, list] of sections) {
-      const column = stack.createDiv('pmn-lastfm-section')
-      column.createDiv({ cls: 'pmn-lastfm-heading', text: title })
-      const shown = list.filter(s => !notInterested.has(s.id))
-      if (!shown.length) column.createEl('p', { cls: 'pmn-dash-empty', text: empty })
-      for (const suggestion of shown) {
-        if (suggestion.id.startsWith('lastfm:')) this.pmnLastfmRow(column, suggestion)
-        else {
-          const entry = entries.find(e => e.id === suggestion.id)
-          if (entry) this.pmnRow(column, { entry, score: suggestion.score, because: suggestion.because, shared: [] }, items)
-        }
-      }
-    }
+    const shown = found.filter(s => !notInterested.has(s.id))
+    if (!shown.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'No new songs found. Refresh to try other loved songs.' })
+    for (const suggestion of shown) this.pmnLastfmRow(card, suggestion)
   }
 
-  /** A song or artist you don't have, linked to its Last.fm page. */
+  /** A song you don't have, linked to its Last.fm page. */
   private pmnLastfmRow(parent: HTMLElement, suggestion: LastfmSuggestion): void {
     const row = parent.createDiv('pmn-rec-row')
     const text = row.createDiv('pmn-rec-text')

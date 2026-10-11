@@ -657,7 +657,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       }))
     new Setting(containerEl)
       .setName('Last.fm API key')
-      .setDesc('Optional. The recommendations page asks Last.fm what\'s like your ⭐⭐⭐⭐ and 🩷 songs: songs you have but haven\'t rated, and songs and artists you don\'t have. Get a free key by creating an API account at last.fm/api.')
+      .setDesc('Optional. The recommendations page asks Last.fm for songs like your ⭐⭐⭐⭐ and 🩷 ones, and lists those you don\'t have, by any artist. Get a free key by creating an API account at last.fm/api.')
       .addText(text => text
         .setPlaceholder('Optional')
         .setValue(settings.lastfmKey ?? '')

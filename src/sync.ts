@@ -1479,9 +1479,18 @@ export class PlexSync {
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
     const folder = normalizePath(lib.folder)
     const files = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(`${folder}/`) && (!only || only.has(f.path)))
-    let position = 0
+    // Every book is looked up first, then asked about grouped by which properties change (as in
+    // a sync), so a run of the same kind of change can be approved together.
+    type Decide = (position: number, total: number, group: string, groupKey: string, groupLeft: number) => Promise<void>
+    const pending: { labels: string[], decide: Decide }[] = []
+    const queue = (path: string, lines: ApprovalLine[], decide: Decide): void => {
+      const locked = this.settings.lockedProperties[path] ?? []
+      const labels = [...new Set(lines.map(line => line.label).filter(label => !locked.includes(label)))].sort()
+      if (labels.length) pending.push({ labels, decide })
+    }
+    let looked = 0
     for (const file of files) {
-      position++
+      looked++
       if (result.stopped) break
       const noteKey = `book:${file.path}`
       if (noteKey in this.settings.ignored) continue
@@ -1489,40 +1498,43 @@ export class PlexSync {
       const rescale = this.planRescaleOf(file, noteKey, ratingNames, 'emoji')
       const asItem: PlexItem = { ratingKey: noteKey, type: 'book', title: file.basename }
       // A book nothing can be found for still gets its rating converted.
-      const rescaleOnly = async (): Promise<void> => {
+      const rescaleOnly = (): void => {
         if (!rescale) return
-        const approval = await this.ask({ action: 'change', path: file.path, lines: this.rescaleLines(rescale), position, total: files.length }, result, asItem, lib)
-        if (!approval) return
-        if (await this.applyRescale(file, noteKey, rescale, approval.excluded, approval.edits)) result.corrected.push(file.path)
-        else result.declined++
+        const lines = this.rescaleLines(rescale)
+        queue(file.path, lines, async (position, total, group, groupKey, groupLeft) => {
+          const approval = await this.ask({ action: 'change', path: file.path, lines, position, total, group, groupKey, groupLeft }, result, asItem, lib)
+          if (!approval) return
+          if (await this.applyRescale(file, noteKey, rescale, approval.excluded, approval.edits)) result.corrected.push(file.path)
+          else result.declined++
+        })
       }
       const link: unknown = linkProp ? from[linkProp] : undefined
       const linked = ratingKeyFromLink(link)
       const work = linked?.startsWith('ol-') ? linked.slice(3) : null
       if (!work && noteKey in this.settings.keptLinks) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
-        await rescaleOnly()
+        rescaleOnly()
         continue
       }
       if (!mappings.length) {
-        await rescaleOnly()
+        rescaleOnly()
         continue
       }
       let book: PlexItem | null
       try {
-        progress(`Checking books: ${position} of ${files.length} (${file.basename})…`)
+        progress(`Checking books: ${looked} of ${files.length} (${file.basename})…`)
         const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
         // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert.
         const title = authors.length ? file.basename.replace(/\s+by\s+.+$/i, '') : file.basename
         book = await lookUpBook({ work, title, author: authors[0] }, this.settings.googleBooksKey ?? '')
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
-        await rescaleOnly()
+        rescaleOnly()
         continue
       }
       if (!book) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
-        await rescaleOnly()
+        rescaleOnly()
         continue
       }
       result.checked.push(file.path)
@@ -1541,43 +1553,57 @@ export class PlexSync {
       }
       if (!lines.length) continue
 
+      const found = book
       const note = searched && (checks || newLink)
-        ? `Found on Open Library: ${book.title}${book.authors?.length ? ` by ${book.authors.join(', ')}` : ''}${book.year ? `, ${book.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
+        ? `Found on Open Library: ${found.title}${found.authors?.length ? ` by ${found.authors.join(', ')}` : ''}${found.year ? `, ${found.year}` : ''}. Make sure it's the same book; if it isn't, press Skip.`
         : undefined
-      progress(`Checking books: ${position} of ${files.length} (${file.basename}), your choice…`)
-      const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total: files.length }, result, asItem, lib)
-      if (!approval) continue
-      const { excluded, edits } = approval
-      const rescaled = await this.applyRescale(file, noteKey, rescale, excluded, edits)
-      const offered = new Map<string, unknown>([...(checks?.names ?? []).map((n): [string, unknown] => [n, checks!.to[n]]), ...(newLink && linkProp ? [[linkProp, newLink] as [string, unknown]] : [])])
-      const apply = [...offered.keys()].filter(name => !excluded.has(`fix:${name}`))
-      for (const name of [...offered.keys()].filter(n => excluded.has(`fix:${n}`))) {
-        if (searched && name === linkProp) {
-          // Not this book's link: don't look this note up again.
-          this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
-        } else {
-          this.keep(`${noteKey}|${name}`, from[name], offered.get(name))
-        }
-        result.keptLinks++
-      }
-      if (!apply.length) {
-        if (rescaled) result.corrected.push(file.path)
-        else result.declined++
-        continue
-      }
-      try {
-        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-          for (const name of apply) {
-            const edited = edits[`fix:${name}`]
-            const value = offered.get(name)
-            fm[name] = edited === undefined ? value : parseEdit(edited, editKind(value))
+      queue(file.path, lines, async (position, total, group, groupKey, groupLeft) => {
+        const approval = await this.ask({ action: 'change', path: file.path, lines, note, position, total, group, groupKey, groupLeft }, result, asItem, lib)
+        if (!approval) return
+        const { excluded, edits } = approval
+        const rescaled = await this.applyRescale(file, noteKey, rescale, excluded, edits)
+        const offered = new Map<string, unknown>([...(checks?.names ?? []).map((n): [string, unknown] => [n, checks!.to[n]]), ...(newLink && linkProp ? [[linkProp, newLink] as [string, unknown]] : [])])
+        const apply = [...offered.keys()].filter(name => !excluded.has(`fix:${name}`))
+        for (const name of [...offered.keys()].filter(n => excluded.has(`fix:${n}`))) {
+          if (searched && name === linkProp) {
+            // Not this book's link: don't look this note up again.
+            this.settings.keptLinks[noteKey] = typeof link === 'string' ? link : ''
+          } else {
+            this.keep(`${noteKey}|${name}`, from[name], offered.get(name))
           }
-        })
-        result.corrected.push(file.path)
-        if (linkProp && apply.includes(linkProp) && searched) result.links.push(file.path)
-      } catch (err) {
-        result.failed.push({ title: file.basename, error: errorText(err) })
-      }
+          result.keptLinks++
+        }
+        if (!apply.length) {
+          if (rescaled) result.corrected.push(file.path)
+          else result.declined++
+          return
+        }
+        try {
+          await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+            for (const name of apply) {
+              const edited = edits[`fix:${name}`]
+              const value = offered.get(name)
+              fm[name] = edited === undefined ? value : parseEdit(edited, editKind(value))
+            }
+          })
+          result.corrected.push(file.path)
+          if (linkProp && apply.includes(linkProp) && searched) result.links.push(file.path)
+        } catch (err) {
+          result.failed.push({ title: file.basename, error: errorText(err) })
+        }
+      })
+    }
+
+    const groupOf = (p: typeof pending[number]) => p.labels.join(', ')
+    pending.sort((a, b) => a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)))
+    let position = 0
+    for (const p of pending) {
+      position++
+      if (result.stopped) break
+      const same = pending.filter(q => groupOf(q) === groupOf(p))
+      const place = same.indexOf(p) + 1
+      progress(`Your choices: ${position} of ${pending.length} (${lib.title})…`)
+      await p.decide(position, pending.length, `${lib.title} · ${groupOf(p)} (${place} of ${same.length})`, `${BOOKS_LIBRARY}|${groupOf(p)}`, same.length - place)
     }
   }
 

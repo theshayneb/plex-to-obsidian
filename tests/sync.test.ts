@@ -894,6 +894,40 @@ describe('PlexSync', () => {
     expect(result.links).toEqual(['Media/Books/The Hobbit by J.R.R. Tolkien.md'])
   })
 
+  it('asks about books grouped by what changes, with "Apply to the rest of this group"', async () => {
+    steamResponses = {
+      'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction'] },
+      'https://openlibrary.org/works/OL27448W.json': { subjects: ['Fantasy'] },
+      'https://openlibrary.org/search.json?title=': { docs: [{ key: '/works/OL1W', title: 'Emma', author_name: ['Jane Austen'], first_publish_year: 1815 }] },
+      'https://openlibrary.org/works/OL1W.json': { subjects: ['Romance'] },
+      'https://openlibrary.org/search.json?q=': { docs: [
+        { key: '/works/OL893415W', title: 'Dune', author_name: ['Frank Herbert'], first_publish_year: 1965 },
+        { key: '/works/OL27448W', title: 'The Hobbit', author_name: ['J.R.R. Tolkien'], first_publish_year: 1937 },
+      ] },
+    }
+    const { app, frontmatter } = makeApp({
+      'Media/Books/Emma by Jane Austen.md': { Author: ['Jane Austen'], Genre: [] },
+      'Media/Books/Dune by Frank Herbert.md': { Author: ['Frank Herbert'], Genre: [], Link: 'https://openlibrary.org/works/OL893415W' },
+      'Media/Books/The Hobbit by J.R.R. Tolkien.md': { Author: ['J.R.R. Tolkien'], Genre: [], Link: 'https://openlibrary.org/works/OL27448W' },
+    })
+    const settings = settingsWith({ allowedGenres: ['Sci-Fi', 'Fantasy', 'Romance'] })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: r.groupLeft ? 'group' : 'apply', excluded: [] })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
+    // The two books changing only Genre come first, as one group; the first answer covers both.
+    expect(requests.map(r => [r.path, r.group, r.groupLeft])).toEqual([
+      ['Media/Books/Dune by Frank Herbert.md', `${settings.libraries.books.title} · Genre (1 of 2)`, 1],
+      ['Media/Books/Emma by Jane Austen.md', `${settings.libraries.books.title} · Genre, Link (1 of 1)`, 0],
+    ])
+    expect(frontmatter.get('Media/Books/The Hobbit by J.R.R. Tolkien.md')!.Genre).toEqual(['Fantasy'])
+  })
+
   it('checks existing notes against sources: empty values ticked, other differences unticked, unmatched notes listed', async () => {
     const { app, frontmatter } = makeApp({
       'Media/Movies/Arrival (2016).md': { Summary: 'My own summary.', Date: '', Duration: 116, Status: 'revisit' },

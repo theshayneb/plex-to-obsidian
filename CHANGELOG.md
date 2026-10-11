@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.92] - 2026-10-11
+
+- Checking books now works like the rest: every book is looked up first ("Checking books: n of N…"), then the pop-ups come grouped by what changes (fewest changes first), with "Apply to the rest of this group".
+
 ## [0.0.91] - 2026-10-10
 
 - A sync or check still running when the plugin is reloaded or updated now stops, so it can't keep going alongside the reloaded plugin's (which is how a book pop-up could appear while another check was still going through games).

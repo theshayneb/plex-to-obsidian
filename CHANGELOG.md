@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.99] - 2026-10-11
+
+- Settings → Remembered choices: each kind of choice (notes you chose for items, skipped every time, notes that match nothing, kept as they were, never changed, not interested) is its own collapsible section with a count, its entries under their kind of media (Movies, TV shows, Documentaries, Music, Games, Books) in alphabetical order. Kept values and links are now listed one by one (note, property, what was kept over what), each to forget, as are "Not interested" notes.
+- "Check notes against sources…" now lists each library with its own switch and its own properties (alphabetical, file name first), opened with the arrow or its name, with "Tick all" and "Untick all". Each library's choice is remembered separately, so, say, Books can check only Date while Movies checks everything.
+
 ## [0.0.98] - 2026-10-11
 
 - When HowLongToBeat has no main story time for a game, its main story plus extras time (in minutes) is used instead, for Duration and Main Story.

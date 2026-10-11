@@ -321,6 +321,21 @@
   padding: 0 var(--size-4-4) var(--size-4-3);
 }
 
+/* A collapsible section inside another (Remembered choices). */
+.pmn-subsection > .pmn-section-title {
+  font-size: var(--font-ui-medium);
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+.pmn-subsection {
+  margin: var(--size-4-2) 0;
+}
+
+/* A kind of media within a remembered-choices section. */
+.pmn-kind-heading .setting-item-name {
+  color: var(--text-accent);
+}
+
 /* Settings that belong to the one above them, or to a heading (Libraries). */
 .pmn-indent {
   margin-left: var(--size-4-2);
@@ -582,4 +597,18 @@
 
 .pmn-approval-lock.is-active {
   color: var(--text-accent);
+}
+
+/* "Check notes against sources": a library's properties, shown when it's opened. */
+.pmn-hidden {
+  display: none;
+}
+
+.pmn-check-library {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.pmn-check-library-row .setting-item-name {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
 }

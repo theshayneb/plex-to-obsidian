@@ -451,11 +451,12 @@ export class PlexSync {
   }
 
   /**
-   * @param checking for 'check': the property names to compare (in every library that has them).
+   * @param checking for 'check': the property names to compare, in every library that has them, or
+   * per library (settings key; a library left out compares nothing).
    * @param only for 'check': just these notes (say, the open one), not every note.
    * @param libraries for 'check': just these libraries (settings keys; `books` for the books), not all.
    */
-  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
+  async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] | Record<string, string[]> = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
     this.onlyLibraries = mode === 'check' && libraries ? libraries : null
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
@@ -466,7 +467,11 @@ export class PlexSync {
     const full = mode === 'full'
     // "Check existing notes against sources": only the chosen properties, always asked about.
     const genreCheck = mode === 'check'
-    const chosen = new Set(checking)
+    const everywhere = Array.isArray(checking) ? new Set(checking) : null
+    const keyOf = new Map(Object.entries(this.settings.libraries).map(([key, lib]) => [lib, key]))
+    // The properties chosen for a library.
+    const chosenOf = (lib: LibrarySetting): Set<string> =>
+      everywhere ?? new Set((checking as Record<string, string[]>)[keyOf.get(lib) ?? ''] ?? [])
     this.alwaysAsk = genreCheck
     if (full) {
       for (const family of FAMILIES) {
@@ -524,7 +529,7 @@ export class PlexSync {
           // Work out every change first, so it can be shown before anything happens.
           let renameTo: string | null = null
           // A note chosen with "Use an existing note" keeps the name you gave it.
-          if ((renaming || (genreCheck && chosen.has(FILE_NAME))) && !this.isMerged(item)) {
+          if ((renaming || (genreCheck && chosenOf(lib).has(FILE_NAME))) && !this.isMerged(item)) {
             try {
               renameTo = this.renameTarget(file, item, lib)
             } catch (err) {
@@ -546,7 +551,7 @@ export class PlexSync {
           // A rating still in an older scale is offered in the star scale whenever a pop-up can ask.
           const reviewing = genreCheck || (full && this.settings.askBeforeChanges && Boolean(this.approve))
           // A check converts and compares ratings only when its rating property is among those checked.
-          const ratingChecked = !genreCheck || lib.properties.some(m => RATING_SOURCES.includes(m.source) && chosen.has(m.name.trim()))
+          const ratingChecked = !genreCheck || lib.properties.some(m => RATING_SOURCES.includes(m.source) && chosenOf(lib).has(m.name.trim()))
           const rescale = reviewing && ratingChecked ? this.planRescale(file, item, lib) : null
           const rating = this.ratingPlan(file, item, lib)
           const notOverwritten = new Set([...beingFilled, ...rescale?.names ?? []])
@@ -564,7 +569,7 @@ export class PlexSync {
           const links = asking ? this.planLinks(file, item, lib) : null
           let checks: Checks | null = null
           try {
-            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosen) : asking ? this.planChecks(file, item, lib) : null
+            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosenOf(lib)) : asking ? this.planChecks(file, item, lib) : null
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
@@ -742,7 +747,8 @@ export class PlexSync {
         await p.decide(position, pending.length, `${p.lib.title} · ${groupOf(p)} (${place} of ${same.length})`, `${p.lib.title}|${groupOf(p)}`, same.length - place)
       }
     }
-    if (genreCheck && !result.stopped) await this.checkBooks(chosen, result, progress, only)
+    const books = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
+    if (genreCheck && !result.stopped && books) await this.checkBooks(chosenOf(books), result, progress, only)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>

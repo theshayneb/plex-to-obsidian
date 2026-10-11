@@ -1,4 +1,4 @@
-import { App, Notice, Platform, PluginSettingTab, Setting } from 'obsidian'
+import { App, normalizePath, Notice, Platform, PluginSettingTab, Setting } from 'obsidian'
 import type PlexMediaNotesPlugin from './main'
 import { cleanOmdbKey } from './discover-data'
 import { testGoogleBooks, testOmdbKey } from './discover'
@@ -14,12 +14,16 @@ import {
   STEAM_LIBRARY,
   type LibrarySetting,
 } from './config'
-import { OTHER_CHARS, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
+import { OTHER_CHARS, ratingKeyFromLink, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
 import { PlexClient } from './plex'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { PropertyNameSuggest } from './property-suggest'
-import { defaultProperties, defaultValues, FIELD_SOURCES, type FieldSource } from './properties'
+import { defaultProperties, defaultValues, FIELD_SOURCES, linkPropertyNames, type FieldSource } from './properties'
+import { groupByKind, keptEntries, kindOfLibrary, kindOfPath, OTHER_KIND, type KeptEntry } from './remembered'
+
+const noteName = (path: string): string => path.split('/').pop()!.replace(/\.md$/, '')
+const folderOf = (path: string): string => path.split('/').slice(0, -1).join('/')
 
 const PREVIEW_ITEMS: PlexItem[] = [
   { ratingKey: '1', type: 'movie', title: 'Mission: Impossible' },
@@ -84,8 +88,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
   }
 
   /** A collapsible section, closed until opened and kept as it was across redraws. */
-  private section(parent: HTMLElement, key: string, title: string, desc?: string): HTMLElement {
-    const details = parent.createEl('details', { cls: 'pmn-section' })
+  private section(parent: HTMLElement, key: string, title: string, desc?: string, cls?: string): HTMLElement {
+    const details = parent.createEl('details', { cls: cls ? ['pmn-section', cls] : 'pmn-section' })
     details.open = this.openSections.has(key)
     details.addEventListener('toggle', () => {
       if (details.open) this.openSections.add(key)
@@ -652,33 +656,62 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       }))
   }
 
-  /** Everything remembered from answers in pop-ups, each to forget. */
+  /**
+   * Everything remembered from answers in pop-ups, each to forget: one collapsible section per
+   * kind of choice, its entries under their kind of media, in alphabetical order.
+   */
   private displayRemembered(containerEl: HTMLElement): void {
-    new Setting(containerEl).setName('Notes you chose for items').setHeading()
-    this.displayMerged(containerEl)
-    new Setting(containerEl).setName('Skipped every time').setHeading()
-    this.displayIgnored(containerEl)
-    this.displayKept(containerEl)
-    this.displayLocked(containerEl)
-    this.displayNotInterested(containerEl)
+    const settings = this.plugin.settings
+    const notes = this.notesByItem()
+    this.displayMerged(this.section(containerEl, 'remembered-merged', `Notes you chose for items (${Object.keys(settings.merged).length})`, 'Use an existing note, and Tie this note to a Plex item.', 'pmn-subsection'))
+    this.displayIgnored(this.section(containerEl, 'remembered-ignored', `Skipped every time (${Object.keys(settings.ignored).length})`, undefined, 'pmn-subsection'))
+    this.displayUnmatchedIgnored(this.section(containerEl, 'remembered-unmatched', `Notes that match nothing, ignored (${settings.unmatchedIgnored.length})`, undefined, 'pmn-subsection'))
+    const kept = keptEntries(settings.keptValues, settings.keptLinks)
+    this.displayKept(this.section(containerEl, 'remembered-kept', `Kept as they were (${kept.length})`, undefined, 'pmn-subsection'), kept, notes)
+    const locked = Object.values(settings.lockedProperties).reduce((sum, names) => sum + names.length, 0)
+    this.displayLocked(this.section(containerEl, 'remembered-locked', `Never changed (${locked})`, undefined, 'pmn-subsection'))
+    this.displayNotInterested(this.section(containerEl, 'remembered-not-interested', `Not interested (${settings.notInterested.length})`, undefined, 'pmn-subsection'))
+  }
+
+  /** A heading for one kind of media within a remembered-choices section. */
+  private kindHeading(containerEl: HTMLElement, kind: string, count: number): void {
+    new Setting(containerEl).setName(`${kind} (${count})`).setHeading().setClass('pmn-kind-heading')
+  }
+
+  /** The notes in the libraries' folders by the item their link (or a tie) points to. */
+  private notesByItem(): Map<string, string> {
+    const settings = this.plugin.settings
+    const libraries = Object.values(settings.libraries).filter(lib => lib.target !== 'skip')
+    const linkNames = [...new Set(libraries.flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = [...new Set(libraries.map(lib => normalizePath(lib.folder)))]
+    const notes = new Map<string, string>()
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!folders.some(folder => file.path.startsWith(`${folder}/`))) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      for (const name of linkNames) {
+        const key = ratingKeyFromLink(frontmatter[name])
+        if (key && !notes.has(key)) notes.set(key, file.path)
+      }
+    }
+    for (const [key, item] of Object.entries(settings.merged)) notes.set(key, item.path)
+    return notes
   }
 
   /** Properties you said never to change in a note ("Never for this note" in a pop-up), each to forget. */
   private displayLocked(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
     const entries = Object.entries(settings.lockedProperties)
-      .filter(([, names]) => names.length)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-    new Setting(containerEl).setName('Never changed').setHeading()
+      .flatMap(([path, names]) => names.map(name => ({ path, name })))
     new Setting(containerEl).setDesc(entries.length
       ? 'Properties you locked in a pop-up: syncs and checks never change them in that note. Forget one to have it offered again.'
       : 'Nothing yet. Press the lock next to a line in a change pop-up to never change that property in that note.')
-    for (const [path, names] of entries) {
-      for (const name of names) {
+    for (const [kind, list] of groupByKind(entries, e => kindOfPath(settings.libraries, e.path), e => noteName(e.path), e => e.name)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const { path, name } of list) {
         new Setting(containerEl)
           .setClass('pmn-ignored-item')
-          .setName(name)
-          .setDesc(path.replace(/\.md$/, ''))
+          .setName(noteName(path))
+          .setDesc(`${name} · ${folderOf(path)}`)
           .addButton(button => button
             .setButtonText('Forget')
             .onClick(async () => {
@@ -692,14 +725,14 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     }
   }
 
-  /** Recommendations you said "Not interested" to. */
+  /** Recommendations you said "Not interested" to: notes by name, items without notes counted. */
   private displayNotInterested(containerEl: HTMLElement): void {
     const settings = this.plugin.settings
     const count = settings.notInterested.length
-    new Setting(containerEl).setName('Not interested').setHeading()
     new Setting(containerEl)
-      .setName(`${count} recommendation${count === 1 ? '' : 's'}`)
-      .setDesc('Suggestions you said "Not interested" to on the recommendations page aren\'t suggested again. Forget them to see them again.')
+      .setDesc(count
+        ? 'Suggestions you said "Not interested" to on the recommendations page aren\'t suggested again. Forget one to see it again.'
+        : 'Nothing yet. Suggestions you say "Not interested" to on the recommendations page show up here.')
       .addButton(button => button
         .setButtonText('Forget all')
         .setDisabled(!count)
@@ -708,55 +741,106 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           await this.save()
           this.refresh()
         }))
+    const paths = settings.notInterested.filter(id => id.startsWith('note:')).map(id => id.slice('note:'.length))
+    for (const [kind, list] of groupByKind(paths, path => kindOfPath(settings.libraries, path), noteName)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const path of list) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(noteName(path))
+          .setDesc(folderOf(path))
+          .addButton(button => button
+            .setButtonText('Forget')
+            .onClick(async () => {
+              settings.notInterested = settings.notInterested.filter(id => id !== `note:${path}`)
+              await this.save()
+              this.refresh()
+            }))
+      }
+    }
+    const items = settings.notInterested.length - paths.length
+    if (items) {
+      new Setting(containerEl)
+        .setName(`${items} item${items === 1 ? '' : 's'} without a note`)
+        .setDesc('Plex items and Steam games you have no note for; only "Forget all" brings them back.')
+    }
   }
 
   /** Values and links you chose to keep in pop-ups, which aren't offered again while they stay the same. */
-  private displayKept(containerEl: HTMLElement): void {
+  private displayKept(containerEl: HTMLElement, kept: KeptEntry[], notes: Map<string, string>): void {
     const settings = this.plugin.settings
-    const values = Object.keys(settings.keptValues).length
-    const links = Object.keys(settings.keptLinks).length
-    new Setting(containerEl).setName('Kept as they were').setHeading()
     new Setting(containerEl)
-      .setName(`${values} value${values === 1 ? '' : 's'} and ${links} link${links === 1 ? '' : 's'}`)
-      .setDesc('Values and links you left unticked in a pop-up are kept and not offered again while they stay the same. Forget them to have syncs and checks offer them again.')
+      .setDesc(kept.length
+        ? 'Values and links you left unticked in a pop-up are kept and not offered again while they stay the same. Forget one to have syncs and checks offer it again.'
+        : 'Nothing yet. Values and links you leave unticked in a pop-up are kept, and listed here.')
       .addButton(button => button
         .setButtonText('Forget all')
-        .setDisabled(!values && !links)
+        .setDisabled(!kept.length)
         .onClick(async () => {
           settings.keptValues = {}
           settings.keptLinks = {}
           await this.save()
           this.refresh()
         }))
+    const pathOf = (entry: KeptEntry): string | null =>
+      entry.item.startsWith('book:') ? entry.item.slice('book:'.length) : notes.get(entry.item) ?? null
+    const nameOf = (entry: KeptEntry): string => {
+      const path = pathOf(entry)
+      return path ? noteName(path) : `Item ${entry.item} (no note found)`
+    }
+    const kindOf = (entry: KeptEntry): string => {
+      const path = pathOf(entry)
+      return path ? kindOfPath(settings.libraries, path) : OTHER_KIND
+    }
+    for (const [kind, list] of groupByKind(kept, kindOf, nameOf, e => e.property)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const entry of list) {
+        const offer = entry.offered === null ? '' : ` over "${entry.offered}"`
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(nameOf(entry))
+          .setDesc(`${entry.property}: kept "${entry.kept}"${offer}`)
+          .addButton(button => button
+            .setButtonText('Forget')
+            .onClick(async () => {
+              if (entry.links) delete settings.keptLinks[entry.key]
+              else delete settings.keptValues[entry.key]
+              await this.save()
+              this.refresh()
+            }))
+      }
+    }
   }
 
   /** Items tied to existing notes with "Use an existing note", each with a button to undo it. */
   private displayMerged(containerEl: HTMLElement): void {
-    const merged = this.plugin.settings.merged
-    const entries = Object.entries(merged).sort((a, b) => a[1].name.localeCompare(b[1].name))
+    const settings = this.plugin.settings
+    const entries = Object.entries(settings.merged)
     new Setting(containerEl).setDesc(entries.length
       ? 'Items you chose "Use an existing note" for. Syncs treat that note as theirs (filling in, play counts and ratings as usual) and never rename it. Unmerge one to have syncs match it by name again, or offer to create it.'
       : 'Nothing yet. Choose "Use an existing note" in the approval pop-up to tie an item to a note you already have, when their names differ.')
-    for (const [key, item] of entries) {
-      new Setting(containerEl)
-        .setClass('pmn-ignored-item')
-        .setName(item.name)
-        .setDesc(`${item.library} → ${item.path.replace(/\.md$/, '')}`)
-        .addButton(button => button
-          .setButtonText('Unmerge')
-          .onClick(async () => {
-            delete this.plugin.settings.merged[key]
-            await this.save()
-            this.refresh()
-          }))
+    for (const [kind, list] of groupByKind(entries, ([, item]) => kindOfLibrary(settings.libraries, item.libraryKey, item.library), ([, item]) => item.name)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const [key, item] of list) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(item.name)
+          .setDesc(`${item.library} → ${item.path.replace(/\.md$/, '')}`)
+          .addButton(button => button
+            .setButtonText('Unmerge')
+            .onClick(async () => {
+              delete settings.merged[key]
+              await this.save()
+              this.refresh()
+            }))
+      }
     }
   }
 
   /** Items "Skip every time" was chosen for, each with a button to un-ignore it. */
   private displayIgnored(containerEl: HTMLElement): void {
-    const ignored = this.plugin.settings.ignored
-    const entries = Object.entries(ignored).sort((a, b) => a[1].name.localeCompare(b[1].name))
-
+    const settings = this.plugin.settings
+    const entries = Object.entries(settings.ignored)
     const heading = new Setting(containerEl)
       .setDesc(entries.length
         ? 'Plex items you chose "Skip every time" for. Syncs pass over them completely: no new notes, renames, fill-ins or play counts. Un-ignore one to be asked about it again on the next sync.'
@@ -765,43 +849,51 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       heading.addButton(button => button
         .setButtonText('Un-ignore all')
         .onClick(async () => {
-          this.plugin.settings.ignored = {}
+          settings.ignored = {}
           await this.save()
           this.refresh()
         }))
     }
-
-    for (const [key, item] of entries) {
-      new Setting(containerEl)
-        .setClass('pmn-ignored-item')
-        .setName(item.name)
-        .setDesc(`${item.library}, since ${new Date(item.since).toLocaleDateString()}`)
-        .addButton(button => button
-          .setButtonText('Un-ignore')
-          .onClick(async () => {
-            delete this.plugin.settings.ignored[key]
-            await this.save()
-            this.refresh()
-          }))
+    for (const [kind, list] of groupByKind(entries, ([, item]) => kindOfLibrary(settings.libraries, undefined, item.library), ([, item]) => item.name)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const [key, item] of list) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(item.name)
+          .setDesc(`${item.library}, since ${new Date(item.since).toLocaleDateString()}`)
+          .addButton(button => button
+            .setButtonText('Un-ignore')
+            .onClick(async () => {
+              delete settings.ignored[key]
+              await this.save()
+              this.refresh()
+            }))
+      }
     }
+  }
 
-    const notes = [...this.plugin.settings.unmatchedIgnored].sort()
-    if (!notes.length) return
-    new Setting(containerEl)
-      .setName('Notes that match nothing')
-      .setDesc('Notes you chose "Always ignore" for when a sync pointed out that they match nothing in Plex, Steam or Open Library. Stop ignoring one to have it pointed out again.')
-    for (const path of notes) {
-      new Setting(containerEl)
-        .setClass('pmn-ignored-item')
-        .setName(path.split('/').pop()!.replace(/\.md$/, ''))
-        .setDesc(path.split('/').slice(0, -1).join('/'))
-        .addButton(button => button
-          .setButtonText('Stop ignoring')
-          .onClick(async () => {
-            this.plugin.settings.unmatchedIgnored = this.plugin.settings.unmatchedIgnored.filter(p => p !== path)
-            await this.save()
-            this.refresh()
-          }))
+  /** Notes "Always ignore" was chosen for when a sync said they match nothing, each to stop ignoring. */
+  private displayUnmatchedIgnored(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+    const notes = settings.unmatchedIgnored
+    new Setting(containerEl).setDesc(notes.length
+      ? 'Notes you chose "Always ignore" for when a sync pointed out that they match nothing in Plex, Steam or Open Library. Stop ignoring one to have it pointed out again.'
+      : 'Nothing yet. Choose "Always ignore" for a note a sync says matches nothing to stop it being pointed out.')
+    for (const [kind, list] of groupByKind(notes, path => kindOfPath(settings.libraries, path), noteName)) {
+      this.kindHeading(containerEl, kind, list.length)
+      for (const path of list) {
+        new Setting(containerEl)
+          .setClass('pmn-ignored-item')
+          .setName(noteName(path))
+          .setDesc(folderOf(path))
+          .addButton(button => button
+            .setButtonText('Stop ignoring')
+            .onClick(async () => {
+              settings.unmatchedIgnored = settings.unmatchedIgnored.filter(p => p !== path)
+              await this.save()
+              this.refresh()
+            }))
+      }
     }
   }
 

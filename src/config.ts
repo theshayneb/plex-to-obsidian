@@ -90,6 +90,8 @@ export interface PlexNotesSettings {
   merged: Record<string, MergedItem>
   /** The properties "Check existing notes against sources" compares, as last chosen (null: not chosen yet). */
   checkProperties: string[] | null
+  /** The properties "Check notes against sources" compares in each library (settings key), as last chosen; a library not in it starts from `checkProperties`. */
+  checkByLibrary: Record<string, string[]>
   /** The libraries (settings keys) "Check notes against sources" checks, as last chosen (null: not chosen yet, all). */
   checkLibraries: string[] | null
   /** The only genres written to notes, in every library; empty keeps them all. */
@@ -180,6 +182,7 @@ export function defaultSettings(): PlexNotesSettings {
     migrations: [],
     allowedGenres: [...DEFAULT_GENRES],
     checkProperties: null,
+    checkByLibrary: {},
     checkLibraries: null,
     updatePlayCounts: false,
     updateRatings: false,
@@ -318,6 +321,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)
   if (Array.isArray(saved.checkLibraries)) settings.checkLibraries = saved.checkLibraries.map(String)
+  if (saved.checkByLibrary && typeof saved.checkByLibrary === 'object') {
+    settings.checkByLibrary = Object.fromEntries(Object.entries(saved.checkByLibrary as Record<string, unknown>)
+      .filter((e): e is [string, unknown[]] => Array.isArray(e[1]))
+      .map(([key, names]) => [key, names.map(String)]))
+  }
   settings.steam = { ...settings.steam, ...saved.steam }
 
   const legacyFolders: Partial<Record<MediaKind, string>> = {

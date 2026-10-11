@@ -226,7 +226,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
    * @param only just these notes, not every note.
    * @param libraries just these libraries (settings keys), not every library.
    */
-  async checkNotes(properties: string[], only?: Set<string>, libraries?: Set<string>): Promise<void> {
+  async checkNotes(properties: string[] | Record<string, string[]>, only?: Set<string>, libraries?: Set<string>): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('A sync or check is already running')
       return

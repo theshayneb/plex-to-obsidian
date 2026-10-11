@@ -966,6 +966,24 @@ describe('PlexSync', () => {
     expect(requests).toEqual([])
   })
 
+  it('checks the properties chosen for each library, and none in a library left out', async () => {
+    const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Summary: 'My own summary.', Date: '' } })
+    const settings = settingsWith({ tickDifferences: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    responses.set('/library/metadata/1', { MediaContainer: { Metadata: [movies[0]] } })
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'skip', excluded: [] })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', { 1: ['Date'] })
+    expect(requests.map(r => r.lines.map(l => l.label))).toEqual([['Date']])
+    requests.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', { 2: ['Summary', 'Date'] })
+    expect(requests).toEqual([])
+  })
+
   it('checks just the notes asked for, and replaces a year-only date with the full one, ticked', async () => {
     const { app, frontmatter } = makeApp({
       'Media/Movies/Arrival (2016).md': { Date: '2016' },

@@ -117,6 +117,11 @@ describe('sourceValue', () => {
     expect(value('contentRating')).toBe('PG-13')
     expect(value('criticRating')).toBe(9.4)
     expect(value('durationText', { ...movie, duration: 3600000 })).toBe('1h')
+    // A game's length is HowLongToBeat's main story.
+    const game = { ratingKey: 'steam-1', type: 'game', title: 'Frog Island', hltb: { main: 312 } }
+    expect(value('durationMinutes', game as never)).toBe(312)
+    expect(value('durationText', game as never)).toBe('5h 12m')
+    expect(value('durationMinutes', { ...game, hltb: undefined } as never)).toBeUndefined()
     expect(value('seasons')).toBeUndefined()
     expect(value('seasons', { ...movie, type: 'show', childCount: 3 })).toBe(3)
     const added = new Date(2024, 0, 5, 12).getTime() / 1000

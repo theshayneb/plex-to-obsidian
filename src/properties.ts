@@ -256,6 +256,15 @@ function orAlbum<T>(item: PlexItem, pick: (i: PlexItem) => T | undefined, empty:
 
 const noTags = (v: string[]) => v.length === 0
 
+/** How long an item is, in milliseconds: Plex's length, or for a game its HowLongToBeat main story. */
+function lengthOf(item: PlexItem): number | undefined {
+  if (item.duration) return item.duration
+  return item.type === 'game' && item.hltb?.main ? item.hltb.main * 60000 : undefined
+}
+
+/** Sources of a length, which for a game come from HowLongToBeat. */
+export const LENGTH_SOURCES: FieldSource[] = ['durationMinutes', 'durationText', 'durationClock']
+
 function durationText(ms: number | undefined): string | undefined {
   if (!ms) return undefined
   const minutes = Math.round(ms / 60000)
@@ -448,9 +457,9 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'originalTitle': return item.type === 'track' ? undefined : item.originalTitle
     case 'releaseDate': return fullDate(orAlbum(item, i => i.originallyAvailableAt), yearOf(item))
     case 'year': return yearOf(item)
-    case 'durationMinutes': return item.duration ? Math.round(item.duration / 60000) : undefined
-    case 'durationText': return durationText(item.duration)
-    case 'durationClock': return durationClock(item.duration)
+    case 'durationMinutes': { const ms = lengthOf(item); return ms ? Math.round(ms / 60000) : undefined }
+    case 'durationText': return durationText(lengthOf(item))
+    case 'durationClock': return durationClock(lengthOf(item))
     case 'status': return isWatched(item) ? ctx.values.watched : isStarted(item) ? ctx.values.started : ctx.values.unwatched
     case 'plexLink': return ctx.link
     case 'poster': return ctx.image ?? undefined

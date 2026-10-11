@@ -38,7 +38,7 @@ import {
 import { lookUpBook } from './discover'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics } from './music-files'
@@ -1211,7 +1211,8 @@ export class PlexSync {
     const item = listed.steamAppId ? await steam.details(listed) : { ...listed }
     const properties = lib?.properties ?? []
     const wantsCover = usesSource(properties, 'poster') && this.settings.askBeforeChanges
-    const wantsHltb = properties.some(m => HLTB_SOURCES.includes(m.source) && m.name.trim())
+    // A game's length (Duration) is HowLongToBeat's main story too.
+    const wantsHltb = properties.some(m => (HLTB_SOURCES.includes(m.source) || LENGTH_SOURCES.includes(m.source)) && m.name.trim())
     if ((wantsHltb || wantsCover) && !item.hltb) {
       try {
         this.hltb ??= new HltbClient()
@@ -1406,7 +1407,7 @@ export class PlexSync {
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
     if (!mappings.length) return null
     // A game's HowLongToBeat lookup (and cover choices) only when a property needs them.
-    const needsLib = mappings.some(m => HLTB_SOURCES.includes(m.source) || m.source === 'poster')
+    const needsLib = mappings.some(m => HLTB_SOURCES.includes(m.source) || LENGTH_SOURCES.includes(m.source) || m.source === 'poster')
     const full = await this.fullItem(item, needsLib ? lib : undefined)
     return this.compareNote(file, full, lib, kind, mappings, item.ratingKey)
   }

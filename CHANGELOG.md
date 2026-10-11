@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.95] - 2026-10-11
+
+- A game's Duration (any "Duration in minutes", "as text" or "as a clock" property in the Steam library) is now its HowLongToBeat main story time, since Steam has no length. "Check notes against sources" with Duration ticked offers it in minutes for game notes that hold hours or nothing.
+
 ## [0.0.94] - 2026-10-11
 
 - Fixed: locks ("Never change this in this note") were only remembered until Obsidian closed, so locked properties came back in later checks. A lock is now saved the moment the pop-up is answered, and also when the pop-up is closed with its ×.

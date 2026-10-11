@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.96] - 2026-10-11
+
+- "Check notes against sources" now offers to empty a length (Duration, Main Story, page count) that the source has nothing for, such as a game HowLongToBeat doesn't know, instead of silently leaving it. It starts unticked: tick it to empty the property (or type minutes in yourself); left unticked, it isn't offered again.
+
 ## [0.0.95] - 2026-10-11
 
 - A game's Duration (any "Duration in minutes", "as text" or "as a clock" property in the Steam library) is now its HowLongToBeat main story time, since Steam has no length. "Check notes against sources" with Duration ticked offers it in minutes for game notes that hold hours or nothing.

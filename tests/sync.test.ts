@@ -1197,6 +1197,24 @@ describe('PlexSync', () => {
     expect(requests.map(r => r.path)).toEqual(['Media/Movies/Arrival (2016).md'])
   })
 
+  it('offers to empty a length the source has none for, unticked', async () => {
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Duration: 5 } })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    const lengthless = { ...movies[0], duration: undefined }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [lengthless] } })
+    responses.set('/library/metadata/1', { MediaContainer: { Metadata: [lengthless] } })
+    const requests: ApprovalRequest[] = []
+    const approve = (r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    }
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
+    expect(requests[0].lines).toMatchObject([{ label: 'Duration', current: '5', value: null, unticked: true }])
+    // Ticked and applied, the property is emptied.
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Duration ?? null).toBeNull()
+  })
+
   it('points out a duration that isn\'t a number in the pop-up', async () => {
     const { app } = makeApp({ 'Media/Movies/Arrival (2016).md': { Duration: '1h 56m', Summary: 'Mine.' } })
     const settings = settingsWith({})

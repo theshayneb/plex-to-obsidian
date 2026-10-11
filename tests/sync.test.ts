@@ -1431,6 +1431,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
     expect(result.unmatched).toEqual([])
     expect(requested).toContain(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('intitle:"We Sent Them Down Singing" inauthor:"Libby Edwardson"')}&maxResults=10&printType=books`)
+    // Only the page count is checked: Google Books isn't asked for a summary or date.
+    expect(requested.filter(u => u.includes('googleapis') && u.includes('isbn'))).toEqual([])
     expect(frontmatter.get(path)).toMatchObject({ Duration: 320, Link: 'https://books.google.com/books?id=abc-1' })
 
     // Linked: that volume, looked up directly.

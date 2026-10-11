@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.105] - 2026-10-11
+
+- Book checks use far fewer Google Books requests: Google Books is only asked for summaries and exact dates when Summary or Date is among the properties checked, and its answers are reused while Obsidian runs. Before, every book in a check used up some of the key's daily allowance whatever was checked.
+- When Google Books refuses, the reason is Google's own: a used-up daily allowance (it resets at midnight Pacific time) is said as such, and no more requests are made for an hour; per-minute limits are waited out longer (up to about 20 seconds). The settings' Test button shows the same.
+
 ## [0.0.104] - 2026-10-11
 
 - Book checks read a "Title by Author" file name as title and author even when the note has no author property (before, the whole name was searched for as the title, so nothing was found), and try the whole name if that finds nothing (for titles like "Stand by Me").

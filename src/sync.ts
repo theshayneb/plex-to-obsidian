@@ -1530,6 +1530,8 @@ export class PlexSync {
       .filter(m => m.source === 'userRatingEmoji' && m.name.trim()).map(m => m.name.trim()))]
       .filter(name => chosen.has(name))
     if (!mappings.length && !ratingNames.length) return
+    // Google Books (which has a daily allowance) is only asked for summaries and exact dates when they're checked.
+    const googleInfo = mappings.some(m => m.source === 'summary' || m.source === 'releaseDate')
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
     const authorProp = lib.properties.find(m => m.source === 'authors' && m.name.trim())?.name.trim()
     const folder = normalizePath(lib.folder)
@@ -1586,8 +1588,8 @@ export class PlexSync {
         const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
         const title = byName ? byName[1] : file.basename
         const googleKey = this.settings.googleBooksKey ?? ''
-        book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2] }, googleKey)
-        if (!book && byName && !work && !volume) book = await lookUpBook({ title: file.basename, author: authors[0] }, googleKey)
+        book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
+        if (!book && byName && !work && !volume) book = await lookUpBook({ title: file.basename, author: authors[0], googleInfo }, googleKey)
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
         rescaleOnly()

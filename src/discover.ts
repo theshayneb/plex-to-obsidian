@@ -142,7 +142,10 @@ function bookQuery(title: string, author?: string): string {
  * doesn't have). Its genres are all the work's subjects (cleaned of tags) and its summary the work's
  * description. Null when nothing is found.
  */
-export async function lookUpBook(by: { work?: string | null, volume?: string | null, title?: string, author?: string }, googleKey = ''): Promise<PlexItem | null> {
+export async function lookUpBook(by: { work?: string | null, volume?: string | null, title?: string, author?: string, googleInfo?: boolean }, googleKey = ''): Promise<PlexItem | null> {
+  // Google Books' summary and exact date are only asked for when they're wanted (it has a daily allowance).
+  const google = (book: PlexItem, fallback: string | undefined): Promise<PlexItem> =>
+    by.googleInfo === false ? Promise.resolve({ ...book, summary: fallback }) : withGoogle(book, googleKey, fallback)
   type Work = { title?: string, subjects?: string[], description?: string | { value?: string } }
   const workJson = (work: string) => getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as Promise<Work>
   if (by.work) {
@@ -162,13 +165,14 @@ export async function lookUpBook(by: { work?: string | null, volume?: string | n
       book.year = earliestYear([...doc ? [doc] : [], ...others]) ?? book.year
     }
     const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
-    return withGoogle({ ...book, Genre: genres }, googleKey, openLibraryDescription(body) ?? found?.item.summary)
+    return google({ ...book, Genre: genres }, openLibraryDescription(body) ?? found?.item.summary)
   }
   if (by.volume) {
     // Linked to Google Books: that volume.
     const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(by.volume)}${googleKey.trim() ? `?key=${encodeURIComponent(googleKey.trim())}` : ''}`)
     if (res.status === 404) return null
-    if (res.status >= 400) throw new Error(`Google Books returned ${res.status}`)
+    if (res.status === 429 || res.status === 503) throw new Error(googleRefusal(res, googleKey))
+    if (res.status >= 400) throw new Error(`Google Books returned ${res.status}${googleReason(res) ? `: ${googleReason(res)}` : ''}`)
     return googleFound(res.json as GoogleVolume)?.item ?? null
   }
   if (!by.title) return null
@@ -187,7 +191,7 @@ export async function lookUpBook(by: { work?: string | null, volume?: string | n
   const body = await workJson(work).catch(() => null)
   const doc = docs.find(d => d.key === `/works/${work}`)
   const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
-  return withGoogle({ ...found.item, Genre: genres }, googleKey, openLibraryDescription(body) ?? found.item.summary)
+  return google({ ...found.item, Genre: genres }, openLibraryDescription(body) ?? found.item.summary)
 }
 
 /**
@@ -223,9 +227,7 @@ export async function googleBooksInfo(book: PlexItem, key = ''): Promise<{ summa
 async function googleVolumes(query: string, key: string): Promise<GoogleVolume[]> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
   const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&printType=books${withKey}`)
-  if (res.status === 429 || res.status === 503) {
-    throw new Error(`Google Books is busy or limiting requests (${res.status})${key.trim() ? '' : '; a free Google Books API key (in the settings) raises the limit'}`)
-  }
+  if (res.status === 429 || res.status === 503) throw new Error(googleRefusal(res, key))
   if (res.status >= 400) {
     console.warn(`Media Manager: Google Books returned ${res.status} for`, query)
     return []
@@ -243,30 +245,59 @@ async function withGoogle(book: PlexItem, key: string, fallback: string | undefi
   return { ...book, summary: summary ?? fallback, ...date ? { originallyAvailableAt: date } : {} }
 }
 
-/**
- * A Google Books request, tried again (after 1.5 and 4 seconds) when Google says it's busy (503)
- * or limiting requests (429), which happens most to requests without a key.
- */
-async function googleBooksGet(url: string): Promise<{ status: number, json: unknown }> {
-  let res = await requestUrl({ url, throw: false })
-  for (const wait of [1500, 4000]) {
-    if (res.status !== 503 && res.status !== 429) break
-    await new Promise(resolve => window.setTimeout(resolve, wait))
-    res = await requestUrl({ url, throw: false })
+/** Google's own reason for refusing a request ("Quota exceeded for quota metric 'Queries' and limit 'Queries per day'…"). */
+function googleReason(res: { json: unknown }): string | undefined {
+  try {
+    return (res.json as { error?: { message?: string } } | null)?.error?.message
+  } catch {
+    return undefined
   }
-  return res as { status: number, json: unknown }
+}
+
+/** Google Books' answers while Obsidian runs, so checking again doesn't use up the daily allowance. */
+const googleAnswers = new Map<string, { status: number, json: unknown }>()
+/** After Google says the day's allowance is used up, no more requests for an hour (they'd only be refused). */
+let googleOut: { until: number, reason: string } | null = null
+
+/**
+ * A Google Books request, tried again (after 2, 6 and 15 seconds) when Google says it's busy
+ * (503) or limiting requests per minute (429). Once the day's allowance is used up, requests stop
+ * for an hour and get that answer straight away.
+ */
+async function googleBooksGet(url: string, fresh = false): Promise<{ status: number, json: unknown }> {
+  const cached = googleAnswers.get(url)
+  if (cached && !fresh) return cached
+  if (googleOut && !fresh && Date.now() < googleOut.until) return { status: 429, json: { error: { message: googleOut.reason } } }
+  let res = await requestUrl({ url, throw: false }) as { status: number, json: unknown }
+  for (const wait of [2000, 6000, 15000]) {
+    if (res.status !== 503 && res.status !== 429) break
+    if (/per day/i.test(googleReason(res) ?? '')) break
+    await new Promise(resolve => window.setTimeout(resolve, wait))
+    res = await requestUrl({ url, throw: false }) as { status: number, json: unknown }
+  }
+  if (res.status === 429 && /per day/i.test(googleReason(res) ?? '')) googleOut = { until: Date.now() + 60 * 60 * 1000, reason: googleReason(res)! }
+  if (res.status === 200) {
+    googleOut = null
+    googleAnswers.set(url, { status: res.status, json: res.json })
+  }
+  return res
+}
+
+/** Why Google Books refused, for the user. */
+function googleRefusal(res: { status: number, json: unknown }, key: string): string {
+  const reason = googleReason(res)
+  if (reason && /per day/i.test(reason)) {
+    return `Google Books' daily allowance${key.trim() ? ' for your key' : ''} is used up (it resets at midnight Pacific time)${key.trim() ? '' : '; a free Google Books API key (in the settings) gives you your own'}`
+  }
+  return `Google Books is busy or limiting requests (${res.status}${reason ? `: ${reason}` : ''})${key.trim() ? '' : '; a free Google Books API key (in the settings) raises the limit'}`
 }
 
 /** Tries Google Books (with the key, if one is given) for the settings' Test button. Returns what to tell the user. */
 export async function testGoogleBooks(key: string): Promise<string> {
   const withKey = key.trim() ? `&key=${encodeURIComponent(key.trim())}` : ''
   try {
-    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('isbn:9780441172719')}${withKey}`)
-    if (res.status === 503 || res.status === 429) {
-      return key.trim()
-        ? `Google Books is busy (${res.status}), even after trying again. Try again in a few minutes; until then book summaries come from Open Library.`
-        : `Google Books is busy (${res.status}), even after trying again. Without a key, everyone shares a small allowance, so this happens often: add a free API key (Google Cloud console, with the Books API enabled) and test again. Until then book summaries come from Open Library.`
-    }
+    const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent('isbn:9780441172719')}${withKey}`, true)
+    if (res.status === 503 || res.status === 429) return `${googleRefusal(res, key)}. Until then book summaries come from Open Library.`
     if (res.status >= 400) {
       let reason: string | undefined
       try {

@@ -190,7 +190,10 @@ export class RecommendView extends ItemView {
 
     const grid = contentEl.createDiv('pmn-dash-grid')
     for (const group of groups) {
-      const card = grid.createDiv('pmn-card')
+      // Music's cell also holds the Last.fm card, below it.
+      const cell = group === 'music' ? grid.createDiv('pmn-dash-stack') : grid
+      const card = cell.createDiv('pmn-card')
+      if (group === 'music') this.pmnLastfmCard(cell, entries, items)
       card.createDiv({ cls: 'pmn-card-title', text: GROUP_TITLES[group] })
       const list = recs[group]
       if (!list.length) {
@@ -204,7 +207,6 @@ export class RecommendView extends ItemView {
       }
       for (const rec of list) this.pmnRow(card, rec, items)
     }
-    if (groups.includes('music')) this.pmnLastfmCard(contentEl, entries, items)
   }
 
   /** Music from Last.fm: songs you have but haven't rated, and songs and artists you don't have. */
@@ -235,9 +237,9 @@ export class RecommendView extends ItemView {
       ['Songs you don\'t have', 'No new songs found.', found.songs],
       ['Artists you don\'t have', 'No new artists found.', found.artists],
     ]
-    const grid = card.createDiv('pmn-lastfm-grid')
+    const stack = card.createDiv('pmn-lastfm-sections')
     for (const [title, empty, list] of sections) {
-      const column = grid.createDiv('pmn-lastfm-column')
+      const column = stack.createDiv('pmn-lastfm-section')
       column.createDiv({ cls: 'pmn-lastfm-heading', text: title })
       const shown = list.filter(s => !notInterested.has(s.id))
       if (!shown.length) column.createEl('p', { cls: 'pmn-dash-empty', text: empty })

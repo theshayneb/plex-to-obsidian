@@ -613,16 +613,18 @@
   font-weight: var(--font-semibold);
 }
 
-/* Recommendations: music from Last.fm, below the other cards, in three columns. */
-.pmn-lastfm {
-  margin-top: var(--size-4-3);
+/* Recommendations: music from Last.fm, in the music card's cell, below it, its lists stacked. */
+.pmn-dash-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  min-width: 0;
 }
 
-.pmn-lastfm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--size-4-4);
-  align-items: start;
+.pmn-lastfm-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
 }
 
 .pmn-lastfm-heading {

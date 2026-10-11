@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.101] - 2026-10-11
+
+- Recommendations: the "Music from Last.fm" card now sits right below the Music card, with its three lists (songs you have, songs you don't have, artists you don't have) one above the other.
+
 ## [0.0.100] - 2026-10-11
 
 - Recommendations: a "Music from Last.fm" card. With a Last.fm API key (Settings → Connections → Other sources, with a Test button), the page asks Last.fm what's like up to 30 of your 🩷 and ⭐⭐⭐⭐ songs (🩷 first, a different mix on each refresh) and their artists, and lists songs you have but haven't rated yet, songs you don't have and artists you have nothing by, each with the loved songs it came from. Songs and artists you don't have link to their Last.fm page and can be marked "Not interested" (listed under Remembered choices → Not interested → Last.fm). Last.fm's answers are kept for a day while Obsidian runs.

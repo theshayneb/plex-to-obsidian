@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.114] - 2026-10-12
+
+- Episode lines in daily notes now take their quote markers from the empty line under the journaling line ("> >- ▶️ [[Show]]: S01E05 – Title"), not from the journaling line itself, which gave them one ">" too many. Lines already written there with the extra ">" are corrected the next time episodes are added to that day.
+
 ## [0.0.113] - 2026-10-12
 
 - Watched episodes of shows you've set to skip every time (in Settings → Remembered choices) are no longer added to daily notes, nor are shows whose note you've set to always ignore.

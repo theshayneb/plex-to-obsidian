@@ -82,7 +82,8 @@ function anchorLine(lines: string[], anchor: string): number {
 
 /**
  * A daily note with entries added under the anchor line: after the anchor and the empty quote line
- * right below it, and after entries added before, each line with the anchor's quote markers
+ * right below it, and after entries added before, each line with that empty line's quote markers
+ * (else the anchor's; earlier entries there are given the same ones)
  * ("> >- ▶️ [[Show]]: S02E05 – Title"). A show that already has a line (anywhere) gets the
  * episodes it lacks added at its end ("…, S02E06 – Title"); nothing is changed or removed.
  * `found` is false when the anchor isn't there.
@@ -91,7 +92,10 @@ export function insertEntries(text: string, anchor: string, entries: DailyEntry[
   const lines = text.split('\n')
   const at = anchorLine(lines, anchor)
   if (at < 0) return { text, added: 0, found: false }
-  const prefix = /^[>\s]*/.exec(lines[at])![0].replace(/\s+$/, '')
+  // The quote markers of the empty quote line under the anchor (inside the callout), else the anchor's.
+  const markers = (line: string): string => /^[>\s]*/.exec(line)![0].replace(/\s+$/, '')
+  const below = at + 1 < lines.length && /^[>\s]*$/.test(lines[at + 1]) && lines[at + 1].includes('>')
+  const prefix = markers(below ? lines[at + 1] : lines[at])
   let added = 0
   const fresh: string[] = []
   for (const { lead, parts } of entries) {
@@ -109,8 +113,17 @@ export function insertEntries(text: string, anchor: string, entries: DailyEntry[
   }
   let to = at + 1
   // The empty line under the anchor (inside the callout: only quote markers).
-  if (to < lines.length && /^[>\s]*$/.test(lines[to]) && lines[to].includes('>')) to++
-  while (to < lines.length && lines[to].startsWith(prefix) && lines[to].includes('▶️')) to++
+  if (below) to++
+  // Earlier entries (written with other quote markers by older versions get these ones).
+  let fixed = false
+  while (to < lines.length && /^[>\s]*-\s*▶️/.test(lines[to])) {
+    const line = `${prefix}${lines[to].slice(markers(lines[to]).length)}`
+    if (line !== lines[to]) {
+      lines[to] = line
+      fixed = true
+    }
+    to++
+  }
   lines.splice(to, 0, ...fresh)
-  return { text: added ? lines.join('\n') : text, added, found: true }
+  return { text: added || fixed ? lines.join('\n') : text, added, found: true }
 }

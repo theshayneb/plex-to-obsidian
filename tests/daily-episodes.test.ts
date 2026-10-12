@@ -50,6 +50,10 @@ describe('insertEntries', () => {
   })
 
   it('leaves a note without the anchor alone', () => {
+    // The empty line's markers, not the anchor's, and earlier entries brought in line.
+    const nested = ['> > >[!writing] Journaling', '> >', '> > >- ▶️ [[A]]: S01E01 – one'].join('\n')
+    expect(insertEntries(nested, '[!writing] Journaling', [{ lead: '▶️ [[B]]:', parts: ['S01E01 – b'] }]).text.split('\n'))
+      .toEqual(['> > >[!writing] Journaling', '> >', '> >- ▶️ [[A]]: S01E01 – one', '> >- ▶️ [[B]]: S01E01 – b'])
     expect(insertEntries('# Nothing here', '[!writing] Journaling', [a('x')])).toEqual({ text: '# Nothing here', added: 0, found: false })
   })
 })

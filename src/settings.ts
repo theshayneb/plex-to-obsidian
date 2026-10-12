@@ -443,6 +443,45 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     const settings = this.plugin.settings
 
     new Setting(containerEl)
+      .setName('Watched episodes in daily notes')
+      .setDesc('After each sync (and with the background update), the TV episodes you watched in Plex are added to that day\'s daily note, under the line below: "▶️ [[Show]]: *S02E05 – Title*", one line per show, a second episode that day added to its line. Nothing in the note is changed or removed, nothing is added twice, and a daily note that doesn\'t exist isn\'t created (its day is tried again later, for up to a week).')
+      .addToggle(toggle => toggle
+        .setValue(settings.dailyEpisodes)
+        .onChange(async value => {
+          settings.dailyEpisodes = value
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setClass('pmn-indent')
+      .setName('Under the line')
+      .setDesc('The daily note line episodes go under (and under the empty quote line right below it), as its text without quote markers, such as "[!writing] Journaling". Episode lines get the same quote markers.')
+      .addText(text => text
+        .setPlaceholder('Callout line')
+        .setValue(settings.dailyAnchor)
+        .onChange(async value => {
+          settings.dailyAnchor = value.trim() || '[!writing] Journaling'
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setClass('pmn-indent')
+      .setName('Daily notes folder and date format')
+      .setDesc('Leave empty to use the settings of Obsidian\'s daily notes plugin. The format is the file name\'s, such as "YYYY-MM-DD".')
+      .addText(text => text
+        .setPlaceholder('Folder')
+        .setValue(settings.dailyFolder)
+        .onChange(async value => {
+          settings.dailyFolder = value.trim()
+          await this.save()
+        }))
+      .addText(text => text
+        .setPlaceholder('Date format')
+        .setValue(settings.dailyFormat)
+        .onChange(async value => {
+          settings.dailyFormat = value.trim()
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Ask before every change')
       .setDesc('Show each new note, and each change to an existing one, in a pop-up to approve, untick or edit first. Checks against sources always ask.')
       .addToggle(toggle => toggle

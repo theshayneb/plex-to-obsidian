@@ -82,6 +82,29 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
+      id: 'daily-episodes',
+      name: 'Add watched episodes to daily notes',
+      callback: async () => {
+        if (!this.settings.dailyEpisodes) {
+          new Notice('Switch on "Watched episodes in daily notes" in the plugin settings first')
+          return
+        }
+        if (this.plexSyncRunning) {
+          new Notice('A sync or check is already running')
+          return
+        }
+        this.plexSyncRunning = true
+        try {
+          const days = await this.dailyEpisodes(() => {})
+          new Notice(days.length ? `Added episodes to ${days.length} daily note${days.length === 1 ? '' : 's'}` : 'No new episodes to add')
+        } finally {
+          this.plexSyncRunning = false
+          this.syncs.clear()
+        }
+      },
+    })
+
+    this.addCommand({
       id: 'check-notes',
       name: 'Check notes against sources…',
       callback: () => {
@@ -173,17 +196,22 @@ export default class PlexMediaNotesPlugin extends Plugin {
     // Another device may have changed the settings (say, a lock): start from what's saved, so this
     // run's save doesn't put back an older copy.
     await this.reloadSettings()
-    const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate } = this.settings
-    if (!(updatePlayCounts || updateRatings || updateStatus) || !playCountHours || this.plexSyncRunning) return
+    const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate, dailyEpisodes } = this.settings
+    const updating = updatePlayCounts || updateRatings || updateStatus
+    if (!(updating || dailyEpisodes) || !playCountHours || this.plexSyncRunning) return
     const now = Date.now()
     if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
     this.plexSyncRunning = true
     try {
-      const result = await this.newSync().run(() => {}, 'playCounts')
+      if (updating) {
+        const result = await this.newSync().run(() => {}, 'playCounts')
+        if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
+        if (result.failed.length) console.error('Media Manager: failed items', result.failed)
+      }
+      const days = await this.dailyEpisodes(() => {})
+      if (days.length) console.log('Media Manager: episodes added to daily notes', days)
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
-      if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
-      if (result.failed.length) console.error('Media Manager: failed items', result.failed)
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
@@ -191,6 +219,19 @@ export default class PlexMediaNotesPlugin extends Plugin {
     } finally {
       this.plexSyncRunning = false
       this.syncs.clear()
+    }
+  }
+
+  /** Episodes watched in Plex, added to their days' daily notes (when switched on); the notes changed. */
+  private async dailyEpisodes(progress: (message: string) => void): Promise<string[]> {
+    if (!this.settings.dailyEpisodes) return []
+    progress('Adding watched episodes to daily notes…')
+    try {
+      return await this.newSync().writeDailyEpisodes()
+    } catch (err) {
+      console.error('Media Manager: adding episodes to daily notes failed', err)
+      new Notice(`Adding episodes to daily notes failed: ${errorMessage(err)}`, 10000)
+      return []
     }
   }
 
@@ -395,9 +436,11 @@ export default class PlexMediaNotesPlugin extends Plugin {
     try {
       const result = await this.newSync()
         .run(message => notice.set(message), 'full', [], undefined, libraries)
+      const days = result.stopped ? [] : await this.dailyEpisodes(message => notice.set(message))
       notice.hide()
 
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]
+      if (days.length) parts.push(`added episodes to ${days.length} daily note${days.length === 1 ? '' : 's'}`)
       if (result.renamed.length) {
         parts.push(`renamed ${result.renamed.length}`)
         console.log('Media Manager: renamed', result.renamed)

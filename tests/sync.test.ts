@@ -27,6 +27,15 @@ vi.mock('obsidian', () => {
     FuzzySuggestModal: Unused,
     AbstractInputSuggest: Unused,
     Platform: { isDesktopApp: false },
+    // Only what daily notes need: local dates as YYYY-MM-DD.
+    moment: {
+      unix: (seconds: number) => ({
+        format: () => {
+          const d = new Date(seconds * 1000)
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        },
+      }),
+    },
     PluginSettingTab: Unused,
     Setting: Unused,
     normalizePath: (p: string) => p.replace(/\/+/g, '/').replace(/^\/|\/$/g, ''),
@@ -70,6 +79,7 @@ function makeApp(existing: Record<string, Record<string, unknown>>) {
   const files = new Map<string, { path: string }>()
   const frontmatter = new Map<string, Record<string, unknown>>()
   const binaries: string[] = []
+  const texts = new Map<string, string>()
   for (const [path, fm] of Object.entries(existing)) {
     files.set(path, new TFile(path))
     frontmatter.set(path, fm)
@@ -81,9 +91,15 @@ function makeApp(existing: Record<string, Record<string, unknown>>) {
       createFolder: (p: string) => { files.set(p, new TFolder(p)); return Promise.resolve() },
       create: (p: string) => { const f = new TFile(p); files.set(p, f); frontmatter.set(p, {}); return Promise.resolve(f) },
       createBinary: (p: string) => { files.set(p, new TFile(p)); binaries.push(p); return Promise.resolve() },
+      process: (f: { path: string }, fn: (text: string) => string) => {
+        texts.set(f.path, fn(texts.get(f.path) ?? ''))
+        return Promise.resolve(texts.get(f.path))
+      },
     },
     metadataCache: {
       getFileCache: (f: { path: string }) => ({ frontmatter: frontmatter.get(f.path) }),
+      getFirstLinkpathDest: () => null,
+      fileToLinktext: (f: { path: string }) => f.path.split('/').pop()!.replace(/\.md$/, ''),
     },
     fileManager: {
       renameFile: (f: { path: string }, to: string) => {
@@ -100,7 +116,7 @@ function makeApp(existing: Record<string, Record<string, unknown>>) {
       },
     },
   }
-  return { app, files, frontmatter, binaries }
+  return { app, files, frontmatter, binaries, texts }
 }
 
 const movies = [
@@ -1228,6 +1244,38 @@ describe('PlexSync', () => {
     // The documentaries' folder isn't looked through.
     expect(result.unmatched).toEqual([])
     expect([...files.keys()].filter(path => path.endsWith('.md')).sort()).toEqual(['Media/Documentaries/Old doc.md', 'Media/Movies/Arrival (2016).md'])
+  })
+
+  it('adds watched episodes to daily notes, under the journaling line, never twice', async () => {
+    // Yesterday evening (the history is only read for the last week).
+    const day = new Date()
+    day.setDate(day.getDate() - 1)
+    day.setHours(21, 0, 0, 0)
+    const at = Math.floor(day.getTime() / 1000)
+    const daily = `Daily/${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}.md`
+    const { app, texts } = makeApp({
+      'Media/TV Shows/Gilmore Girls (2000).md': { Link: 'http://plex:32400/library/metadata/77' },
+      [daily]: {},
+    })
+    texts.set(daily, ['# Saturday', '> [!note] Today', '> >[!writing] Journaling', '> >', '> > Mine.'].join('\n'))
+    const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD', dailyEpisodesSince: at - 3600 })
+    settings.libraries = { 2: newLibrary('TV Shows', 'show', 'tv') }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'episode', title: 'Shoes', grandparentTitle: 'Gilmore Girls', grandparentKey: '/library/metadata/77', parentIndex: 2, index: 6, viewedAt: at + 60, accountID: 1 },
+      { type: 'episode', title: 'The Dinner Party', grandparentTitle: 'Gilmore Girls', grandparentKey: '/library/metadata/77', parentIndex: 2, index: 5, viewedAt: at, accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 1, index: 1, viewedAt: at + 120, accountID: 1 },
+    ] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    expect(await sync.writeDailyEpisodes()).toEqual([daily])
+    const expected = ['# Saturday', '> [!note] Today', '> >[!writing] Journaling', '> >',
+      '> >- ▶️ [[Gilmore Girls (2000)]]: *S02E05 – The Dinner Party*, *S02E06 – Shoes*',
+      '> >- ▶️ [[Lost]]: *S01E01 – Pilot*',
+      '> > Mine.']
+    expect(texts.get(daily)!.split('\n')).toEqual(expected)
+    // Again: nothing new.
+    settings.dailyEpisodesSince = at - 3600
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes()).toEqual([])
+    expect(texts.get(daily)!.split('\n')).toEqual(expected)
   })
 
   it('offers to empty a length the source has none for, unticked', async () => {

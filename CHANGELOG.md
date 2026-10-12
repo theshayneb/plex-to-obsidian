@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.110] - 2026-10-12
+
+- Watched episodes in daily notes (Settings → Syncing, off until switched on): after each sync, with the background update, and with the new command "Add watched episodes to daily notes", the TV episodes you watched in Plex are added to that day's daily note under your "[!writing] Journaling" line (and the empty line below it), as "> >- ▶️ [[Show]]: *S02E05 – Title*". One line per show per day: a second episode that day is added to the end of its line ("…, *S02E06 – Shoes*"). Nothing in the note is changed or removed, nothing is added twice, and a daily note that doesn't exist isn't created (its day is tried again later, for up to a week). The line to look for and the daily notes' folder and date format can be changed; empty uses Obsidian's daily notes settings. Only the Plex server owner's viewing counts.
+
 ## [0.0.109] - 2026-10-12
 
 - Recommendations: the Music card (suggestions from your own library) is gone, since you rate every song and it never had anything to suggest. The Last.fm card takes its place, renamed "From Last.fm".

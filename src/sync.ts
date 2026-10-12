@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile, TFolder } from 'obsidian'
+import { App, moment, normalizePath, TFile, TFolder } from 'obsidian'
 import { FILE_NAME } from './check-modal'
 import { describeValue, editKind, parseEdit, type ApprovalLine, type ApprovalRequest, type UnchangedLine, type Approver, type OwnerChooser } from './approval-modal'
 import {
@@ -36,6 +36,7 @@ import {
   type PlexItem,
 } from './notes'
 import { lookUpBook } from './discover'
+import { episodeEntry, episodesByDay, insertEntries, watchedEpisodes } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -830,6 +831,79 @@ export class PlexSync {
    * none yet. For recommendations, which take a note's people (director, cast…) from its item.
    * Reads the libraries; changes nothing.
    */
+  /** Where daily notes are: the plugin's own settings, else Obsidian's Daily notes plugin's. */
+  private dailyNotes(): { folder: string, format: string } {
+    const core = (this.app as unknown as { internalPlugins?: { getPluginById?: (id: string) => { instance?: { options?: { folder?: string, format?: string } } } | null } })
+      .internalPlugins?.getPluginById?.('daily-notes')?.instance?.options
+    return {
+      folder: (this.settings.dailyFolder || core?.folder || '').trim(),
+      format: (this.settings.dailyFormat || core?.format || 'YYYY-MM-DD').trim(),
+    }
+  }
+
+  /**
+   * Adds the episodes watched in Plex since the last time to each day's daily note, under the
+   * anchor line (`insertEntries`: never changing or removing anything, never twice). A daily note
+   * that doesn't exist (or lacks the anchor) isn't created or touched; its day is tried again next
+   * time, for up to a week. Returns the daily notes changed.
+   */
+  async writeDailyEpisodes(): Promise<string[]> {
+    if (!this.settings.dailyEpisodes || !plexReady(this.settings)) return []
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const now = Math.floor(Date.now() / 1000)
+    const midnight = new Date()
+    midnight.setHours(0, 0, 0, 0)
+    const today = Math.floor(midnight.getTime() / 1000)
+    const since = Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
+    const episodes = watchedEpisodes(await plex.history(since))
+    const { folder, format } = this.dailyNotes()
+    const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
+    // Each show's note, through its link (or a tie).
+    const shows = new Map<string, TFile>()
+    const linkNames = [...new Set(Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').map(lib => normalizePath(lib.folder))
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      for (const name of linkNames) {
+        const key = ratingKeyFromLink(frontmatter[name])
+        if (key && !shows.has(key)) shows.set(key, file)
+      }
+    }
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      const file = this.app.vault.getAbstractFileByPath(merged.path)
+      if (file instanceof TFile) shows.set(key, file)
+    }
+    const changed: string[] = []
+    let retryFrom = now
+    for (const [path, list] of episodesByDay(episodes, pathOf)) {
+      const file = this.app.vault.getAbstractFileByPath(path)
+      const firstSeen = Math.min(...list.flat().map(e => e.viewedAt))
+      if (!(file instanceof TFile)) {
+        retryFrom = Math.min(retryFrom, firstSeen)
+        continue
+      }
+      const entries = list.map(eps => {
+        const note = shows.get(eps[0].showKey) ?? this.app.metadataCache.getFirstLinkpathDest(eps[0].show, path)
+        const link = note ? `[[${this.app.metadataCache.fileToLinktext(note, path, true)}]]` : `[[${eps[0].show}]]`
+        return episodeEntry(link, eps)
+      })
+      let found = true
+      let added = 0
+      await this.app.vault.process(file, text => {
+        const result = insertEntries(text, this.settings.dailyAnchor, entries)
+        found = result.found
+        added = result.added
+        return result.text
+      })
+      if (!found) retryFrom = Math.min(retryFrom, firstSeen)
+      if (added) changed.push(path)
+    }
+    this.settings.dailyEpisodesSince = retryFrom
+    await this.saveSettings()
+    return changed
+  }
+
   async libraryItems(progress: ProgressFn): Promise<{
     withNotes: { item: PlexItem, path: string, kind: MediaKind }[]
     withoutNotes: { item: PlexItem, libraryKey: string, kind: MediaKind }[]

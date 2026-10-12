@@ -1,4 +1,5 @@
 import { requestUrl } from 'obsidian'
+import type { HistoryEntry } from './daily-episodes'
 import type { PlexItem } from './notes'
 
 export interface PlexLibrary {
@@ -83,6 +84,22 @@ export class PlexClient {
       const total = page.totalSize ?? 0
       if (batch.length < pageSize || (total && items.length >= total)) return items
     }
+  }
+
+  /**
+   * Plex's watch history from `since` (seconds since 1970) on, newest first, read in pages until
+   * older entries.
+   */
+  async history(since: number): Promise<HistoryEntry[]> {
+    const pageSize = 100
+    const out: HistoryEntry[] = []
+    for (let start = 0; start < 5000; start += pageSize) {
+      const page = await this.get(`/status/sessions/history/all?sort=viewedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`)
+      const batch = (page.Metadata ?? []) as HistoryEntry[]
+      out.push(...batch.filter(h => (h.viewedAt ?? 0) >= since))
+      if (batch.length < pageSize || batch.some(h => (h.viewedAt ?? 0) < since)) break
+    }
+    return out
   }
 
   /**

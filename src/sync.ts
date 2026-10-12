@@ -845,16 +845,19 @@ export class PlexSync {
    * Adds the episodes watched in Plex since the last time to each day's daily note, under the
    * anchor line (`insertEntries`: never changing or removing anything, never twice). A daily note
    * that doesn't exist (or lacks the anchor) isn't created or touched; its day is tried again next
-   * time, for up to a week. Returns the daily notes changed.
+   * time, for up to a week. `wholeWeek` (the command) looks through the last week again, whatever
+   * was added before. Returns the daily notes changed.
    */
-  async writeDailyEpisodes(): Promise<string[]> {
+  async writeDailyEpisodes(wholeWeek = false): Promise<string[]> {
     if (!this.settings.dailyEpisodes || !plexReady(this.settings)) return []
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
     const now = Math.floor(Date.now() / 1000)
     const midnight = new Date()
     midnight.setHours(0, 0, 0, 0)
     const today = Math.floor(midnight.getTime() / 1000)
-    const since = Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
+    // By hand, the whole last week is looked through again (so a line you deleted comes back);
+    // otherwise only what was watched since last time.
+    const since = wholeWeek ? now - 7 * 86400 : Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
     const episodes = watchedEpisodes(await plex.history(since))
     const { folder, format } = this.dailyNotes()
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)

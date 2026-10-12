@@ -95,8 +95,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         }
         this.plexSyncRunning = true
         try {
-          const days = await this.dailyEpisodes(() => {})
-          new Notice(days.length ? `Added episodes to ${days.length} daily note${days.length === 1 ? '' : 's'}` : 'No new episodes to add')
+          const days = await this.dailyEpisodes(() => {}, true)
+          new Notice(days.length ? `Added episodes to ${days.length} daily note${days.length === 1 ? '' : 's'}` : 'No episodes from the last week are missing from your daily notes')
         } finally {
           this.plexSyncRunning = false
           this.syncs.clear()
@@ -223,11 +223,11 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /** Episodes watched in Plex, added to their days' daily notes (when switched on); the notes changed. */
-  private async dailyEpisodes(progress: (message: string) => void): Promise<string[]> {
+  private async dailyEpisodes(progress: (message: string) => void, wholeWeek = false): Promise<string[]> {
     if (!this.settings.dailyEpisodes) return []
     progress('Adding watched episodes to daily notes…')
     try {
-      return await this.newSync().writeDailyEpisodes()
+      return await this.newSync().writeDailyEpisodes(wholeWeek)
     } catch (err) {
       console.error('Media Manager: adding episodes to daily notes failed', err)
       new Notice(`Adding episodes to daily notes failed: ${errorMessage(err)}`, 10000)

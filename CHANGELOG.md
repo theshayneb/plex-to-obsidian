@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.112] - 2026-10-12
+
+- The command "Add watched episodes to daily notes" now looks through the whole last week again, so episodes you deleted from a daily note (say, to rewrite them in the new format) are added back. Syncs and the background update still only add what you've watched since last time, so a line you delete on purpose isn't put back by them.
+
 ## [0.0.111] - 2026-10-12
 
 - Watched episodes in daily notes are written without italics: "> >- ▶️ [[Show]]: S02E05 – Title" (a second episode that day: "…, S02E06 – Title"). Lines written before in italics aren't changed, and their episodes aren't added again.

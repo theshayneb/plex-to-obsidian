@@ -1276,6 +1276,11 @@ describe('PlexSync', () => {
     settings.dailyEpisodesSince = at - 3600
     expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes()).toEqual([])
     expect(texts.get(daily)!.split('\n')).toEqual(expected)
+    // Deleted by hand: a sync doesn't bring it back, the command (the whole week) does.
+    texts.set(daily, ['# Saturday', '> [!note] Today', '> >[!writing] Journaling', '> >', '> > Mine.'].join('\n'))
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes()).toEqual([])
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
+    expect(texts.get(daily)!.split('\n')).toEqual(expected)
   })
 
   it('offers to empty a length the source has none for, unticked', async () => {

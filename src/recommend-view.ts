@@ -176,10 +176,12 @@ export class RecommendView extends ItemView {
 
     const grid = contentEl.createDiv('pmn-dash-grid')
     for (const group of groups) {
-      // Music's cell also holds the Last.fm card, below it.
-      const cell = group === 'music' ? grid.createDiv('pmn-dash-stack') : grid
-      const card = cell.createDiv('pmn-card')
-      if (group === 'music') this.pmnLastfmCard(cell)
+      // Music is suggested by Last.fm only: you rate every song, so your own library has none to suggest.
+      if (group === 'music') {
+        this.pmnLastfmCard(grid)
+        continue
+      }
+      const card = grid.createDiv('pmn-card')
       card.createDiv({ cls: 'pmn-card-title', text: GROUP_TITLES[group] })
       const list = recs[group]
       if (!list.length) {
@@ -198,7 +200,7 @@ export class RecommendView extends ItemView {
   /** Music from Last.fm: songs you don't have, like the ones you loved, whoever they're by. */
   private pmnLastfmCard(parent: HTMLElement): void {
     const card = parent.createDiv('pmn-card pmn-lastfm')
-    card.createDiv({ cls: 'pmn-card-title', text: 'Songs you don\'t have, from Last.fm' })
+    card.createDiv({ cls: 'pmn-card-title', text: 'From Last.fm' })
     if (!this.pmnPlugin.settings.lastfmKey?.trim()) {
       card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add a Last.fm API key in this plugin\'s settings, under other sources, to get songs like your ⭐⭐⭐⭐ and 🩷 ones that you don\'t have yet.' })
       return

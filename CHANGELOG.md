@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.109] - 2026-10-12
+
+- Recommendations: the Music card (suggestions from your own library) is gone, since you rate every song and it never had anything to suggest. The Last.fm card takes its place, renamed "From Last.fm".
+
 ## [0.0.108] - 2026-10-12
 
 - "Sync with Plex and Steam…" (the command and the ribbon button) now asks which libraries to sync, remembered for next time, with All and None buttons: sync only Movies after adding a film, and the other libraries aren't read at all. A new command, "Sync every library with Plex and Steam", syncs everything without asking (for a hotkey). A folder shared with a library left out isn't searched for notes that match nothing.

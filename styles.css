@@ -612,11 +612,3 @@
   cursor: pointer;
   font-weight: var(--font-semibold);
 }
-
-/* Recommendations: songs from Last.fm, in the music card's cell, below it. */
-.pmn-dash-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size-4-3);
-  min-width: 0;
-}

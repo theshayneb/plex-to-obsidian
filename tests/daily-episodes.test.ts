@@ -18,7 +18,7 @@ describe('episodeLabel and episodeEntry', () => {
   it('writes the season, episode and title', () => {
     const e = ep('Gilmore Girls', 2, 5, 'The Dinner Party', 0)
     expect(episodeLabel(e)).toBe('S02E05 – The Dinner Party')
-    expect(episodeEntry('[[Gilmore Girls]]', [e])).toEqual({ lead: '▶️ [[Gilmore Girls]]:', parts: ['*S02E05 – The Dinner Party*'] })
+    expect(episodeEntry('[[Gilmore Girls]]', [e])).toEqual({ lead: '▶️ [[Gilmore Girls]]:', parts: ['S02E05 – The Dinner Party'] })
   })
 })
 
@@ -38,15 +38,15 @@ describe('insertEntries', () => {
   const a = (...parts: string[]) => ({ lead: '▶️ [[A]]:', parts })
 
   it('adds lines under the anchor and the empty line below it, with its quote markers', () => {
-    const once = insertEntries(note, '[!writing] Journaling', [a('*S01E01 – one*', '*S01E02 – two*')])
+    const once = insertEntries(note, '[!writing] Journaling', [a('S01E01 – one', 'S01E02 – two')])
     expect(once).toMatchObject({ added: 2, found: true })
-    expect(once.text.split('\n')).toEqual(['# Monday', '> [!note] Day', '> >[!writing] Journaling', '> >', '> >- ▶️ [[A]]: *S01E01 – one*, *S01E02 – two*', '> > Had a nice day.', '', 'End'])
+    expect(once.text.split('\n')).toEqual(['# Monday', '> [!note] Day', '> >[!writing] Journaling', '> >', '> >- ▶️ [[A]]: S01E01 – one, S01E02 – two', '> > Had a nice day.', '', 'End'])
     // A later episode of the same show joins its line; another show gets a line after it.
-    const twice = insertEntries(once.text, '[!writing] Journaling', [a('*S01E02 – two*', '*S01E03 – three*'), { lead: '▶️ [[B]]:', parts: ['*S01E01 – b*'] }])
+    const twice = insertEntries(once.text, '[!writing] Journaling', [a('S01E02 – two', 'S01E03 – three'), { lead: '▶️ [[B]]:', parts: ['S01E01 – b'] }])
     expect(twice.added).toBe(2)
-    expect(twice.text.split('\n').slice(3, 7)).toEqual(['> >', '> >- ▶️ [[A]]: *S01E01 – one*, *S01E02 – two*, *S01E03 – three*', '> >- ▶️ [[B]]: *S01E01 – b*', '> > Had a nice day.'])
+    expect(twice.text.split('\n').slice(3, 7)).toEqual(['> >', '> >- ▶️ [[A]]: S01E01 – one, S01E02 – two, S01E03 – three', '> >- ▶️ [[B]]: S01E01 – b', '> > Had a nice day.'])
     // Nothing new: left exactly as it was.
-    expect(insertEntries(twice.text, '[!writing] Journaling', [a('*S01E03 – three*')])).toEqual({ text: twice.text, added: 0, found: true })
+    expect(insertEntries(twice.text, '[!writing] Journaling', [a('S01E03 – three')])).toEqual({ text: twice.text, added: 0, found: true })
   })
 
   it('leaves a note without the anchor alone', () => {

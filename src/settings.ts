@@ -444,7 +444,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Watched episodes in daily notes')
-      .setDesc('After each sync (and with the background update), the TV episodes you watched in Plex are added to that day\'s daily note, under the line below: "▶️ [[Show]]: *S02E05 – Title*", one line per show, a second episode that day added to its line. Nothing in the note is changed or removed, nothing is added twice, and a daily note that doesn\'t exist isn\'t created (its day is tried again later, for up to a week).')
+      .setDesc('After each sync (and with the background update), the TV episodes you watched in Plex are added to that day\'s daily note, under the line below: "▶️ [[Show]]: S02E05 – Title", one line per show, a second episode that day added to its line. Nothing in the note is changed or removed, nothing is added twice, and a daily note that doesn\'t exist isn\'t created (its day is tried again later, for up to a week).')
       .addToggle(toggle => toggle
         .setValue(settings.dailyEpisodes)
         .onChange(async value => {

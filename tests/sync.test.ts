@@ -1268,8 +1268,8 @@ describe('PlexSync', () => {
     const sync = new PlexSync(app as never, settings, () => Promise.resolve())
     expect(await sync.writeDailyEpisodes()).toEqual([daily])
     const expected = ['# Saturday', '> [!note] Today', '> >[!writing] Journaling', '> >',
-      '> >- ▶️ [[Gilmore Girls (2000)]]: *S02E05 – The Dinner Party*, *S02E06 – Shoes*',
-      '> >- ▶️ [[Lost]]: *S01E01 – Pilot*',
+      '> >- ▶️ [[Gilmore Girls (2000)]]: S02E05 – The Dinner Party, S02E06 – Shoes',
+      '> >- ▶️ [[Lost]]: S01E01 – Pilot',
       '> > Mine.']
     expect(texts.get(daily)!.split('\n')).toEqual(expected)
     // Again: nothing new.

@@ -65,12 +65,12 @@ export function episodesByDay(episodes: WatchedEpisode[], dayOf: (seconds: numbe
   return new Map([...byDay.entries()].map(([day, shows]) => [day, [...shows.values()]]))
 }
 
-/** One show's line: "▶️ [[Show]]:" and its episodes, each "*S02E05 – Title*". */
+/** One show's line: "▶️ [[Show]]:" and its episodes, each "S02E05 – Title". */
 export interface DailyEntry { lead: string, parts: string[] }
 
-/** The line for a show's episodes: "▶️ [[Show]]: *S02E05 – Title*, *S02E06 – Title*". */
+/** The line for a show's episodes: "▶️ [[Show]]: S02E05 – Title, S02E06 – Title". */
 export function episodeEntry(link: string, episodes: WatchedEpisode[]): DailyEntry {
-  return { lead: `▶️ ${link}:`, parts: episodes.map(e => `*${episodeLabel(e)}*`) }
+  return { lead: `▶️ ${link}:`, parts: episodes.map(episodeLabel) }
 }
 
 /** The first line whose text (without callout or quote markers) starts with `anchor` (any case). */
@@ -83,8 +83,8 @@ function anchorLine(lines: string[], anchor: string): number {
 /**
  * A daily note with entries added under the anchor line: after the anchor and the empty quote line
  * right below it, and after entries added before, each line with the anchor's quote markers
- * ("> >- ▶️ [[Show]]: *S02E05 – Title*"). A show that already has a line (anywhere) gets the
- * episodes it lacks added at its end ("…, *S02E06 – Title*"); nothing is changed or removed.
+ * ("> >- ▶️ [[Show]]: S02E05 – Title"). A show that already has a line (anywhere) gets the
+ * episodes it lacks added at its end ("…, S02E06 – Title"); nothing is changed or removed.
  * `found` is false when the anchor isn't there.
  */
 export function insertEntries(text: string, anchor: string, entries: DailyEntry[]): { text: string, added: number, found: boolean } {

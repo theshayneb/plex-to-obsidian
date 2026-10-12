@@ -1283,6 +1283,29 @@ describe('PlexSync', () => {
     expect(texts.get(daily)!.split('\n')).toEqual(expected)
   })
 
+  it('leaves ignored shows out of daily notes', async () => {
+    const day = new Date()
+    day.setDate(day.getDate() - 1)
+    day.setHours(21, 0, 0, 0)
+    const at = Math.floor(day.getTime() / 1000)
+    const daily = `Daily/${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}.md`
+    const { app, texts } = makeApp({ [daily]: {} })
+    texts.set(daily, ['> >[!writing] Journaling', '> >'].join('\n'))
+    const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD', dailyEpisodesSince: at - 3600 })
+    settings.libraries = { 2: newLibrary('TV Shows', 'show', 'tv') }
+    settings.ignored = {
+      90: { name: 'The Simpsons (1989)', library: 'TV Shows', since: 0 },
+      123: { name: 'Futurama (1999)', library: 'TV Shows', since: 0 },
+    }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'episode', title: 'Bart the Genius', grandparentTitle: 'The Simpsons', grandparentKey: '/library/metadata/90', parentIndex: 1, index: 2, viewedAt: at, accountID: 1 },
+      { type: 'episode', title: 'Space Pilot 3000', grandparentTitle: 'Futurama', grandparentKey: '/library/metadata/91', parentIndex: 1, index: 1, viewedAt: at + 30, accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 1, index: 1, viewedAt: at + 60, accountID: 1 },
+    ] } })
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
+    expect(texts.get(daily)!.split('\n')).toEqual(['> >[!writing] Journaling', '> >', '> >- ▶️ [[Lost]]: S01E01 – Pilot'])
+  })
+
   it('offers to empty a length the source has none for, unticked', async () => {
     const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Duration: 5 } })
     const settings = settingsWith({})

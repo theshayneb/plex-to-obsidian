@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.113] - 2026-10-12
+
+- Watched episodes of shows you've set to skip every time (in Settings → Remembered choices) are no longer added to daily notes, nor are shows whose note you've set to always ignore.
+
 ## [0.0.112] - 2026-10-12
 
 - The command "Add watched episodes to daily notes" now looks through the whole last week again, so episodes you deleted from a daily note (say, to rewrite them in the new format) are added back. Syncs and the background update still only add what you've watched since last time, so a line you delete on purpose isn't put back by them.

@@ -36,7 +36,7 @@ import {
   type PlexItem,
 } from './notes'
 import { lookUpBook } from './discover'
-import { episodeEntry, episodesByDay, insertEntries, watchedEpisodes } from './daily-episodes'
+import { episodeEntry, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -858,7 +858,6 @@ export class PlexSync {
     // By hand, the whole last week is looked through again (so a line you deleted comes back);
     // otherwise only what was watched since last time.
     const since = wholeWeek ? now - 7 * 86400 : Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
-    const episodes = watchedEpisodes(await plex.history(since))
     const { folder, format } = this.dailyNotes()
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
     // Each show's note, through its link (or a tie).
@@ -877,6 +876,18 @@ export class PlexSync {
       const file = this.app.vault.getAbstractFileByPath(merged.path)
       if (file instanceof TFile) shows.set(key, file)
     }
+    // Shows set to "Skip every time" (by key, or by name in a TV library) and shows whose note is
+    // ignored as unmatched are left out.
+    const tvTitles = new Set(Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').map(lib => lib.title))
+    const ignoredNames = Object.values(this.settings.ignored).filter(entry => tvTitles.has(entry.library)).map(entry => entry.name.toLowerCase())
+    const ignoredShow = (e: WatchedEpisode): boolean => {
+      if (e.showKey && e.showKey in this.settings.ignored) return true
+      const name = e.show.toLowerCase()
+      if (ignoredNames.some(n => n === name || n.startsWith(`${name} (`))) return true
+      const note = shows.get(e.showKey)
+      return !!note && this.settings.unmatchedIgnored.includes(note.path)
+    }
+    const episodes = watchedEpisodes(await plex.history(since)).filter(e => !ignoredShow(e))
     const changed: string[] = []
     let retryFrom = now
     for (const [path, list] of episodesByDay(episodes, pathOf)) {

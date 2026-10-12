@@ -1215,6 +1215,21 @@ describe('PlexSync', () => {
     expect(requests.map(r => r.path)).toEqual(['Media/Movies/Arrival (2016).md'])
   })
 
+  it('syncs only the libraries chosen', async () => {
+    const { app, files } = makeApp({ 'Media/Documentaries/Old doc.md': {} })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 2: newLibrary('Docs', 'movie', 'documentary') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    responses.set('/library/sections/2/all', { MediaContainer: { Metadata: [movies[1]] } })
+    requested.length = 0
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'full', [], undefined, new Set(['1']))
+    expect(result.created).toEqual(['Media/Movies/Arrival (2016).md'])
+    expect(requested.some(url => url.includes('/library/sections/2/'))).toBe(false)
+    // The documentaries' folder isn't looked through.
+    expect(result.unmatched).toEqual([])
+    expect([...files.keys()].filter(path => path.endsWith('.md')).sort()).toEqual(['Media/Documentaries/Old doc.md', 'Media/Movies/Arrival (2016).md'])
+  })
+
   it('offers to empty a length the source has none for, unticked', async () => {
     const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Duration: 5 } })
     const settings = settingsWith({})

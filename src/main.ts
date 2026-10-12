@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
-import { CheckModal, checkableProperties, UnmatchedModal } from './check-modal'
+import { CheckModal, checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { TieModal } from './tie-modal'
@@ -62,12 +62,20 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }))
 
     this.addRibbonIcon('clapperboard', 'Sync with Plex and Steam', () => {
-      void this.syncFromPlex()
+      this.chooseAndSync()
     })
 
     this.addCommand({
       id: 'create-notes-from-plex',
-      name: 'Sync with Plex and Steam',
+      name: 'Sync with Plex and Steam…',
+      callback: () => {
+        this.chooseAndSync()
+      },
+    })
+
+    this.addCommand({
+      id: 'sync-all-libraries',
+      name: 'Sync every library with Plex and Steam',
       callback: () => {
         void this.syncFromPlex()
       },
@@ -365,7 +373,19 @@ export default class PlexMediaNotesPlugin extends Plugin {
     await this.saveSettings()
   }
 
-    async syncFromPlex(): Promise<void> {
+  /** Asks which libraries to sync (remembered), then syncs them. */
+  chooseAndSync(): void {
+    if (this.plexSyncRunning) {
+      new Notice('A sync or check is already running')
+      return
+    }
+    new SyncModal(this.app, this.settings, libraries => {
+      void this.saveSettings().then(() => this.syncFromPlex(new Set(libraries)))
+    }).open()
+  }
+
+  /** @param libraries just these libraries (settings keys); every one when left out. */
+  async syncFromPlex(libraries?: Set<string>): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('A sync or check is already running')
       return
@@ -374,7 +394,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new ProgressNotice('Starting…')
     try {
       const result = await this.newSync()
-        .run(message => notice.set(message))
+        .run(message => notice.set(message), 'full', [], undefined, libraries)
       notice.hide()
 
       const parts = [`Created ${result.created.length} note${result.created.length === 1 ? '' : 's'}`]

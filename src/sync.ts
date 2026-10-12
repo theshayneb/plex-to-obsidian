@@ -455,10 +455,11 @@ export class PlexSync {
    * @param checking for 'check': the property names to compare, in every library that has them, or
    * per library (settings key; a library left out compares nothing).
    * @param only for 'check': just these notes (say, the open one), not every note.
-   * @param libraries for 'check': just these libraries (settings keys; `books` for the books), not all.
+   * @param libraries for 'check' and 'full': just these libraries (settings keys; `books` for the books), not all.
    */
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] | Record<string, string[]> = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
-    this.onlyLibraries = mode === 'check' && libraries ? libraries : null
+    // A check or a sync can be limited to some libraries (the background update never is).
+    this.onlyLibraries = mode !== 'playCounts' && libraries ? libraries : null
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     this.running = result
@@ -1432,7 +1433,12 @@ export class PlexSync {
    * apart from those you chose to always ignore.
    */
   private listUnmatched(family: Family, active: [string, ActiveLibrary][], matched: string[], result: SyncResult): void {
+    // A folder a library left out of this run also uses isn't looked through: its notes may be that library's.
+    const elsewhere = new Set(Object.entries(this.settings.libraries)
+      .filter(([key, lib]) => lib.target !== 'skip' && this.onlyLibraries && !this.onlyLibraries.has(key))
+      .map(([, lib]) => normalizePath(lib.folder)))
     const folders = [...new Set(active.filter(([, lib]) => familyOf(lib) === family).map(([, lib]) => normalizePath(lib.folder)))]
+      .filter(folder => !elsewhere.has(folder))
     const taken = new Set([...matched, ...Object.values(this.settings.merged).map(m => m.path)])
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(folder => file.path.startsWith(`${folder}/`)) || taken.has(file.path)) continue

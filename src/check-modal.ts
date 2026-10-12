@@ -1,5 +1,5 @@
 import { App, type ExtraButtonComponent, Modal, Notice, Setting, TFile, type ToggleComponent } from 'obsidian'
-import type { PlexNotesSettings } from './config'
+import { BOOKS_LIBRARY, type PlexNotesSettings } from './config'
 import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties'
 
 
@@ -160,6 +160,62 @@ export class CheckModal extends Modal {
           return
         }
         this.pmnStart(Object.fromEntries(keys.map(key => [key, byLibrary[key]])), keys)
+      }))
+      .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
+  }
+
+  onClose(): void {
+    this.contentEl.empty()
+  }
+}
+
+/**
+ * "Sync with Plex and Steam": choose which libraries to sync (say, only Movies after adding a
+ * film), then start. The choice is remembered for next time.
+ */
+export class SyncModal extends Modal {
+  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (libraries: string[]) => void) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText('Sync with Plex and Steam')
+    this.modalEl.addClass('pmn-check')
+    const { contentEl } = this
+    contentEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: 'Only the libraries switched on are read from Plex or Steam and their notes created, renamed, filled in and updated. Fewer libraries, quicker sync.',
+    })
+    const settings = this.pmnSettings
+    // Books aren't synced (they come from Open Library, through checks).
+    const libraries = Object.entries(settings.libraries).filter(([key, lib]) => lib.target !== 'skip' && key !== BOOKS_LIBRARY)
+    const chosen = new Set(settings.syncLibraries?.filter(key => libraries.some(([k]) => k === key)) ?? libraries.map(([key]) => key))
+    const toggles: ToggleComponent[] = []
+    new Setting(contentEl)
+      .addButton(b => b.setButtonText('All').onClick(() => { toggles.forEach(t => { t.setValue(true) }) }))
+      .addButton(b => b.setButtonText('None').onClick(() => { toggles.forEach(t => { t.setValue(false) }) }))
+    for (const [key, lib] of libraries) {
+      new Setting(contentEl)
+        .setName(lib.title)
+        .setDesc(KIND_NAMES[lib.target] ?? '')
+        .addToggle(toggle => {
+          toggles.push(toggle)
+          toggle.setValue(chosen.has(key)).onChange(value => {
+            if (value) chosen.add(key)
+            else chosen.delete(key)
+          })
+        })
+    }
+    new Setting(contentEl)
+      .addButton(b => b.setButtonText('Sync').setCta().onClick(() => {
+        const keys = libraries.map(([key]) => key).filter(key => chosen.has(key))
+        settings.syncLibraries = keys
+        this.close()
+        if (!keys.length) {
+          new Notice('Nothing to sync: switch on at least one library')
+          return
+        }
+        this.pmnStart(keys)
       }))
       .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
   }

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.108] - 2026-10-12
+
+- "Sync with Plex and Steam…" (the command and the ribbon button) now asks which libraries to sync, remembered for next time, with All and None buttons: sync only Movies after adding a film, and the other libraries aren't read at all. A new command, "Sync every library with Plex and Steam", syncs everything without asking (for a hotkey). A folder shared with a library left out isn't searched for notes that match nothing.
+
 ## [0.0.107] - 2026-10-11
 
 - Locks (and every other remembered choice) no longer get lost to another device: the plugin reads its settings again when Obsidian Sync changes them, and before each background update of play counts, ratings and statuses. Before, Obsidian on another device (a phone, another computer) kept its older copy of the settings and saved it over the newer one on its next background update, so a lock made here vanished after the next restart.

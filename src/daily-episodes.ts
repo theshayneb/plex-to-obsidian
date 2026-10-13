@@ -82,20 +82,20 @@ function anchorLine(lines: string[], anchor: string): number {
 
 /**
  * A daily note with entries added under the anchor line: after the anchor and the empty quote line
- * right below it, and after entries added before, each line with that empty line's quote markers
- * (else the anchor's; earlier entries there are given the same ones)
+ * right below it, and after entries added before, each line starting with `quote` (by default that
+ * empty line's quote markers, else the anchor's; earlier entries there are given the same ones)
  * ("> >- ▶️ [[Show]]: S02E05 – Title"). A show that already has a line (anywhere) gets the
  * episodes it lacks added at its end ("…, S02E06 – Title"); nothing is changed or removed.
  * `found` is false when the anchor isn't there.
  */
-export function insertEntries(text: string, anchor: string, entries: DailyEntry[]): { text: string, added: number, found: boolean } {
+export function insertEntries(text: string, anchor: string, entries: DailyEntry[], quote?: string): { text: string, added: number, found: boolean } {
   const lines = text.split('\n')
   const at = anchorLine(lines, anchor)
   if (at < 0) return { text, added: 0, found: false }
   // The quote markers of the empty quote line under the anchor (inside the callout), else the anchor's.
   const markers = (line: string): string => /^[>\s]*/.exec(line)![0].replace(/\s+$/, '')
   const below = at + 1 < lines.length && /^[>\s]*$/.test(lines[at + 1]) && lines[at + 1].includes('>')
-  const prefix = markers(below ? lines[at + 1] : lines[at])
+  const prefix = quote?.trim() ?? markers(below ? lines[at + 1] : lines[at])
   let added = 0
   const fresh: string[] = []
   for (const { lead, parts } of entries) {

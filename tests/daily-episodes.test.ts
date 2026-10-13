@@ -54,6 +54,10 @@ describe('insertEntries', () => {
     const nested = ['> > >[!writing] Journaling', '> >', '> > >- ▶️ [[A]]: S01E01 – one'].join('\n')
     expect(insertEntries(nested, '[!writing] Journaling', [{ lead: '▶️ [[B]]:', parts: ['S01E01 – b'] }]).text.split('\n'))
       .toEqual(['> > >[!writing] Journaling', '> >', '> >- ▶️ [[A]]: S01E01 – one', '> >- ▶️ [[B]]: S01E01 – b'])
+    // The quote markers set in Settings win, earlier entries brought in line with them.
+    const outer = ['> > >[!writing] Journaling', '>', '>- ▶️ [[A]]: S01E01 – one'].join('\n')
+    expect(insertEntries(outer, '[!writing] Journaling', [{ lead: '▶️ [[B]]:', parts: ['S01E01 – b'] }], '> >').text.split('\n'))
+      .toEqual(['> > >[!writing] Journaling', '>', '> >- ▶️ [[A]]: S01E01 – one', '> >- ▶️ [[B]]: S01E01 – b'])
     expect(insertEntries('# Nothing here', '[!writing] Journaling', [a('x')])).toEqual({ text: '# Nothing here', added: 0, found: false })
   })
 })

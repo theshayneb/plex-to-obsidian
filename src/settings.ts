@@ -454,12 +454,23 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setClass('pmn-indent')
       .setName('Under the line')
-      .setDesc('The daily note line episodes go under (and under the empty quote line right below it), as its text without quote markers, such as "[!writing] Journaling". Episode lines get the same quote markers.')
+      .setDesc('The daily note line episodes go under (and under the empty quote line right below it), as its text without quote markers, such as "[!writing] Journaling".')
       .addText(text => text
         .setPlaceholder('Callout line')
         .setValue(settings.dailyAnchor)
         .onChange(async value => {
           settings.dailyAnchor = value.trim() || '[!writing] Journaling'
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setClass('pmn-indent')
+      .setName('Quote markers')
+      .setDesc('What each episode line starts with, before "- ▶️", such as "> >".')
+      .addText(text => text
+        .setPlaceholder('> >')
+        .setValue(settings.dailyQuote)
+        .onChange(async value => {
+          settings.dailyQuote = value.trim()
           await this.save()
         }))
     new Setting(containerEl)

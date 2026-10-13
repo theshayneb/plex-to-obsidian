@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.116] - 2026-10-13
+
+- Episode lines in daily notes always start with "> >" now ("> >- ▶️ [[Show]]: S01E05 – Title"), instead of copying the quote markers of the lines around them, which gave one ">" too few. It's a setting ("Quote markers", under Daily notes) if you ever need something else. Episode lines already right under the journaling line are given the same markers the next time episodes are added to that day.
+
 ## [0.0.115] - 2026-10-13
 
 - Changes you make to a song note's Tempo (or any property read from one of your own tags in the music file) and Lyrics can now be written back to the music file and its lyrics file. When the note and the file differ, "Check notes against sources" (for the properties you choose) and syncs (with "Ask before changes" on) offer lines like "Tempo in the music file" and "Lyrics in the lyrics file", unticked; nothing is written unless you tick them.

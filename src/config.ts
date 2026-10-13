@@ -80,6 +80,8 @@ export interface PlexNotesSettings {
   dailyEpisodes: boolean
   /** The daily note line they go under (its text, without quote markers). */
   dailyAnchor: string
+  /** The quote markers each episode line starts with, before "- ▶️". */
+  dailyQuote: string
   /** Daily notes' folder and file name format (moment.js); empty uses Obsidian's Daily notes settings. */
   dailyFolder: string
   dailyFormat: string
@@ -183,6 +185,7 @@ export function defaultSettings(): PlexNotesSettings {
     lastfmKey: '',
     dailyEpisodes: false,
     dailyAnchor: '[!writing] Journaling',
+    dailyQuote: '> >',
     dailyFolder: '',
     dailyFormat: '',
     dailyEpisodesSince: 0,
@@ -321,7 +324,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'dailyEpisodes', 'dailyAnchor', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

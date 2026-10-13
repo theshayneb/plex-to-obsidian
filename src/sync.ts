@@ -989,7 +989,7 @@ export class PlexSync {
       let found = true
       let added = 0
       await this.app.vault.process(file, text => {
-        const result = insertEntries(text, this.settings.dailyAnchor, entries)
+        const result = insertEntries(text, this.settings.dailyAnchor, entries, this.settings.dailyQuote)
         found = result.found
         added = result.added
         return result.text

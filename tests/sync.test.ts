@@ -61,14 +61,14 @@ vi.mock('obsidian', () => {
 // Steam's local files (desktop only) are read through this; each test says what it finds.
 vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
 // Music files' own tags (desktop only) are read through this; each test says what it finds.
-vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), readLyrics: vi.fn(() => null) }))
+vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), readLyrics: vi.fn(() => null), writeOwnTag: vi.fn(() => null), writeLyrics: vi.fn(() => null) }))
 
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
 const { readSteamCollections } = await import('../src/steam-local')
-const { readFileTags, readLyrics } = await import('../src/music-files')
+const { readFileTags, readLyrics, writeOwnTag, writeLyrics } = await import('../src/music-files')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
 const { HltbClient } = await import('../src/hltb')
@@ -1142,6 +1142,48 @@ describe('PlexSync', () => {
     expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')!.Lyrics).toBe(lyrics)
     expect(readFileTags).not.toHaveBeenCalled()
     vi.mocked(readLyrics).mockReset()
+    vi.mocked(readLyrics).mockReturnValue(null)
+  })
+
+  it('offers to write a song note\'s tempo and lyrics to its music and lyrics files, unticked', async () => {
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Slow'] })
+    vi.mocked(readLyrics).mockReturnValue('Old words')
+    const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Tempo: 'Fast', Lyrics: 'New words\nand more' } })
+    const settings = settingsWith()
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Tempo', source: 'fileTag', text: 'TXXX/TEMPO' }, { name: 'Lyrics', source: 'lyricsFile' })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Karma Police.mp3' }] }] }] } })
+    // A sync: both offered unticked; ticking them (the tempo edited) writes them.
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [], edits: { 'file:Tempo': 'Very Fast' } }))
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
+    expect(lines.filter(l => l.key.startsWith('file:'))).toEqual([
+      { key: 'file:Tempo', label: 'Tempo in the music file', current: 'Slow', value: 'Fast', edit: 'text', unticked: true },
+      { key: 'file:Lyrics', label: 'Lyrics in the lyrics file', current: 'Old words', value: 'New words\nand more', edit: 'text', unticked: true },
+    ])
+    expect(writeOwnTag).toHaveBeenCalledWith('/music/Karma Police.mp3', 'TEMPO', 'Very Fast', 'Slow')
+    expect(writeLyrics).toHaveBeenCalledWith('/music/Karma Police.mp3', 'New words\nand more', 'Old words')
+    expect(result.sentToFiles).toEqual([song])
+    // The note takes the edited value too.
+    expect(frontmatter.get(song)!.Tempo).toBe('Very Fast')
+
+    // A check of Tempo only, left unticked: not offered again while both stay the same.
+    vi.mocked(writeOwnTag).mockClear()
+    const decline = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Tempo'])
+    expect(decline.mock.calls[0][0].lines.map(l => l.key)).toContain('file:Tempo')
+    expect(decline.mock.calls[0][0].lines.map(l => l.key)).not.toContain('file:Lyrics')
+    expect(writeOwnTag).not.toHaveBeenCalled()
+    decline.mockClear()
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Tempo'])
+    expect(decline.mock.calls.flatMap(c => c[0].lines.map(l => l.key))).not.toContain('file:Tempo')
+    // A refusal is reported, not hidden.
+    vi.mocked(writeLyrics).mockReturnValue('the lyrics file has changed since it was read')
+    const again = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Lyrics'])
+    expect(again.failed).toEqual([{ title: 'Karma Police', error: 'Lyrics wasn\'t written to the lyrics file: the lyrics file has changed since it was read' }])
+    vi.mocked(writeLyrics).mockReturnValue(null)
+    vi.mocked(readFileTags).mockReturnValue(null)
     vi.mocked(readLyrics).mockReturnValue(null)
   })
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.115] - 2026-10-13
+
+- Changes you make to a song note's Tempo (or any property read from one of your own tags in the music file) and Lyrics can now be written back to the music file and its lyrics file. When the note and the file differ, "Check notes against sources" (for the properties you choose) and syncs (with "Ask before changes" on) offer lines like "Tempo in the music file" and "Lyrics in the lyrics file", unticked; nothing is written unless you tick them.
+  - Only a tag the music file already has is changed, inside the same file: the file keeps its name and size, and the audio and everything else in it are left alone. A file with no room left in its tag is skipped and listed.
+  - The lyrics file is changed in place too, keeping its text encoding and line endings. A lyrics file is never made for a song that has none.
+  - If the file changed since the plugin read it, nothing is written and you're told.
+  - A line you leave unticked isn't offered again while the note and the file stay as they are.
+  - Desktop only. Plex sees the change after it next refreshes the track.
+
 ## [0.0.114] - 2026-10-12
 
 - Episode lines in daily notes now take their quote markers from the empty line under the journaling line ("> >- ▶️ [[Show]]: S01E05 – Title"), not from the journaling line itself, which gave them one ">" too many. Lines already written there with the extra ">" are corrected the next time episodes are added to that day.

@@ -387,7 +387,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.failed.length) {
         console.error('Media Manager: failed items', result.failed)
         new Notice(`Checking failed: ${result.failed.map(f => f.error).join('; ')}`, 10000)
-      } else if ([...result.corrected, ...result.links, ...result.sentRatings, ...result.renamed.flatMap(r => [r.from, r.to])].includes(file.path)) new Notice(`${file.basename}: changed`)
+      } else if ([...result.corrected, ...result.links, ...result.sentRatings, ...result.sentToFiles, ...result.renamed.flatMap(r => [r.from, r.to])].includes(file.path)) new Notice(`${file.basename}: changed`)
       else if (result.declined || result.keptLinks || result.stopped) new Notice(`${file.basename}: left as it was`)
       else if (result.checked.includes(file.path)) new Notice(`${file.basename} already matches its source`)
       else new Notice(`${file.basename} matches nothing in Plex, Steam or Open Library (or its library isn't synced)`, 8000)
@@ -453,6 +453,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.sentRatings.length) {
         parts.push(`sent ${result.sentRatings.length} rating${result.sentRatings.length === 1 ? '' : 's'} to Plex`)
         console.log('Media Manager: ratings sent to Plex', result.sentRatings)
+      }
+      if (result.sentToFiles.length) {
+        parts.push(`wrote ${result.sentToFiles.length} note${result.sentToFiles.length === 1 ? '\'s' : 's\''} values to music or lyrics files`)
+        console.log('Media Manager: values written to music or lyrics files', result.sentToFiles)
       }
       if (result.corrected.length) {
         parts.push(`corrected ${result.corrected.length} duration${result.corrected.length === 1 ? '' : 's'}`)

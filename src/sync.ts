@@ -42,7 +42,7 @@ import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
-import { readFileTags, readLyrics } from './music-files'
+import { readFileTags, readLyrics, writeLyrics, writeOwnTag } from './music-files'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -74,6 +74,8 @@ export interface SyncResult {
   unmatchedWhy: Record<string, string>
   /** Notes whose rating was sent to Plex. */
   sentRatings: string[]
+  /** Notes whose value was written to their music file's tag or lyrics file. */
+  sentToFiles: string[]
   /** Links and values you chose to keep in this sync. */
   keptLinks: number
   skipped: number
@@ -134,6 +136,22 @@ interface Checks {
   /** Those always offered unticked: images you picked yourself (a link to a file in the vault). */
   yours?: Set<string>
 }
+
+/** A note's value to write to its music file's own tag, or to its lyrics file (see `planFileWrites`). */
+interface FileWrite {
+  name: string
+  /** The music file. */
+  path: string
+  /** The tag's name, or null for the lyrics file. */
+  tag: string | null
+  /** What's in the file now. */
+  from: string
+  /** The note's value. */
+  to: string
+}
+
+/** Text the way a lyrics file's is compared: plain line endings, no blank lines at the end. */
+const lyricsText = (text: string): string => text.replace(/\r\n?/g, '\n').replace(/\s+$/, '')
 
 interface FillPlan {
   item: PlexItem
@@ -229,6 +247,59 @@ export class PlexSync {
   private onlyLibraries: Set<string> | null = null
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
+
+  /**
+   * The music file's own tags (TXXX ones already in the file) and lyrics file whose value differs
+   * from the note's, to offer writing the note's value there (a check: only the properties chosen).
+   * Never offered for an empty note value, a tag the file lacks or has several values in, a lyrics
+   * file that isn't there, or a difference you turned down before.
+   */
+  private planFileWrites(file: TFile, item: PlexItem, lib: LibrarySetting, chosen: Set<string> | null): FileWrite[] {
+    const path = item.Media?.[0]?.Part?.[0]?.file
+    if (lib.target !== 'music' || !path) return []
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const writes: FileWrite[] = []
+    for (const mapping of lib.properties) {
+      const name = mapping.name.trim()
+      if (!name || (chosen && !chosen.has(name))) continue
+      const value: unknown = frontmatter[name]
+      if (typeof value !== 'string' && typeof value !== 'number') continue
+      let write: FileWrite | null = null
+      if (mapping.source === 'fileTag' && mapping.text?.trim()) {
+        const tag = mapping.text.trim().replace(/^TXXX[/:]/i, '')
+        const values = item.fileTags?.[`TXXX:${tag.toLowerCase()}`]
+        const to = String(value).trim()
+        if (values?.length === 1 && to && to !== values[0]) write = { name, path, tag, from: values[0], to }
+      } else if (mapping.source === 'lyricsFile' && item.lyrics) {
+        const to = lyricsText(String(value))
+        if (to && to !== lyricsText(item.lyrics)) write = { name, path, tag: null, from: item.lyrics, to }
+      }
+      if (write && !this.isKept(`${item.ratingKey}|file:${name}`, write.to, write.from)) writes.push(write)
+    }
+    return writes
+  }
+
+  /** Writes approved values to music files (as edited, the note then taking the edit too). */
+  private async applyFileWrites(file: TFile, item: PlexItem, writes: FileWrite[], edits: Record<string, string | string[]>, result: SyncResult): Promise<void> {
+    const edited: Record<string, string> = {}
+    let sent = false
+    for (const write of writes) {
+      const typed = edits[`file:${write.name}`]
+      const value = typeof typed === 'string' ? (write.tag ? typed.trim() : lyricsText(typed)) : write.to
+      if (!value) continue
+      const refused = write.tag ? writeOwnTag(write.path, write.tag, value, write.from) : writeLyrics(write.path, value, item.lyrics)
+      if (refused) {
+        result.failed.push({ title: item.title, error: `${write.name} wasn't written to the ${write.tag ? 'music' : 'lyrics'} file: ${refused}` })
+        continue
+      }
+      sent = true
+      if (value !== write.to) edited[write.name] = value
+    }
+    if (Object.keys(edited).length) {
+      await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => Object.assign(fm, edited))
+    }
+    if (sent) result.sentToFiles.push(file.path)
+  }
 
   /**
    * Whether you chose to keep a note's value over this offer before. Remembered with the offer you
@@ -462,7 +533,7 @@ export class PlexSync {
     // A check or a sync can be limited to some libraries (the background update never is).
     this.onlyLibraries = mode !== 'playCounts' && libraries ? libraries : null
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], sentToFiles: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     this.running = result
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
@@ -579,6 +650,8 @@ export class PlexSync {
           // Remembered only when the note and Plex agree (or one was just made to match the other).
           if (rating && (rating.note ?? 0) === rating.plex) this.seeRating(item.ratingKey, rating.plex)
           const links = asking ? this.planLinks(file, item, lib) : null
+          // A music file's own tag or lyrics file that differs from the note: offered to be written from the note.
+          const fileWrites = genreCheck || asking ? this.planFileWrites(file, item, lib, genreCheck ? chosenOf(lib) : null) : []
           let checks: Checks | null = null
           try {
             checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosenOf(lib)) : asking ? this.planChecks(file, item, lib) : null
@@ -590,7 +663,7 @@ export class PlexSync {
             checks.names = checks.names.filter(name => !rescale.names.includes(name))
             if (!checks.names.length) checks = null
           }
-          if (!renameTo && !fill && !plays && !links && !checks && !toPlex && !rescale) continue
+          if (!renameTo && !fill && !plays && !links && !checks && !toPlex && !rescale && !fileWrites.length) continue
 
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -623,6 +696,9 @@ export class PlexSync {
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
+          for (const write of fileWrites) {
+            lines.push({ key: `file:${write.name}`, label: write.tag ? `${write.name} in the music file` : `${write.name} in the lyrics file`, current: write.from, value: write.to, edit: 'text', unticked: true })
+          }
           // Lines about what you said never to change in this note are left out unasked (see `ask`).
           const lockedHere = this.settings.lockedProperties[path] ?? []
           const askedLines = lines.filter(line => !lockedHere.includes(line.label))
@@ -639,7 +715,14 @@ export class PlexSync {
               this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
               result.keptLinks++
             }
-            const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`))
+            const sendingToFiles = fileWrites.filter(write => !excluded.has(`file:${write.name}`))
+            // A file you said not to change isn't offered again while it and the note stay the same.
+            for (const write of fileWrites.filter(w => excluded.has(`file:${w.name}`))) {
+              this.keep(`${item.ratingKey}|file:${write.name}`, write.to, write.from)
+            }
+            // Sending the note's value to the file keeps the note's value: the file's isn't brought in too.
+            const sentNames = new Set(sendingToFiles.map(write => write.name))
+            const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`) && !sentNames.has(name))
             // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
             for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
               this.keep(`${item.ratingKey}|${name}`, checks!.from[name], checks!.to[name])
@@ -684,7 +767,7 @@ export class PlexSync {
               const edited = edits[`update:${name}`]
               return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
             }
-            if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length) {
+            if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length && !sendingToFiles.length) {
               result.declined++
               return
             }
@@ -742,6 +825,7 @@ export class PlexSync {
                 this.seeRating(item.ratingKey, level)
                 result.sentRatings.push(file.path)
               }
+              if (sendingToFiles.length) await this.applyFileWrites(file, item, sendingToFiles, edits, result)
             } catch (err) {
               result.failed.push({ title: item.title, error: errorText(err) })
             }
@@ -1076,7 +1160,7 @@ export class PlexSync {
     const match = findNote(index, item, this.naming(lib), lib.matchBy)
     if (match) return { existing: match.paths[0] }
 
-    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
+    const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], sentToFiles: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     this.running = result
     const kind = lib.target
     const preview = this.previewNote(item, lib, kind)

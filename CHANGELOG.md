@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.119] - 2026-10-15
+
+- The pop-ups say where each new value comes from ("From: Plex", "From: Last.fm", "From: This note"…) and where it will be written ("Writes to: This note", "Writes to: Plex", "Writes to: Music file"). The two play count lines are now both called "Progress", the property they write, one from Plex and one from Last.fm, and the pop-up says when a property has values from more than one source to choose from. The same goes for ratings: your rating for the note, for Plex and for the music file each say where they go.
+
 ## [0.0.118] - 2026-10-15
 
 - Songs' play counts from Plex now go in the Progress property (added to your music library's properties). A song's count is never lowered, so one you took from Last.fm stays.

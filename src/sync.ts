@@ -381,6 +381,42 @@ export class PlexSync {
     this.settings.keptValues[key] = JSON.stringify({ kept: String(current), offered: offerText(offer) })
   }
 
+  /**
+   * The request with each line saying where its value comes from and where it's written, so lines
+   * about the same data from several places (a play count from Plex and from Last.fm, your rating
+   * for the note and for Plex) can't be taken for different properties.
+   */
+  private withSources(request: ApprovalRequest, item: PlexItem, lib: LibrarySetting): ApprovalRequest {
+    const sourceOf = (name: string): string => {
+      const m = lib.properties.find(p => p.name.trim() === name)
+      if (m?.source === 'fileTag') return 'Music file'
+      if (m?.source === 'lyricsFile') return 'Lyrics file'
+      if (m?.source === 'text') return 'Your fixed value (library settings)'
+      if (m?.source === 'steamCollections') return 'Steam collections'
+      if (m && (HLTB_SOURCES.includes(m.source) || (lib.target === 'game' && LENGTH_SOURCES.includes(m.source)))) return 'HowLongToBeat'
+      if (item.ratingKey.startsWith('hltb-')) return 'HowLongToBeat'
+      if (item.ratingKey.startsWith('imdb-')) return 'OMDb'
+      if (lib.target === 'game') return 'Steam'
+      if (lib.target === 'book') return m?.source === 'summary' || m?.source === 'releaseDate' ? 'Google Books or Open Library' : item.ratingKey.startsWith('gb-') ? 'Google Books' : 'Open Library'
+      return 'Plex'
+    }
+    const where = (line: ApprovalLine): Pick<ApprovalLine, 'source' | 'writesTo'> => {
+      const { key } = line
+      if (key === 'plexRating') return { source: 'This note', writesTo: 'Plex' }
+      if (key.startsWith('file:')) return { source: 'This note', writesTo: line.label.endsWith('lyrics file') ? 'Lyrics file' : 'Music file' }
+      if (key.startsWith('rescale:')) return { source: 'This note, in the star scale', writesTo: 'This note' }
+      if (key === 'rename') return { source: 'The library\'s file name format', writesTo: 'This note\'s file name' }
+      if (key === 'file') return { source: 'The library\'s file name format' }
+      const name = key.slice(key.indexOf(':') + 1).replace(/^(plex|lastfm):/, '')
+      return { source: sourceOf(name), writesTo: 'This note' }
+    }
+    return { ...request, lines: request.lines.map(line => {
+      const found = where(line)
+      // A new note's lines all go in the new note: only where each value comes from is said.
+      return { ...line, source: line.source ?? found.source, ...request.action === 'change' ? { writesTo: line.writesTo ?? found.writesTo } : {} }
+    }) }
+  }
+
   /** The lines of a change that are about something you said never to change in that note. */
   private lockedLines(request: ApprovalRequest): string[] {
     const locked = request.action === 'change' ? this.settings.lockedProperties[request.path] : undefined
@@ -401,7 +437,7 @@ export class PlexSync {
     // "All the rest" leaves out what was unticked then, and anything that would start unticked here
     // (a link, status, rating or image of your own): those are never changed without being seen.
     if (remembered) return { excluded: new Set([...remembered, ...locked, ...request.lines.filter(l => l.unticked).map(l => l.key)]), edits: {} }
-    const shown = request.action === 'change' ? this.withWholeNote(request, lib) : request
+    const shown = this.withSources(request.action === 'change' ? this.withWholeNote(request, lib) : request, item, lib)
     const { choice, excluded, edits, mergeWith, locked: lockedNow } = await this.approve(shown)
     // "Never for this note": remembered for this note whatever was chosen.
     const newlyLocked = request.lines.filter(l => lockedNow?.includes(l.label))
@@ -789,7 +825,7 @@ export class PlexSync {
           for (const c of countChoices) {
             for (const from of ['plex', 'lastfm'] as const) {
               if (!c.offer[from]) continue
-              lines.push({ key: `count:${from}:${c.name}`, label: `${c.name} (${from === 'plex' ? 'Plex' : 'Last.fm'})`, current: describeValue(c.current), value: String(c[from]), edit: 'number', unticked: c.ticked !== from })
+              lines.push({ key: `count:${from}:${c.name}`, label: c.name, current: describeValue(c.current), value: String(c[from]), edit: 'number', unticked: c.ticked !== from, source: from === 'plex' ? 'Plex' : 'Last.fm' })
             }
           }
           for (const write of fileWrites) {

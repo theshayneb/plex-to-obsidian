@@ -416,8 +416,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
-      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐⭐ (4 stars in Plex)', edit: 'text', unticked: false }]],
-      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐⭐ (4 stars in Plex)', value: '⭐⭐ (2 stars in Plex)', edit: 'text', unticked: false }]],
+      ['Media/Movies/Arrival (2016).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: null, value: '⭐⭐⭐⭐ (4 stars in Plex)', edit: 'text', unticked: false, source: 'This note', writesTo: 'Plex' }]],
+      ['Media/Movies/Heat (1995).md', [{ key: 'plexRating', label: 'Your rating in Plex', current: '⭐⭐⭐⭐ (4 stars in Plex)', value: '⭐⭐ (2 stars in Plex)', edit: 'text', unticked: false, source: 'This note', writesTo: 'Plex' }]],
     ])
     expect(requested.filter(u => u.includes('/:/rate'))).toEqual([
       'http://plex:32400/:/rate?key=1&identifier=com.plexapp.plugins.library&rating=8',
@@ -460,7 +460,7 @@ describe('PlexSync', () => {
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     // ⭐⭐⭐ was 4 stars in the old scale: offered as ⭐⭐⭐⭐. 🩷 is the same in both: just marked reviewed.
     expect(requests.filter(r => r.action === 'change').map(r => [r.path, r.lines])).toEqual([
-      ['Media/Movies/Arrival (2016).md', [{ key: 'rescale:Rating', label: 'Rating', current: '⭐⭐⭐', value: '⭐⭐⭐⭐', edit: 'text', unticked: false }]],
+      ['Media/Movies/Arrival (2016).md', [{ key: 'rescale:Rating', label: 'Rating', current: '⭐⭐⭐', value: '⭐⭐⭐⭐', edit: 'text', unticked: false, source: 'This note, in the star scale', writesTo: 'This note' }]],
     ])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Rating).toBe('⭐⭐⭐⭐')
     expect(settings.ratingsReviewed).toEqual({ 1: true, 2: true })
@@ -517,7 +517,7 @@ describe('PlexSync', () => {
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[1], viewCount: 3 }] } })
     const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'stop' as const, excluded: [] }))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
-    expect(approve.mock.calls[0][0].lines).toEqual([{ key: 'update:Plays', label: 'Plays', current: '1', value: '3', edit: 'number' }])
+    expect(approve.mock.calls[0][0].lines).toEqual([{ key: 'update:Plays', label: 'Plays', current: '1', value: '3', edit: 'number', source: 'Plex', writesTo: 'This note' }])
   })
 
   it('only updates play counts in the background mode', async () => {
@@ -554,13 +554,13 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(approve.mock.calls[0][0].lines).toEqual([
-      { key: 'rename', label: 'File name', current: 'Heat', value: 'Heat (1995)', edit: 'text' },
-      { key: 'add:Link', label: 'Link', current: null, value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2', edit: 'text', items: undefined },
+      { key: 'rename', label: 'File name', current: 'Heat', value: 'Heat (1995)', edit: 'text', source: 'The library\'s file name format', writesTo: 'This note\'s file name' },
+      { key: 'add:Link', label: 'Link', current: null, value: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F2', edit: 'text', items: undefined, source: 'Plex', writesTo: 'This note' },
     ])
     const arrival = approve.mock.calls.find(c => c[0].path === 'Media/Movies/Arrival (2016).md')![0]
-    expect(arrival.lines).toContainEqual({ key: 'prop:Image', label: 'Image', value: 'poster downloaded from Plex' })
-    expect(arrival.lines).toContainEqual({ key: 'prop:Genre', label: 'Genre', value: 'Sci-Fi, Drama', edit: 'list', items: ['Sci-Fi', 'Drama'] })
-    expect(arrival.lines[0]).toEqual({ key: 'file', label: 'File name', value: 'Arrival (2016)', edit: 'text', required: true })
+    expect(arrival.lines).toContainEqual({ key: 'prop:Image', label: 'Image', value: 'poster downloaded from Plex', source: 'Plex' })
+    expect(arrival.lines).toContainEqual({ key: 'prop:Genre', label: 'Genre', value: 'Sci-Fi, Drama', edit: 'list', items: ['Sci-Fi', 'Drama'], source: 'Plex' })
+    expect(arrival.lines[0]).toEqual({ key: 'file', label: 'File name', value: 'Arrival (2016)', edit: 'text', required: true, source: 'The library\'s file name format' })
     expect(files.has('Media/Movies/Heat.md')).toBe(true)
     expect(frontmatter.get('Media/Movies/Heat.md')).toEqual({})
     expect(files.has('Media/Movies/Arrival (2016).md')).toBe(false)
@@ -794,7 +794,7 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.map(r => r.path)).toEqual(['Media/Video Games/Wildermyth.md', 'Media/Video Games/Hades.md'])
-    expect(requests[0].lines).toEqual([{ key: 'link:Link', label: 'Link', current: search, value: 'https://store.steampowered.com/app/763890/', edit: 'text', unticked: false }])
+    expect(requests[0].lines).toEqual([{ key: 'link:Link', label: 'Link', current: search, value: 'https://store.steampowered.com/app/763890/', edit: 'text', unticked: false, source: 'Steam', writesTo: 'This note' }])
     expect(requests[1].lines[0]).toMatchObject({ key: 'link:Link', current: hltb, unticked: true })
     expect(frontmatter.get('Media/Video Games/Wildermyth.md')!.Link).toBe('https://store.steampowered.com/app/763890/')
     expect(frontmatter.get('Media/Video Games/Hades.md')!.Link).toBe(hltb)
@@ -843,8 +843,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
     expect(requests.filter(r => r.action === 'change').map(r => r.lines)).toEqual([
-      [{ key: 'fix:Duration', label: 'Duration', current: '1.9', value: '116', edit: 'number', unticked: false }],
-      [{ key: 'fix:Duration', label: 'Duration', current: '150', value: '170', edit: 'number', unticked: true }],
+      [{ key: 'fix:Duration', label: 'Duration', current: '1.9', value: '116', edit: 'number', unticked: false, source: 'Plex', writesTo: 'This note' }],
+      [{ key: 'fix:Duration', label: 'Duration', current: '150', value: '170', edit: 'number', unticked: true, source: 'Plex', writesTo: 'This note' }],
     ])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Duration).toBe(116)
     expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Duration).toBe(150)
@@ -872,7 +872,7 @@ describe('PlexSync', () => {
 
     // Arrival: its own kept genres (Sci-Fi, Mystery) plus Plex's kept ones (Sci-Fi). Heat already matches.
     expect(requests.map(r => r.lines)).toEqual([[{
-      key: 'fix:Genre', label: 'Genre', current: 'Drama, Family, Sci-Fi, Mystery', value: 'Sci-Fi, Mystery', edit: 'list', items: ['Sci-Fi', 'Mystery'], unticked: false,
+      key: 'fix:Genre', label: 'Genre', current: 'Drama, Family, Sci-Fi, Mystery', value: 'Sci-Fi, Mystery', edit: 'list', items: ['Sci-Fi', 'Mystery'], unticked: false, source: 'Plex', writesTo: 'This note',
     }]])
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Genre).toEqual(['Sci-Fi', 'Mystery'])
     expect(frontmatter.get('Media/Movies/Heat (1995).md')!.Genre).toEqual(['Crime'])
@@ -1161,9 +1161,9 @@ describe('PlexSync', () => {
     const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked && l.key !== 'count:plex:Progress').map(l => l.key) }))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
-    expect(lines.filter(l => l.label.startsWith('Progress'))).toEqual([
-      { key: 'count:plex:Progress', label: 'Progress (Plex)', current: '3', value: '12', edit: 'number', unticked: true },
-      { key: 'count:lastfm:Progress', label: 'Progress (Last.fm)', current: '3', value: '40', edit: 'number', unticked: false },
+    expect(lines.filter(l => l.label === 'Progress')).toEqual([
+      { key: 'count:plex:Progress', label: 'Progress', current: '3', value: '12', edit: 'number', unticked: true, source: 'Plex', writesTo: 'This note' },
+      { key: 'count:lastfm:Progress', label: 'Progress', current: '3', value: '40', edit: 'number', unticked: false, source: 'Last.fm', writesTo: 'This note' },
     ])
     expect(frontmatter.get(song)!.Progress).toBe(12)
     // Now the note has Plex's: only Last.fm's is offered; left unticked, it isn't offered again.
@@ -1196,8 +1196,8 @@ describe('PlexSync', () => {
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
     expect(lines.filter(l => l.key.startsWith('file:'))).toEqual([
-      { key: 'file:Tempo', label: 'Tempo in the music file', current: 'Slow', value: 'Fast', edit: 'text', unticked: true },
-      { key: 'file:Lyrics', label: 'Lyrics in the lyrics file', current: 'Old words', value: 'New words\nand more', edit: 'text', unticked: true },
+      { key: 'file:Tempo', label: 'Tempo in the music file', current: 'Slow', value: 'Fast', edit: 'text', unticked: true, source: 'This note', writesTo: 'Music file' },
+      { key: 'file:Lyrics', label: 'Lyrics in the lyrics file', current: 'Old words', value: 'New words\nand more', edit: 'text', unticked: true, source: 'This note', writesTo: 'Lyrics file' },
     ])
     expect(writeOwnTag).toHaveBeenCalledWith('/music/Karma Police.mp3', 'TEMPO', 'Very Fast', 'Slow')
     expect(writeLyrics).toHaveBeenCalledWith('/music/Karma Police.mp3', 'New words\nand more', 'Old words')

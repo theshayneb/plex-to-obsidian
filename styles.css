@@ -68,6 +68,13 @@
 }
 
 .pmn-approval-off .pmn-approval-new,
+.pmn-approval-where {
+  font-size: var(--font-ui-smaller);
+  font-weight: normal;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
 .pmn-approval-off .pmn-approval-name {
   text-decoration: line-through;
   color: var(--text-faint);

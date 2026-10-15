@@ -44,6 +44,10 @@ export interface ApprovalLine {
   choices?: CoverChoice[]
   /** Something wrong with what's in the note now, pointed out next to it (a duration that isn't a number). */
   warn?: string
+  /** Where the new value comes from ("Plex", "Last.fm", "This note"), shown under it. */
+  source?: string
+  /** Where it's written ("This note", "Plex", "Music file"), shown under the property's name. */
+  writesTo?: string
 }
 
 /** A property (or the file name) a change leaves alone; editing it in the pop-up changes it too. */
@@ -141,7 +145,16 @@ export class ApprovalModal extends Modal {
     if (!create) head.createEl('th', { text: 'Existing' })
     head.createEl('th', { text: create ? 'Value' : 'New' })
     const body = table.createEl('tbody')
-    for (const { key, label, current, value, edit, items, required, choices, unticked, warn } of lines) {
+    // A property more than one source has a value for: its lines are offered side by side to choose from.
+    const intoNote = lines.filter(line => (line.writesTo ?? 'This note') === 'This note').map(line => line.label)
+    const several = [...new Set(intoNote.filter((label, i) => intoNote.indexOf(label) !== i))]
+    if (several.length) {
+      contentEl.insertBefore(createEl('p', {
+        cls: 'setting-item-description',
+        text: `${several.join(', ')}: more than one source has a value. Tick the one to write to the note; each line says where its value comes from.`,
+      }), table.parentElement)
+    }
+    for (const { key, label, current, value, edit, items, required, choices, unticked, warn, source, writesTo } of lines) {
       const row = body.createEl('tr')
       const tickCell = row.createEl('td', { cls: 'pmn-approval-tick' })
       const box = tickCell.createEl('input', { type: 'checkbox' })
@@ -151,7 +164,8 @@ export class ApprovalModal extends Modal {
         this.pmnExcluded.add(key)
         row.addClass('pmn-approval-off')
       }
-      row.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
+      const nameCell = row.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
+      if (writesTo && !create) nameCell.createDiv({ cls: 'pmn-approval-where', text: `Writes to: ${writesTo}` })
       if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing', warn)
       const newLabel = create ? 'Value' : 'New'
       const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
@@ -171,6 +185,7 @@ export class ApprovalModal extends Modal {
       } else {
         cell(row, value, 'pmn-approval-new', newLabel)
       }
+      if (source) (row.lastElementChild as HTMLElement).createDiv({ cls: 'pmn-approval-where', text: `From: ${source}` })
       // "Never for this note": unticked now, and never offered for this note again.
       if (!create) {
         const lock = tickCell.createEl('button', { cls: 'pmn-approval-lock clickable-icon', attr: { 'aria-label': `Never change ${label} in this note` } })

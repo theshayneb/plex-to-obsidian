@@ -96,3 +96,27 @@ export function pickSeeds(seeds: Seed[], count: number, random: () => number = M
     .sort((a, b) => b.seed.weight - a.seed.weight || a.order - b.order)
   return shuffled.slice(0, count).map(s => s.seed)
 }
+
+/** One page of `user.getTopTracks`: each song's play count, and how many pages there are. */
+export function parseTopTracks(body: unknown): { tracks: { artist: string, title: string, plays: number }[], pages: number } {
+  const top = (body as { toptracks?: { track?: unknown, '@attr'?: { totalPages?: unknown } } } | null)?.toptracks
+  const tracks = listOf(top?.track).map(t => {
+    const track = t as { name?: unknown, playcount?: unknown, artist?: unknown }
+    const artist = track.artist && typeof track.artist === 'object' ? text((track.artist as { name?: unknown }).name) : text(track.artist)
+    return { artist, title: text(track.name), plays: Number(text(track.playcount)) || 0 }
+  }).filter(t => t.artist && t.title)
+  return { tracks, pages: Number(text(top?.['@attr']?.totalPages)) || 1 }
+}
+
+/**
+ * Last.fm play counts by song (`songKey`), the versions Last.fm lists apart ("- Remastered",
+ * "(Live)") added together, as Plex's songs are compared without them.
+ */
+export function playCountsByKey(tracks: { artist: string, title: string, plays: number }[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const t of tracks) {
+    const key = songKey(t.artist, t.title)
+    counts.set(key, (counts.get(key) ?? 0) + t.plays)
+  }
+  return counts
+}

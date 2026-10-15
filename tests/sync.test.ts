@@ -61,6 +61,7 @@ vi.mock('obsidian', () => {
 // Steam's local files (desktop only) are read through this; each test says what it finds.
 vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
 // Music files' own tags (desktop only) are read through this; each test says what it finds.
+vi.mock('../src/lastfm', () => ({ userPlayCounts: vi.fn(() => Promise.resolve(null)), similarTracks: vi.fn(() => Promise.resolve([])), testLastfmKey: vi.fn() }))
 vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), readLyrics: vi.fn(() => null), writeOwnTag: vi.fn(() => null), writeLyrics: vi.fn(() => null) }))
 
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
@@ -232,6 +233,7 @@ describe('PlexSync', () => {
       Date: '1997-05-21',
       Link: 'https://app.plex.tv/desktop/#!/server/srv/details?key=%2Flibrary%2Fmetadata%2F90&track=100',
       Image: '[[Media/Music/Images/Radiohead - OK Computer.jpg]]',
+      Progress: 0,
       tags: ['music'],
     })
     expect(frontmatter.get('Media/Music/DJ X - Intro.md')).toMatchObject({ Artist: 'DJ X', Album: 'Mix', Genre: [], Image: null })
@@ -1147,6 +1149,39 @@ describe('PlexSync', () => {
     vi.mocked(readLyrics).mockReturnValue(null)
   })
 
+  it('offers a song\'s play count from Plex and from Last.fm to choose from when they differ', async () => {
+    const { userPlayCounts } = await import('../src/lastfm')
+    vi.mocked(userPlayCounts).mockResolvedValue(new Map([['radiohead|karmapolice', 40]]))
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Progress: 3 } })
+    const settings = settingsWith({ lastfmKey: 'k', lastfmUser: 'me' })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], viewCount: 12 }] } })
+    // Neither in the note: both offered, the higher ticked; ticking the other too picks it.
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked && l.key !== 'count:plex:Progress').map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
+    expect(lines.filter(l => l.label.startsWith('Progress'))).toEqual([
+      { key: 'count:plex:Progress', label: 'Progress (Plex)', current: '3', value: '12', edit: 'number', unticked: true },
+      { key: 'count:lastfm:Progress', label: 'Progress (Last.fm)', current: '3', value: '40', edit: 'number', unticked: false },
+    ])
+    expect(frontmatter.get(song)!.Progress).toBe(12)
+    // Now the note has Plex's: only Last.fm's is offered; left unticked, it isn't offered again.
+    approve.mockClear()
+    const decline = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Progress'])
+    expect(decline.mock.calls[0][0].lines.map(l => l.key)).toEqual(['count:lastfm:Progress'])
+    decline.mockClear()
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Progress'])
+    expect(decline).not.toHaveBeenCalled()
+    // A Last.fm count chosen isn't lowered to Plex's by a background update.
+    frontmatter.get(song)!.Progress = 40
+    settings.askBeforeChanges = false
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
+    expect(frontmatter.get(song)!.Progress).toBe(40)
+    vi.mocked(userPlayCounts).mockResolvedValue(null)
+  })
+
   it('offers to write a song note\'s tempo and lyrics to its music and lyrics files, unticked', async () => {
     const song = 'Media/Music/Radiohead - Karma Police.md'
     vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Slow'] })
@@ -1493,7 +1528,7 @@ describe('PlexSync', () => {
       },
     }
     const once = loadSettings(saved)
-    expect(once.libraries['3'].properties.map(p => p.name)).toEqual(['Artist'])
+    expect(once.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Progress'])
     expect(once.libraries.books.properties).toEqual([{ name: 'Author', source: 'authors' }, { name: 'Duration', source: 'pages' }])
     // Put back by hand afterwards: left alone.
     const again = loadSettings({ ...saved, migrations: once.migrations })
@@ -1878,7 +1913,7 @@ describe('PlexSync', () => {
     const { retarget } = await import('../src/config')
     retarget(settings.libraries['3'], 'music')
     expect(settings.libraries['3']).toMatchObject({ folder: 'Media/Music', fileNameFormat: '{{artist}} - {{title}}', values: { tag: 'music' } })
-    expect(settings.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Album', 'Track', 'Genre', 'Date', 'Link', 'Image', 'tags'])
+    expect(settings.libraries['3'].properties.map(p => p.name)).toEqual(['Artist', 'Album', 'Track', 'Genre', 'Date', 'Link', 'Image', 'Progress', 'tags'])
   })
 
   it('moves settings from older versions into each library', () => {

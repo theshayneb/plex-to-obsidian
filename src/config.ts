@@ -91,6 +91,8 @@ export interface PlexNotesSettings {
   dailyEpisodesSince: number
   /** Last.fm API key, for music suggestions from outside your library on the recommendations page. */
   lastfmKey: string
+  /** Your Last.fm username: songs' play counts there are offered beside Plex's. */
+  lastfmUser: string
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -185,6 +187,7 @@ export function defaultSettings(): PlexNotesSettings {
     omdbKey: '',
     googleBooksKey: '',
     lastfmKey: '',
+    lastfmUser: '',
     dailyEpisodes: false,
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
@@ -327,7 +330,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -435,6 +438,12 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     // A started game isn't set back to "planned" by its Right Now collection.
     for (const lib of Object.values(settings.libraries)) {
       lib.values.collectionStatus = lib.values.collectionStatus?.map(p => p.status.trim().toLowerCase() === 'planned' ? { ...p, untilStarted: true } : p)
+    }
+  })
+  migrateOnce(settings, saved, 'music-progress', () => {
+    // Songs' play counts go in Progress, as you asked.
+    for (const lib of Object.values(settings.libraries)) {
+      if (lib.target === 'music' && !lib.properties.some(m => m.source === 'viewCount')) lib.properties.push({ name: 'Progress', source: 'viewCount' })
     }
   })
   migrateOnce(settings, saved, 'check-everything', () => {

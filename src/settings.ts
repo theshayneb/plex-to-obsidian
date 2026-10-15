@@ -743,6 +743,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         new Notice(await testLastfmKey(settings.lastfmKey ?? ''), 10_000)
         button.setDisabled(false)
       }))
+    new Setting(containerEl)
+      .setName('Last.fm username')
+      .setDesc('Optional, with the key. A song\'s play count on Last.fm is offered beside Plex\'s in syncs and checks whenever the two differ, for you to choose which goes in the note.')
+      .addText(text => text
+        .setPlaceholder('Optional')
+        .setValue(settings.lastfmUser ?? '')
+        .onChange(async value => {
+          settings.lastfmUser = value.trim()
+          await this.save()
+        }))
   }
 
   /**

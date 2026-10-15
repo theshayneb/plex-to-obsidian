@@ -108,6 +108,7 @@ export const DEFAULT_MUSIC_PROPERTIES: PropertyMapping[] = [
   { name: 'Date', source: 'releaseDate' },
   { name: 'Link', source: 'plexLink', fill: true },
   { name: 'Image', source: 'poster' },
+  { name: 'Progress', source: 'viewCount' },
   { name: 'tags', source: 'typeTag' },
 ]
 

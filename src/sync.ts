@@ -34,15 +34,18 @@ import {
   type FileNaming,
   type MediaKind,
   type PlexItem,
+  trackArtist,
 } from './notes'
 import { lookUpBook } from './discover'
 import { episodeEntry, episodesByDay, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics, writeLyrics, writeOwnTag } from './music-files'
+import { userPlayCounts } from './lastfm'
+import { songKey } from './lastfm-data'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -152,6 +155,18 @@ interface Checks {
   sameLength: Set<string>
   /** Those always offered unticked: images you picked yourself (a link to a file in the vault). */
   yours?: Set<string>
+}
+
+/** A song's play count from Plex and from Last.fm, to choose between (see `planCountChoices`). */
+interface CountChoice {
+  name: string
+  current: unknown
+  plex: number
+  lastfm: number
+  /** Which are offered: those the note doesn't already have. */
+  offer: { plex: boolean, lastfm: boolean }
+  /** The one that starts ticked, if any. */
+  ticked: 'plex' | 'lastfm' | null
 }
 
 /** A note's value to write to its music file's own tag, or to its lyrics file (see `planFileWrites`). */
@@ -264,6 +279,37 @@ export class PlexSync {
   private onlyLibraries: Set<string> | null = null
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
+
+  /**
+   * A song's play count properties where Last.fm's count (from `counts`, by `songKey`) differs
+   * from Plex's: `replaced` names them (their usual Plex line is left out, so a count you chose
+   * isn't changed back), and `choices` offers whichever of the two the note doesn't have yet,
+   * the higher one ticked when it has neither. A check only looks at the properties chosen. A
+   * choice turned down isn't offered again while the note and both counts stay the same.
+   */
+  private planCountChoices(file: TFile, item: PlexItem, lib: LibrarySetting, counts: Map<string, number>, chosen: Set<string> | null): { replaced: Set<string>, choices: CountChoice[] } | null {
+    const artist = trackArtist(item)
+    if (lib.target !== 'music' || item.type !== 'track' || !artist) return null
+    const lastfm = counts.get(songKey(artist, item.title))
+    const plex = playCount(item)
+    if (lastfm === undefined || lastfm === plex) return null
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const locked = this.settings.lockedProperties[file.path] ?? []
+    const replaced = new Set<string>()
+    const choices: CountChoice[] = []
+    for (const m of lib.properties) {
+      const name = m.name.trim()
+      if (m.source !== 'viewCount' || !name || (chosen && !chosen.has(name)) || locked.includes(name)) continue
+      replaced.add(name)
+      const current: unknown = frontmatter[name]
+      const now = typeof current === 'number' ? current : typeof current === 'string' && current.trim() ? Number(current) : NaN
+      if (this.isKept(`${item.ratingKey}|count:${name}`, current, `${plex}/${lastfm}`)) continue
+      const offer = { plex: now !== plex, lastfm: now !== lastfm }
+      const ticked = offer.plex && offer.lastfm ? (lastfm > plex ? 'lastfm' : 'plex') : null
+      choices.push({ name, current, plex, lastfm, offer, ticked })
+    }
+    return { replaced, choices }
+  }
 
   /**
    * The music file's own tags (TXXX ones already in the file) and lyrics file whose value differs
@@ -591,6 +637,19 @@ export class PlexSync {
     ]
     const counting = updating.length > 0
     const sendingRatings = full && this.settings.sendRatings
+    // Songs' play counts on Last.fm, offered beside Plex's where a pop-up can ask.
+    let lastfmCounts: Map<string, number> | null = null
+    const askable = genreCheck || (full && this.settings.askBeforeChanges && Boolean(this.approve))
+    const songCounts = active.some(([, lib]) => lib.target === 'music' && lib.properties.some(m => m.source === 'viewCount' && m.name.trim()))
+    if (askable && songCounts && this.settings.lastfmKey?.trim() && this.settings.lastfmUser?.trim()) {
+      progress('Reading your play counts on Last.fm…')
+      try {
+        lastfmCounts = await userPlayCounts(this.settings.lastfmKey, this.settings.lastfmUser)
+        if (!lastfmCounts) result.failed.push({ title: 'Last.fm', error: `Last.fm doesn't know the user "${this.settings.lastfmUser}"` })
+      } catch (err) {
+        result.failed.push({ title: 'Last.fm', error: `play counts couldn't be read: ${errorText(err)}` })
+      }
+    }
     if (renaming || filling || counting || genreCheck || sendingRatings) {
       progress('Checking existing notes…')
       // Every note's changes are worked out first, then asked about grouped by library and by which
@@ -675,12 +734,26 @@ export class PlexSync {
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
+          // A song's play count on Last.fm, when it differs from Plex's, is offered beside it to choose
+          // from, in place of the usual line for the property.
+          const counts = lastfmCounts ? this.planCountChoices(file, item, lib, lastfmCounts, genreCheck ? chosenOf(lib) : null) : null
+          if (counts?.replaced.size) {
+            if (plays) {
+              plays = { ...plays, names: plays.names.filter(n => !counts.replaced.has(n)) }
+              if (!plays.names.length) plays = null
+            }
+            if (checks) {
+              checks.names = checks.names.filter(n => !counts.replaced.has(n))
+              if (!checks.names.length) checks = null
+            }
+          }
+          const countChoices = counts?.choices ?? []
           // The rescaled rating is offered once, not again as a difference.
           if (checks && rescale) {
             checks.names = checks.names.filter(name => !rescale.names.includes(name))
             if (!checks.names.length) checks = null
           }
-          if (!renameTo && !fill && !plays && !links && !checks && !toPlex && !rescale && !fileWrites.length) continue
+          if (!renameTo && !fill && !plays && !links && !checks && !toPlex && !rescale && !fileWrites.length && !countChoices.length) continue
 
           const lines: ApprovalLine[] = []
           const now = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -713,6 +786,12 @@ export class PlexSync {
           if (toPlex) {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
+          for (const c of countChoices) {
+            for (const from of ['plex', 'lastfm'] as const) {
+              if (!c.offer[from]) continue
+              lines.push({ key: `count:${from}:${c.name}`, label: `${c.name} (${from === 'plex' ? 'Plex' : 'Last.fm'})`, current: describeValue(c.current), value: String(c[from]), edit: 'number', unticked: c.ticked !== from })
+            }
+          }
           for (const write of fileWrites) {
             lines.push({ key: `file:${write.name}`, label: write.tag ? `${write.name} in the music file` : `${write.name} in the lyrics file`, current: write.from, value: write.to, edit: 'text', unticked: true })
           }
@@ -731,6 +810,18 @@ export class PlexSync {
               // Plex's rating is to stay as it is: don't offer this note's rating again while it's the same.
               this.settings.keptValues[`${item.ratingKey}|plexRating`] = String(toPlex)
               result.keptLinks++
+            }
+            // A play count from Plex or Last.fm, whichever was ticked (both ticked: the one that started unticked).
+            const countValues: Record<string, unknown> = {}
+            for (const c of countChoices) {
+              const ticked = (['plex', 'lastfm'] as const).filter(from => c.offer[from] && !excluded.has(`count:${from}:${c.name}`))
+              const from = ticked.length > 1 ? ticked.find(f => f !== c.ticked)! : ticked[0]
+              if (!from) {
+                this.keep(`${item.ratingKey}|count:${c.name}`, c.current, `${c.plex}/${c.lastfm}`)
+                continue
+              }
+              const edited = edits[`count:${from}:${c.name}`]
+              countValues[c.name] = edited === undefined ? c[from] : parseEdit(edited, 'number')
             }
             const sendingToFiles = fileWrites.filter(write => !excluded.has(`file:${write.name}`))
             // A file you said not to change isn't offered again while it and the note stay the same.
@@ -784,7 +875,7 @@ export class PlexSync {
               const edited = edits[`update:${name}`]
               return edited === undefined ? plays!.to[name] : parseEdit(edited, editKind(plays!.to[name]))
             }
-            if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length && !sendingToFiles.length) {
+            if (!renameTo && !fill?.additions.length && !fill?.imageProperty && !playNames.length && !linkNames.length && !fixNames.length && !sending && !rescaleNames.length && !sendingToFiles.length && !Object.keys(countValues).length) {
               result.declined++
               return
             }
@@ -841,6 +932,10 @@ export class PlexSync {
                 await this.plex!.rate(item.ratingKey, level * 2)
                 this.seeRating(item.ratingKey, level)
                 result.sentRatings.push(file.path)
+              }
+              if (Object.keys(countValues).length) {
+                await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => Object.assign(fm, countValues))
+                if (!result.playCounts.includes(file.path)) result.playCounts.push(file.path)
               }
               if (sendingToFiles.length) await this.applyFileWrites(file, item, sendingToFiles, edits, result)
             } catch (err) {
@@ -1594,6 +1689,8 @@ export class PlexSync {
       if (STATUS_SOURCES.includes(m.source) && !statusMovesForward(from[name], value, lib.values)) continue
       // A playtime never goes down: one longer in the note than Steam's stays.
       if (m.source === 'playtime' && playtimeShrinks(from[name], value)) continue
+      // Nor does a song's play count (it may be Last.fm's, which counts plays elsewhere too).
+      if (m.source === 'viewCount' && lib.target === 'music' && typeof value === 'number' && Number(from[name]) > value) continue
       to[name] = value
     }
     const names = Object.keys(to)

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.118] - 2026-10-15
+
+- Songs' play counts from Plex now go in the Progress property (added to your music library's properties). A song's count is never lowered, so one you took from Last.fm stays.
+- With your Last.fm username (Settings → Other sources, beside the Last.fm key), syncs (with "Ask before changes" on) and "Check notes against sources" compare each song's play count on Plex and on Last.fm. When they differ, the pop-up shows "Progress (Plex)" and "Progress (Last.fm)" for you to pick; the one the note already has isn't offered again, and leaving both unticked keeps the note as it is until the counts change.
+
 ## [0.0.117] - 2026-10-15
 
 - Daily notes: every movie and show you watched that day is also linked in the daily note's "Related" property, added to what's already there (nothing is removed). It comes with the watched episodes (Settings → Daily notes); the property is a setting ("Link in a property"), and leaving it empty turns this off. Skipped and ignored ones are left out.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { artistKey, lastfmError, lastfmSuggestions, parseSimilarTracks, pickSeeds, songKey, type Seed } from '../src/lastfm-data'
+import { artistKey, lastfmError, lastfmSuggestions, parseSimilarTracks, pickSeeds, songKey, parseTopTracks, playCountsByKey, type Seed } from '../src/lastfm-data'
 
 describe('parsing Last.fm', () => {
   it('reads similar tracks, one or several', () => {
@@ -66,5 +66,18 @@ describe('pickSeeds', () => {
   it('takes 🩷 songs before ⭐⭐⭐⭐ ones', () => {
     const seeds = [1, 2, 1, 2].map((weight, i): Seed => ({ title: String(i), artist: 'a', track: String(i), weight }))
     expect(pickSeeds(seeds, 3, () => 0.5).map(s => s.weight)).toEqual([2, 2, 1])
+  })
+})
+
+describe('Last.fm play counts', () => {
+  it('reads a page of top tracks and adds up versions of the same song', () => {
+    const page = parseTopTracks({ toptracks: { track: [
+      { name: 'Karma Police', playcount: '30', artist: { name: 'Radiohead' } },
+      { name: 'Karma Police - Remastered', playcount: '10', artist: { name: 'Radiohead' } },
+      { name: 'Airbag', playcount: '5', artist: { name: 'Radiohead' } },
+    ], '@attr': { totalPages: '3' } } })
+    expect(page.pages).toBe(3)
+    expect(playCountsByKey(page.tracks)).toEqual(new Map([['radiohead|karmapolice', 40], ['radiohead|airbag', 5]]))
+    expect(parseTopTracks({ toptracks: { track: { name: 'One', playcount: '1', artist: { name: 'U2' } } } }).tracks).toHaveLength(1)
   })
 })

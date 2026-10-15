@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bookGenres, cleanOmdbKey, earliestYear, firstPublishYear, googleDate, googleDescription, googleFound, googleSameBooks, type GoogleVolume, sameBooks, hltbFound, omdbFound, omdbItem, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
+import { bookGenres, cleanOmdbKey, earliestYear, firstPublishYear, googleDate, googleDescription, googleFound, googleSameBooks, type GoogleVolume, sameBooks, hltbFound, omdbFound, omdbItem, omdbRatings, steamReviews, openLibraryDescription, openLibraryFound, parseMinutes, steamFound } from '../src/discover-data'
 import { itemKeys, ratingKeyFromLink } from '../src/notes'
 
 describe('OMDb', () => {
@@ -190,5 +190,20 @@ describe('Google Books as a source of books', () => {
     expect(ratingKeyFromLink('https://books.google.com/books?id=abc-1')).toBe('gb-abc-1')
     expect(ratingKeyFromLink('https://books.google.co.uk/books/about/X.html?hl=en&id=Q_7xEAAAQBAJ')).toBe('gb-Q_7xEAAAQBAJ')
     expect(ratingKeyFromLink('https://books.google.com/books/about/The_City_of_Stardust.html?id=Q6C8EAAAQBAJ&source=kp_book_description')).toBe('gb-Q6C8EAAAQBAJ')
+  })
+})
+
+describe('ratings in search results', () => {
+  it('lists OMDb\'s, Steam\'s and the book databases\' ratings', () => {
+    expect(omdbRatings({ Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Type: 'movie', imdbRating: '8.3', imdbVotes: '720,000', Ratings: [
+      { Source: 'Internet Movie Database', Value: '8.3/10' }, { Source: 'Rotten Tomatoes', Value: '88%' }, { Source: 'Metacritic', Value: '76/100' },
+    ] })).toEqual(['IMDb 8.3/10 (720,000 votes)', 'Rotten Tomatoes 88%', 'Metacritic 76/100'])
+    expect(omdbRatings({ Title: 'X', Year: '2020', imdbID: 'tt1', Type: 'movie', imdbRating: 'N/A', Ratings: [] })).toEqual([])
+    expect(steamReviews({ review_score_desc: 'Very Positive', total_positive: 920, total_reviews: 1000 })).toEqual(['Steam: Very Positive, 92% of 1,000'])
+    expect(steamReviews({ total_reviews: 0 })).toEqual([])
+    expect(steamFound({ id: 1, name: 'Hades', metascore: '93' })!.ratings).toEqual(['Metacritic 93'])
+    expect(openLibraryFound({ key: '/works/OL1W', title: 'Dune', ratings_average: 4.256, ratings_count: 1234 })!.ratings).toEqual(['Open Library ★ 4.3 (1,234)'])
+    expect(openLibraryFound({ key: '/works/OL1W', title: 'Dune' })!.ratings).toEqual([])
+    expect(googleFound({ id: 'abc', volumeInfo: { title: 'Dune', averageRating: 4, ratingsCount: 12 } })!.ratings).toEqual(['Google Books ★ 4.0 (12)'])
   })
 })

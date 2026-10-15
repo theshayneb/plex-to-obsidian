@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Setting } from 'obsidian'
 import { addLibrary, type PlexNotesSettings } from './config'
 import type { Found } from './discover-data'
-import { findItems, itemDetails, type FindKind } from './discover'
+import { findItems, itemDetails, moreRatings, type FindKind } from './discover'
 import type { PlexItem } from './notes'
 
 const KIND_LABELS: Record<FindKind, string> = {
@@ -24,7 +24,7 @@ const KIND_TARGETS: Record<FindKind, string[]> = {
  * it (with its full details) to `onPick` with the library chosen.
  */
 export class AddModal extends Modal {
-  private pmnKind: FindKind = 'movie'
+  private pmnKind: FindKind = 'book'
   private pmnLibrary = ''
   private pmnQuery = ''
 
@@ -122,6 +122,13 @@ export class AddModal extends Modal {
       const text = row.createDiv('pmn-add-text')
       text.createEl('strong', { text: result.item.title })
       text.createDiv({ cls: 'pmn-add-detail', text: [result.detail, result.source].filter(Boolean).join(' · ') })
+      // Ratings, to help decide whether it's worth a note: more are asked for movies, shows and Steam games.
+      const ratings = text.createDiv({ cls: 'pmn-add-ratings', text: result.ratings?.join(' · ') ?? '' })
+      const asking = /^(imdb|steam)-/.test(result.item.ratingKey)
+      if (asking) {
+        if (!ratings.getText()) ratings.setText('Ratings…')
+        void moreRatings(result, this.pmnSettings.omdbKey ?? '').then(found => ratings.setText(found.length ? found.join(' · ') : 'No ratings found'))
+      }
       row.addEventListener('click', () => void this.pmnChoose(result))
     }
   }

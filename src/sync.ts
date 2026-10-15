@@ -36,7 +36,7 @@ import {
   type PlexItem,
 } from './notes'
 import { lookUpBook } from './discover'
-import { episodeEntry, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from './daily-episodes'
+import { episodeEntry, episodesByDay, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -105,6 +105,23 @@ interface Approval {
   edits: Record<string, string | string[]>
   /** "Use an existing note": the note chosen instead of creating one. */
   mergeWith?: string
+}
+
+/** Runs at most `n` of the tasks given to it at a time, the rest waiting their turn. */
+function limited(n: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let running = 0
+  const waiting: (() => void)[] = []
+  return <T>(task: () => Promise<T>) => new Promise<T>((resolve, reject) => {
+    const run = () => {
+      running++
+      task().then(resolve, reject).finally(() => {
+        running--
+        waiting.shift()?.()
+      })
+    }
+    if (running < n) run()
+    else waiting.push(run)
+  })
 }
 
 /** A value for the approval pop-up, editable as text, a number or a list. */
@@ -944,10 +961,11 @@ export class PlexSync {
     const since = wholeWeek ? now - 7 * 86400 : Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
     const { folder, format } = this.dailyNotes()
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
-    // Each show's note, through its link (or a tie).
+    // Each show's and movie's note, through its link (or a tie).
     const shows = new Map<string, TFile>()
-    const linkNames = [...new Set(Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').flatMap(lib => linkPropertyNames(lib.properties)))]
-    const folders = Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').map(lib => normalizePath(lib.folder))
+    const video = Object.values(this.settings.libraries).filter(lib => lib.target === 'tv' || lib.target === 'movie' || lib.target === 'documentary')
+    const linkNames = [...new Set(video.flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = video.map(lib => normalizePath(lib.folder))
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -960,41 +978,73 @@ export class PlexSync {
       const file = this.app.vault.getAbstractFileByPath(merged.path)
       if (file instanceof TFile) shows.set(key, file)
     }
-    // Shows set to "Skip every time" (by key, or by name in a TV library) and shows whose note is
-    // ignored as unmatched are left out.
-    const tvTitles = new Set(Object.values(this.settings.libraries).filter(lib => lib.target === 'tv').map(lib => lib.title))
-    const ignoredNames = Object.values(this.settings.ignored).filter(entry => tvTitles.has(entry.library)).map(entry => entry.name.toLowerCase())
-    const ignoredShow = (e: WatchedEpisode): boolean => {
-      if (e.showKey && e.showKey in this.settings.ignored) return true
-      const name = e.show.toLowerCase()
-      if (ignoredNames.some(n => n === name || n.startsWith(`${name} (`))) return true
-      const note = shows.get(e.showKey)
+    // Shows and movies set to "Skip every time" (by key, or by name in their kind of library) and
+    // those whose note is ignored as unmatched are left out.
+    const ignoredNames = (targets: string[]) => {
+      const titles = new Set(Object.values(this.settings.libraries).filter(lib => targets.includes(lib.target)).map(lib => lib.title))
+      return Object.values(this.settings.ignored).filter(entry => titles.has(entry.library)).map(entry => entry.name.toLowerCase())
+    }
+    const ignored = (key: string, title: string, names: string[]): boolean => {
+      if (key && key in this.settings.ignored) return true
+      const name = title.toLowerCase()
+      if (names.some(n => n === name || n.startsWith(`${name} (`))) return true
+      const note = shows.get(key)
       return !!note && this.settings.unmatchedIgnored.includes(note.path)
     }
-    const episodes = watchedEpisodes(await plex.history(since)).filter(e => !ignoredShow(e))
+    const showNames = ignoredNames(['tv'])
+    const movieNames = ignoredNames(['movie', 'documentary'])
+    const history = await plex.history(since)
+    const episodes = watchedEpisodes(history).filter(e => !ignored(e.showKey, e.show, showNames))
+    const movies = this.settings.dailyRelated ? watchedMovies(history).filter(m => !ignored(m.key, m.title, movieNames)) : []
+    const episodeDays = episodesByDay(episodes, pathOf)
+    const movieDays = moviesByDay(movies, pathOf)
     const changed: string[] = []
     let retryFrom = now
-    for (const [path, list] of episodesByDay(episodes, pathOf)) {
+    for (const path of new Set([...episodeDays.keys(), ...movieDays.keys()])) {
+      const list = episodeDays.get(path) ?? []
+      const watchedMovies = movieDays.get(path) ?? []
       const file = this.app.vault.getAbstractFileByPath(path)
-      const firstSeen = Math.min(...list.flat().map(e => e.viewedAt))
+      const firstSeen = Math.min(...list.flat().map(e => e.viewedAt), ...watchedMovies.map(m => m.viewedAt))
       if (!(file instanceof TFile)) {
         retryFrom = Math.min(retryFrom, firstSeen)
         continue
       }
-      const entries = list.map(eps => {
-        const note = shows.get(eps[0].showKey) ?? this.app.metadataCache.getFirstLinkpathDest(eps[0].show, path)
-        const link = note ? `[[${this.app.metadataCache.fileToLinktext(note, path, true)}]]` : `[[${eps[0].show}]]`
-        return episodeEntry(link, eps)
-      })
+      const linkTo = (key: string, title: string): string => {
+        const note = shows.get(key) ?? this.app.metadataCache.getFirstLinkpathDest(title, path)
+        return note ? `[[${this.app.metadataCache.fileToLinktext(note, path, true)}]]` : `[[${title}]]`
+      }
+      const showLinks = list.map(eps => linkTo(eps[0].showKey, eps[0].show))
+      const entries = list.map((eps, i) => episodeEntry(showLinks[i], eps))
       let found = true
       let added = 0
-      await this.app.vault.process(file, text => {
-        const result = insertEntries(text, this.settings.dailyAnchor, entries, this.settings.dailyQuote)
-        found = result.found
-        added = result.added
-        return result.text
-      })
+      if (entries.length) {
+        await this.app.vault.process(file, text => {
+          const result = insertEntries(text, this.settings.dailyAnchor, entries, this.settings.dailyQuote)
+          found = result.found
+          added = result.added
+          return result.text
+        })
+      }
       if (!found) retryFrom = Math.min(retryFrom, firstSeen)
+      // Every show and movie watched that day, linked in the Related property (added to what's there).
+      const related = this.settings.dailyRelated
+      const links = [...new Set([...showLinks, ...watchedMovies.map((m: WatchedMovie) => linkTo(m.key, m.title))])]
+      if (related && links.length) {
+        const target = (link: string): string => link.replace(/^\s*\[\[|\]\]\s*$/g, '').split(/[|#]/)[0].trim()
+        const fileOf = (link: string) => this.app.metadataCache.getFirstLinkpathDest(target(link), path)
+        const same = (entry: string, link: string): boolean => {
+          const a = fileOf(entry)
+          const b = fileOf(link)
+          return a && b ? a.path === b.path : target(entry).toLowerCase() === target(link).toLowerCase()
+        }
+        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+          const next = withRelated(fm[related], links, same)
+          if (next) {
+            fm[related] = next
+            added++
+          }
+        })
+      }
       if (added) changed.push(path)
     }
     this.settings.dailyEpisodesSince = retryFrom
@@ -1726,6 +1776,38 @@ export class PlexSync {
       const labels = [...new Set(lines.map(line => line.label).filter(label => !locked.includes(label)))].sort()
       if (labels.length) pending.push({ labels, decide })
     }
+    // A note's book, from its Open Library or Google Books link, else by its title and author.
+    const linkOf = (file: TFile) => {
+      const link: unknown = linkProp ? this.app.metadataCache.getFileCache(file)?.frontmatter?.[linkProp] : undefined
+      const linked = ratingKeyFromLink(link)
+      // Books Open Library doesn't have are linked to Google Books instead.
+      return { link, work: linked?.startsWith('ol-') ? linked.slice(3) : null, volume: linked?.startsWith('gb-') ? linked.slice(3) : null }
+    }
+    const googleKey = this.settings.googleBooksKey ?? ''
+    const lookFor = async (file: TFile): Promise<PlexItem | null> => {
+      const { work, volume } = linkOf(file)
+      const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
+      // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert, whether or
+      // not the note has an author; failing that (say, "Stand by Me"), as the whole name.
+      const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
+      const title = byName ? byName[1] : file.basename
+      const book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
+      if (!book && byName && !work && !volume) return lookUpBook({ title: file.basename, author: authors[0], googleInfo }, googleKey)
+      return book
+    }
+    // The books are looked up a few at a time, ahead of the loop below (the questions only come once
+    // every book has been looked up), rather than one after another.
+    const ahead = new Map<string, Promise<{ book: PlexItem | null } | { error: unknown }>>()
+    if (mappings.length) {
+      const slot = limited(3)
+      for (const file of files) {
+        const { work, volume } = linkOf(file)
+        const noteKey = `book:${file.path}`
+        if (noteKey in this.settings.ignored || (!work && !volume && noteKey in this.settings.keptLinks)) continue
+        ahead.set(file.path, slot(() => result.stopped ? Promise.resolve({ book: null }) : lookFor(file).then(book => ({ book }), (error: unknown) => ({ error }))))
+      }
+    }
     let looked = 0
     for (const file of files) {
       looked++
@@ -1746,11 +1828,7 @@ export class PlexSync {
           else result.declined++
         })
       }
-      const link: unknown = linkProp ? from[linkProp] : undefined
-      const linked = ratingKeyFromLink(link)
-      const work = linked?.startsWith('ol-') ? linked.slice(3) : null
-      // Books Open Library doesn't have are linked to Google Books instead.
-      const volume = linked?.startsWith('gb-') ? linked.slice(3) : null
+      const { link, work, volume } = linkOf(file)
       if (!work && !volume && noteKey in this.settings.keptLinks) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
         rescaleOnly()
@@ -1763,14 +1841,9 @@ export class PlexSync {
       let book: PlexItem | null
       try {
         progress(`Checking books: ${looked} of ${files.length} (${file.basename})…`)
-        const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
-        // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert, whether or
-        // not the note has an author; failing that (say, "Stand by Me"), as the whole name.
-        const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
-        const title = byName ? byName[1] : file.basename
-        const googleKey = this.settings.googleBooksKey ?? ''
-        book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
-        if (!book && byName && !work && !volume) book = await lookUpBook({ title: file.basename, author: authors[0], googleInfo }, googleKey)
+        const got = await (ahead.get(file.path) ?? lookFor(file).then(found => ({ book: found })))
+        if ('error' in got) throw got.error
+        book = got.book
       } catch (err) {
         result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
         rescaleOnly()

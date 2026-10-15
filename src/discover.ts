@@ -9,6 +9,8 @@ import {
   hltbFound,
   omdbFound,
   omdbItem,
+  omdbRatings,
+  steamReviews,
   earliestYear,
   OPEN_LIBRARY_FIELDS,
   sameBooks,
@@ -29,7 +31,58 @@ import type { PlexItem } from './notes'
 export type FindKind = 'movie' | 'show' | 'game' | 'book'
 
 /** Open Library asks apps to say who they are. */
-const OPEN_LIBRARY_HEADERS = { 'User-Agent': 'MediaImportAndSync (Obsidian plugin)' }
+const OPEN_LIBRARY_HEADERS = { 'User-Agent': 'MediaManager (Obsidian plugin; https://github.com/theshayneb/plex-to-obsidian)' }
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+/** Open Library's answers while Obsidian runs (at most this many), so a book is only asked about once. */
+const openLibraryAnswers = new Map<string, Promise<unknown>>()
+const OPEN_LIBRARY_KEPT = 3000
+/** Time between Open Library requests: a few a second, slowed down for good once it says it's busy. */
+let openLibraryGap = 350
+let openLibraryNext = 0
+
+/** Forgets Open Library's answers and sets the time between requests (for tests). */
+export function resetOpenLibrary(gap = 350): void {
+  openLibraryAnswers.clear()
+  openLibraryGap = gap
+  openLibraryNext = 0
+}
+
+/**
+ * An Open Library request. Several can run at once, but they start a little apart, and when Open
+ * Library is busy or limiting requests (429, 5xx) it's asked again after 3 and 10 seconds, and
+ * from then on more slowly.
+ */
+function openLibraryJson(url: string): Promise<unknown> {
+  const cached = openLibraryAnswers.get(url)
+  if (cached) return cached
+  const answer = (async () => {
+    let last = 0
+    for (const wait of [0, 3000, 10000]) {
+      if (wait) {
+        openLibraryGap = Math.max(openLibraryGap, 1100)
+        await sleep(wait)
+      }
+      const now = Date.now()
+      const at = Math.max(now, openLibraryNext)
+      openLibraryNext = at + openLibraryGap
+      if (at > now) await sleep(at - now)
+      const res = await requestUrl({ url, headers: OPEN_LIBRARY_HEADERS, throw: false })
+      if (res.status === 429 || res.status >= 500) {
+        last = res.status
+        continue
+      }
+      if (res.status >= 400) throw new Error(`openlibrary.org returned ${res.status}`)
+      return res.json as unknown
+    }
+    throw new Error(`Open Library is busy or limiting requests (${last}); try again in a few minutes`)
+  })()
+  openLibraryAnswers.set(url, answer)
+  answer.catch(() => { openLibraryAnswers.delete(url) })
+  if (openLibraryAnswers.size > OPEN_LIBRARY_KEPT) openLibraryAnswers.delete(openLibraryAnswers.keys().next().value!)
+  return answer
+}
 
 async function getJson(url: string, headers: Record<string, string> = {}): Promise<unknown> {
   const res = await requestUrl({ url, headers, throw: false })
@@ -67,7 +120,7 @@ export async function findItems(kind: FindKind, query: string, omdbKey: string, 
     // Open Library first; Google Books after it, for books Open Library doesn't have.
     const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${OPEN_LIBRARY_FIELDS}`
     const [open, google] = await Promise.allSettled([
-      getJson(url, OPEN_LIBRARY_HEADERS) as Promise<{ docs?: OpenLibraryDoc[] }>,
+      openLibraryJson(url) as Promise<{ docs?: OpenLibraryDoc[] }>,
       googleVolumes(query, googleKey),
     ])
     const found = open.status === 'fulfilled' ? (open.value.docs ?? []).map(openLibraryFound).filter((f): f is Found => f !== null) : []
@@ -96,18 +149,51 @@ export async function findItems(kind: FindKind, query: string, omdbKey: string, 
   return found
 }
 
+/** OMDb's full details of a title, asked once while Obsidian runs (for its ratings, then for its note). */
+const omdbDetails = new Map<string, Promise<OmdbDetails>>()
+
+function omdbDetailsOf(id: string, omdbKey: string): Promise<OmdbDetails> {
+  let details = omdbDetails.get(id)
+  if (!details) {
+    details = (getJson(`https://www.omdbapi.com/?apikey=${encodeURIComponent(cleanOmdbKey(omdbKey))}&i=${encodeURIComponent(id)}&plot=full`) as Promise<OmdbDetails & { Response?: string, Error?: string }>)
+      .then(body => {
+        if (body.Response === 'False') throw new Error(`OMDb: ${body.Error ?? 'not found'}`)
+        return body
+      })
+    details.catch(() => { omdbDetails.delete(id) })
+    omdbDetails.set(id, details)
+  }
+  return details
+}
+
+/**
+ * A search result's ratings, for deciding whether to add it: what the search gave, plus, for
+ * movies and shows, OMDb's (IMDb, Rotten Tomatoes, Metacritic) and, for Steam games, what Steam's
+ * players say. Never throws: a rating that can't be had is left out.
+ */
+export async function moreRatings(found: Found, omdbKey: string): Promise<string[]> {
+  const key = found.item.ratingKey
+  const known = found.ratings ?? []
+  try {
+    if (key.startsWith('imdb-')) return [...omdbRatings(await omdbDetailsOf(key.slice(5), omdbKey)), ...known]
+    if (key.startsWith('steam-')) {
+      const body = await getJson(`https://store.steampowered.com/appreviews/${key.slice(6)}?json=1&language=all&purchase_type=all&num_per_page=0`) as
+        { query_summary?: { review_score_desc?: string, total_positive?: number, total_reviews?: number } }
+      return [...steamReviews(body.query_summary), ...known]
+    }
+  } catch (err) {
+    console.warn('Media Manager: ratings not found for', found.item.title, err)
+  }
+  return known
+}
+
 /** The full details of a picked result (OMDb and Open Library need a second request). */
 export async function itemDetails(found: Found, omdbKey: string, googleKey = ''): Promise<PlexItem> {
   const { item } = found
-  if (item.ratingKey.startsWith('imdb-')) {
-    const id = item.ratingKey.slice(5)
-    const body = await getJson(`https://www.omdbapi.com/?apikey=${encodeURIComponent(cleanOmdbKey(omdbKey))}&i=${encodeURIComponent(id)}&plot=full`) as OmdbDetails & { Response?: string, Error?: string }
-    if (body.Response === 'False') throw new Error(`OMDb: ${body.Error ?? 'not found'}`)
-    return omdbItem(body)
-  }
+  if (item.ratingKey.startsWith('imdb-')) return omdbItem(await omdbDetailsOf(item.ratingKey.slice(5), omdbKey))
   if (item.ratingKey.startsWith('ol-')) {
     const work = item.ratingKey.slice(3)
-    const body = await getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS).catch(() => null) as
+    const body = await openLibraryJson(`https://openlibrary.org/works/${work}.json`).catch(() => null) as
       { description?: string | { value?: string } } | null
     return withGoogle(item, googleKey, openLibraryDescription(body))
   }
@@ -127,7 +213,7 @@ export async function testOmdbKey(pasted: string): Promise<string> {
 }
 
 async function searchBooks(query: string, limit = 5): Promise<OpenLibraryDoc[]> {
-  const body = await getJson(`https://openlibrary.org/search.json?${query}&limit=${limit}&fields=${OPEN_LIBRARY_FIELDS}`, OPEN_LIBRARY_HEADERS) as { docs?: OpenLibraryDoc[] }
+  const body = await openLibraryJson(`https://openlibrary.org/search.json?${query}&limit=${limit}&fields=${OPEN_LIBRARY_FIELDS}`) as { docs?: OpenLibraryDoc[] }
   return body.docs ?? []
 }
 
@@ -147,21 +233,24 @@ export async function lookUpBook(by: { work?: string | null, volume?: string | n
   const google = (book: PlexItem, fallback: string | undefined): Promise<PlexItem> =>
     by.googleInfo === false ? Promise.resolve({ ...book, summary: fallback }) : withGoogle(book, googleKey, fallback)
   type Work = { title?: string, subjects?: string[], description?: string | { value?: string } }
-  const workJson = (work: string) => getJson(`https://openlibrary.org/works/${work}.json`, OPEN_LIBRARY_HEADERS) as Promise<Work>
+  const workJson = (work: string) => openLibraryJson(`https://openlibrary.org/works/${work}.json`) as Promise<Work>
   if (by.work) {
     // The note's own link decides the book: only that work's search entry counts, and failing
     // that, the work's own page (which has no authors or pages).
-    const docs = await searchBooks(`q=${encodeURIComponent(`key:/works/${by.work}`)}`)
+    // Asked all at once: the work's search entry, its page, and (by the note's title and author)
+    // the same book's other records, which may know an earlier first edition than the linked one.
+    const othersOf = (title: string, author?: string) => searchBooks(bookQuery(title, author), 20).catch(() => [] as OpenLibraryDoc[])
+    const early = by.title ? othersOf(by.title, by.author) : null
+    const [docs, body] = await Promise.all([searchBooks(`q=${encodeURIComponent(`key:/works/${by.work}`)}`), workJson(by.work).catch(() => null)])
     const doc = docs.find(d => d.key === `/works/${by.work}`)
     const found = doc ? openLibraryFound(doc) : null
-    const body = await workJson(by.work).catch(() => null)
     if (!found && !body) return null
     const book: PlexItem = found?.item ?? { ratingKey: `ol-${by.work}`, type: 'book', title: body?.title ?? '', webLink: `https://openlibrary.org/works/${by.work}` }
-    // The same book's other records may know an earlier first edition than the linked one.
     const title = book.title || by.title
     const author = book.authors?.[0] ?? by.author
     if (title) {
-      const others = sameBooks(await searchBooks(bookQuery(title, author), 20).catch(() => []), title, author)
+      // Searched by the note's name when it has one (asked alongside the rest), else by the work's.
+      const others = sameBooks(await (early ?? othersOf(title, author)), title, author)
       book.year = earliestYear([...doc ? [doc] : [], ...others]) ?? book.year
     }
     const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))

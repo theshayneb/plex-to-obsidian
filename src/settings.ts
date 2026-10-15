@@ -475,6 +475,17 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
     new Setting(containerEl)
       .setClass('pmn-indent')
+      .setName('Link in a property')
+      .setDesc('Every movie and show watched that day is also linked in this property of the daily note, added to what\'s there. Leave empty for none.')
+      .addText(text => text
+        .setPlaceholder('Related')
+        .setValue(settings.dailyRelated)
+        .onChange(async value => {
+          settings.dailyRelated = value.trim()
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setClass('pmn-indent')
       .setName('Daily notes folder and date format')
       .setDesc('Leave empty to use the settings of Obsidian\'s daily notes plugin. The format is the file name\'s, such as "YYYY-MM-DD".')
       .addText(text => text

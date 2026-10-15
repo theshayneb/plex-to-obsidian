@@ -293,6 +293,15 @@
   color: var(--text-muted);
 }
 
+.pmn-add-ratings {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+}
+
+.pmn-add-ratings:empty {
+  display: none;
+}
+
 /* Settings page: collapsible sections (Setup, Skipped every time). */
 .pmn-section {
   margin: var(--size-4-3) 0;

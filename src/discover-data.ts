@@ -11,6 +11,32 @@ export interface Found {
   detail: string
   thumb?: string
   source: string
+  /** Ratings the search already gave ("Open Library ★ 4.1 (230)"); more may be fetched (`moreRatings`). */
+  ratings?: string[]
+}
+
+const count = (n: number): string => n.toLocaleString('en-US')
+
+/** OMDb's ratings: IMDb, Rotten Tomatoes and Metacritic, as each writes it. */
+export function omdbRatings(details: OmdbDetails): string[] {
+  const names: Record<string, string> = { 'Internet Movie Database': 'IMDb', 'Rotten Tomatoes': 'Rotten Tomatoes', Metacritic: 'Metacritic' }
+  const out = (details.Ratings ?? []).filter(r => given(r.Value)).map(r => `${names[r.Source] ?? r.Source} ${r.Value}`)
+  const imdb = given(details.imdbRating)
+  if (imdb && !out.some(r => r.startsWith('IMDb'))) out.unshift(`IMDb ${imdb}/10`)
+  const votes = given(details.imdbVotes)
+  return out.map(r => r.startsWith('IMDb') && votes ? `${r} (${votes} votes)` : r)
+}
+
+/** A star average and how many gave it ("Open Library ★ 4.1 (230)"); none when nobody rated it. */
+function starRating(source: string, average: number | undefined, ratings: number | undefined): string[] {
+  return average && ratings ? [`${source} ★ ${average.toFixed(1)} (${count(ratings)})`] : []
+}
+
+/** What Steam's players say ("Steam: Very Positive, 92% of 12,345"), from its appreviews query summary. */
+export function steamReviews(summary: { review_score_desc?: string, total_positive?: number, total_reviews?: number } | undefined): string[] {
+  if (!summary?.total_reviews) return []
+  const share = Math.round(100 * (summary.total_positive ?? 0) / summary.total_reviews)
+  return [`Steam: ${summary.review_score_desc ? `${summary.review_score_desc}, ` : ''}${share}% of ${count(summary.total_reviews)}`]
 }
 
 /** OMDb writes "N/A" for anything it doesn't have. */
@@ -43,6 +69,8 @@ export interface OmdbDetails extends OmdbSearchResult {
   Plot?: string
   Country?: string
   imdbRating?: string
+  imdbVotes?: string
+  Ratings?: { Source: string, Value: string }[]
   totalSeasons?: string
 }
 
@@ -129,9 +157,11 @@ export interface OpenLibraryDoc {
   subject?: string[]
   number_of_pages_median?: number
   isbn?: string[]
+  ratings_average?: number
+  ratings_count?: number
 }
 
-export const OPEN_LIBRARY_FIELDS = 'key,title,author_name,first_publish_year,publish_year,edition_count,cover_i,subject,number_of_pages_median,isbn'
+export const OPEN_LIBRARY_FIELDS = 'key,title,author_name,first_publish_year,publish_year,edition_count,cover_i,subject,number_of_pages_median,isbn,ratings_average,ratings_count'
 
 /** Open Library's subjects run long and loose; the first few are the useful ones. */
 const BOOK_GENRES = 5
@@ -217,6 +247,7 @@ export function openLibraryFound(doc: OpenLibraryDoc): Found | null {
     detail: [authors.join(', '), firstPublishYear(doc)].filter(Boolean).join(' · '),
     thumb: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : undefined,
     source: 'Open Library',
+    ratings: starRating('Open Library', doc.ratings_average, doc.ratings_count),
   }
 }
 
@@ -233,6 +264,8 @@ export interface SteamSearchResult {
   name: string
   type?: string
   tiny_image?: string
+  /** Metacritic's score, or empty. */
+  metascore?: string
 }
 
 export function steamFound(result: SteamSearchResult): Found | null {
@@ -242,6 +275,7 @@ export function steamFound(result: SteamSearchResult): Found | null {
     detail: 'On Steam',
     thumb: result.tiny_image,
     source: 'Steam',
+    ratings: result.metascore ? [`Metacritic ${result.metascore}`] : [],
   }
 }
 
@@ -263,6 +297,7 @@ export function hltbFound(game: HltbGame): Found {
     detail: [platforms.join(', '), game.release_world].filter(Boolean).join(' · '),
     thumb: times.image,
     source: 'HowLongToBeat',
+    ratings: game.review_score ? [`HowLongToBeat ${game.review_score}%`] : [],
   }
 }
 
@@ -278,6 +313,8 @@ export interface GoogleVolume {
     pageCount?: number
     categories?: string[]
     imageLinks?: { thumbnail?: string, smallThumbnail?: string }
+    averageRating?: number
+    ratingsCount?: number
     industryIdentifiers?: { type?: string, identifier?: string }[]
   }
 }
@@ -363,6 +400,7 @@ export function googleFound(volume: GoogleVolume): Found | null {
     detail: [authors.join(', '), year].filter(Boolean).join(' · '),
     thumb: image,
     source: 'Google Books',
+    ratings: starRating('Google Books', info.averageRating, info.ratingsCount),
   }
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.117] - 2026-10-15
+
+- Daily notes: every movie and show you watched that day is also linked in the daily note's "Related" property, added to what's already there (nothing is removed). It comes with the watched episodes (Settings → Daily notes); the property is a setting ("Link in a property"), and leaving it empty turns this off. Skipped and ignored ones are left out.
+- "Add a movie, show, game or book" starts on Book, and shows each result's ratings: IMDb, Rotten Tomatoes and Metacritic for movies and shows (from OMDb), Steam's player reviews and Metacritic for Steam games, HowLongToBeat's score for other games, and Open Library's and Google Books' star ratings for books.
+- Book checks are much faster: several books are looked up at once, each book's Open Library requests are sent together, and Open Library's answers are kept until Obsidian closes, so checking again doesn't ask again. If Open Library says it's busy, the plugin waits and slows down instead of failing.
+
 ## [0.0.116] - 2026-10-13
 
 - Episode lines in daily notes always start with "> >" now ("> >- ▶️ [[Show]]: S01E05 – Title"), instead of copying the quote markers of the lines around them, which gave one ">" too few. It's a setting ("Quote markers", under Daily notes) if you ever need something else. Episode lines already right under the journaling line are given the same markers the next time episodes are added to that day.

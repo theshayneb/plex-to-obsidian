@@ -137,7 +137,9 @@ const tracks = [
     parentRatingKey: '92', index: 3 },
 ]
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { resetOpenLibrary } = await import('../src/discover')
+  resetOpenLibrary(0)
   responses.clear()
   requested.length = 0
   responses.set('/identity', { MediaContainer: { machineIdentifier: 'srv' } })
@@ -1323,6 +1325,39 @@ describe('PlexSync', () => {
     expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes()).toEqual([])
     expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
     expect(texts.get(daily)!.split('\n')).toEqual(expected)
+  })
+
+  it('links every movie and show watched that day in the daily note\'s Related property', async () => {
+    const day = new Date()
+    day.setDate(day.getDate() - 1)
+    day.setHours(21, 0, 0, 0)
+    const at = Math.floor(day.getTime() / 1000)
+    const daily = `Daily/${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}.md`
+    const { app, texts, frontmatter } = makeApp({
+      'Media/TV Shows/Lost (2004).md': { Link: 'http://plex:32400/library/metadata/88' },
+      'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1' },
+      [daily]: { Related: ['[[Mom]]', '[[Lost (2004)]]'] },
+    })
+    texts.set(daily, '# No journaling line here')
+    const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD' })
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 2: newLibrary('TV Shows', 'show', 'tv') }
+    settings.ignored = { 5: { name: 'Cats (2019)', library: 'Movies', since: 0 } }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 1, index: 1, viewedAt: at, accountID: 1 },
+      { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at + 60, accountID: 1 },
+      { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at + 90, accountID: 1 },
+      { type: 'movie', title: 'Cats', ratingKey: '5', viewedAt: at + 120, accountID: 1 },
+      { type: 'movie', title: 'Heat', ratingKey: '2', viewedAt: at + 180, accountID: 7 },
+    ] } })
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
+    expect(frontmatter.get(daily)!.Related).toEqual(['[[Mom]]', '[[Lost (2004)]]', '[[Arrival (2016)]]'])
+    // Nothing new the second time; the note's text is left alone without its journaling line.
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([])
+    expect(texts.get(daily)).toBe('# No journaling line here')
+    // Off when the property name is empty.
+    settings.dailyRelated = ''
+    frontmatter.get(daily)!.Related = []
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([])
   })
 
   it('leaves ignored shows out of daily notes', async () => {

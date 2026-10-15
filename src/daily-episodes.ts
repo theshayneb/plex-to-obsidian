@@ -24,6 +24,55 @@ export interface HistoryEntry {
   index?: number
   viewedAt?: number
   accountID?: number
+  ratingKey?: string | number
+  key?: string
+  year?: number
+}
+
+/** A movie watched in Plex. */
+export interface WatchedMovie {
+  title: string
+  /** Its rating key, to find its note. */
+  key: string
+  year?: number
+  viewedAt: number
+}
+
+/** The movies in Plex's watch history watched by the server's owner (account 1). */
+export function watchedMovies(history: HistoryEntry[]): WatchedMovie[] {
+  const out: WatchedMovie[] = []
+  for (const h of history) {
+    if (h.type !== 'movie' || !h.viewedAt || !h.title) continue
+    if (h.accountID !== undefined && h.accountID !== 1) continue
+    const key = h.ratingKey !== undefined ? String(h.ratingKey) : /\/library\/metadata\/(\d+)/.exec(h.key ?? '')?.[1] ?? ''
+    out.push({ title: h.title, key, year: h.year, viewedAt: h.viewedAt })
+  }
+  return out
+}
+
+/** The movies watched each day (`dayOf` turns a time into the day's key), each once, in the order watched. */
+export function moviesByDay(movies: WatchedMovie[], dayOf: (seconds: number) => string): Map<string, WatchedMovie[]> {
+  const byDay = new Map<string, WatchedMovie[]>()
+  for (const m of [...movies].sort((a, b) => a.viewedAt - b.viewedAt)) {
+    const day = dayOf(m.viewedAt)
+    const list = byDay.get(day) ?? []
+    if (!list.some(seen => (seen.key || seen.title) === (m.key || m.title))) list.push(m)
+    byDay.set(day, list)
+  }
+  return byDay
+}
+
+/**
+ * A list property (such as Related) with `links` added that it doesn't have yet (`same` says
+ * whether an entry already is that link), keeping what's there; null when there's nothing to add.
+ */
+export function withRelated(existing: unknown, links: string[], same: (entry: string, link: string) => boolean): string[] | null {
+  const now = (Array.isArray(existing) ? existing : existing === undefined || existing === null || existing === '' ? [] : [existing]).map(String)
+  const next = [...now]
+  for (const link of links) {
+    if (!next.some(entry => same(entry, link))) next.push(link)
+  }
+  return next.length > now.length ? next : null
 }
 
 /** The episodes in Plex's watch history watched by the server's owner (account 1). */

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.120] - 2026-10-15
+
+- A song's play count in a note is never offered a lower number any more: syncs and checks only suggest Plex's or Last.fm's count when it's higher than the note's. (Before, only the plain Plex update held back; the Plex/Last.fm choice and checks still offered lower counts.)
+
 ## [0.0.119] - 2026-10-15
 
 - The pop-ups say where each new value comes from ("From: Plex", "From: Last.fm", "From: This note"…) and where it will be written ("Writes to: This note", "Writes to: Plex", "Writes to: Music file"). The two play count lines are now both called "Progress", the property they write, one from Plex and one from Last.fm, and the pop-up says when a property has values from more than one source to choose from. The same goes for ratings: your rating for the note, for Plex and for the music file each say where they go.

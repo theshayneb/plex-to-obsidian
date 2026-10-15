@@ -304,7 +304,10 @@ export class PlexSync {
       const current: unknown = frontmatter[name]
       const now = typeof current === 'number' ? current : typeof current === 'string' && current.trim() ? Number(current) : NaN
       if (this.isKept(`${item.ratingKey}|count:${name}`, current, `${plex}/${lastfm}`)) continue
-      const offer = { plex: now !== plex, lastfm: now !== lastfm }
+      // Never a lower count than the note's (it may count plays neither source knows about).
+      const higher = (count: number) => !Number.isFinite(now) || count > now
+      const offer = { plex: now !== plex && higher(plex), lastfm: now !== lastfm && higher(lastfm) }
+      if (!offer.plex && !offer.lastfm) continue
       const ticked = offer.plex && offer.lastfm ? (lastfm > plex ? 'lastfm' : 'plex') : null
       choices.push({ name, current, plex, lastfm, offer, ticked })
     }
@@ -1726,7 +1729,7 @@ export class PlexSync {
       // A playtime never goes down: one longer in the note than Steam's stays.
       if (m.source === 'playtime' && playtimeShrinks(from[name], value)) continue
       // Nor does a song's play count (it may be Last.fm's, which counts plays elsewhere too).
-      if (m.source === 'viewCount' && lib.target === 'music' && typeof value === 'number' && Number(from[name]) > value) continue
+      if (m.source === 'viewCount' && lib.target === 'music' && playtimeShrinks(from[name], value)) continue
       to[name] = value
     }
     const names = Object.keys(to)

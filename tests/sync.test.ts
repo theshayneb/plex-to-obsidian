@@ -1179,6 +1179,14 @@ describe('PlexSync', () => {
     settings.askBeforeChanges = false
     await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {}, 'playCounts')
     expect(frontmatter.get(song)!.Progress).toBe(40)
+    // A note counting more than both: nothing offered, in a sync or a check.
+    frontmatter.get(song)!.Progress = 99
+    settings.askBeforeChanges = true
+    const asked = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), asked).run(() => {})
+    await new PlexSync(app as never, settings, () => Promise.resolve(), asked).run(() => {}, 'check', ['Progress'])
+    expect(asked.mock.calls.flatMap(c => c[0].lines.map(l => l.label))).not.toContain('Progress')
+    expect(frontmatter.get(song)!.Progress).toBe(99)
     vi.mocked(userPlayCounts).mockResolvedValue(null)
   })
 

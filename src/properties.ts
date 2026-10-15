@@ -685,6 +685,8 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
   if (sameValue(current, value)) return null
   // A longer playtime in the note than Steam's stays.
   if (source === 'playtime' && playtimeShrinks(current, value)) return null
+  // Nor does a song's play count (it may be Last.fm's, which counts plays elsewhere too).
+  if (source === 'viewCount' && kind === 'music' && playtimeShrinks(current, value)) return null
   // A date of yours is never made vaguer: the source's year alone (or the 1st of January standing
   // in for one, as with every Open Library book) doesn't replace a full date from that year.
   if (source === 'releaseDate' && vagueDate(value) && !vagueDate(current) && String(current).trim().startsWith(String(value).slice(0, 4))) return null

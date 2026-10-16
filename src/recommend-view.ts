@@ -495,6 +495,7 @@ export class RecommendView extends ItemView {
     this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
     this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
     this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
+    this.pmnFinishedCard(reactionCol)
 
     const movieCol = column()
     const viewings = s.movies.reduce((n, m) => n + m.times, 0)
@@ -528,9 +529,8 @@ export class RecommendView extends ItemView {
     ], 'No songs then.')
     this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
-    // What you just finished and rewatches, below the rest for now (the owner is still thinking about where).
+    // What you came back to, below the rest for now (the owner is still thinking about where).
     const grid = el.createDiv('pmn-dash-grid')
-    this.pmnFinishedCard(grid)
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
     this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: again[r.kind] })), 'Nothing you came back to then.')
   }

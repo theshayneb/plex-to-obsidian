@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.136] - 2026-10-16
+
+- Media dashboard, Insights: "Just finished" is now at the bottom of the Reactions column.
+- "Back again" no longer lists a show, book or game you never stopped. It now needs a break: your daily notes linked it more than three months before, and nothing (no daily-note link, and for a show no episode in Plex) in the three months just before you picked it up again. A game played every weekend stays off it; Over the Garden Wall after years away still shows.
+
 ## [0.0.135] - 2026-10-17
 
 - Note links while you type: in "Why do you want it?" (Add a movie, show, game or book, and a sync's new-note pop-up) and in the reaction pop-up's "In a few words", typing "[[" and a few letters lists your notes (those starting with what you typed first), and picking one puts in the link, such as [[Mom]]. Enter picks a note while the list is open, rather than saving.

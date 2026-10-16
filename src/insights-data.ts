@@ -159,8 +159,8 @@ export interface PeriodSummary {
   feelings: [string, number][]
   /**
    * What you came back to then: movies seen on another day before (in Plex's history, your
-   * daily notes or a reaction), and shows, books and games your daily notes link at least three
-   * months before this time (so carrying on from last month isn't a return).
+   * daily notes or a reaction), and shows, books and games back after a break: linked before,
+   * then nothing for the three months before this time's first day (so carrying on isn't a return).
    */
   rewatches: { title: string, path?: string, kind: 'movie' | 'show' | 'book' | 'game' }[]
   reactions: number
@@ -206,6 +206,15 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     const [y, m, d] = day.split('-').map(Number)
     return localDay(seconds(new Date(y, m - 1, d - 90, 12)))
   }
+  // Back after a break: linked before, then nothing (no daily-note link, and for a show no episode
+  // in Plex's history) in the three months before its first day now.
+  const cameBack = (path: string | undefined, first: string, showKey?: string) => {
+    if (!path) return false
+    const gap = monthsBefore(first)
+    const linkedDays = linked.get(path) ?? []
+    if (!before(path, gap) || linkedDays.some(d => d >= gap && d < first)) return false
+    return !showKey || !events.some(e => e.kind === 'episode' && (e.parent || e.title) === showKey && localDay(e.viewedAt) >= gap && localDay(e.viewedAt) < first)
+  }
   const firstEpisode = new Map<string, number>()
   for (const e of now) if (e.kind === 'episode') firstEpisode.set(e.parent || e.title, Math.min(firstEpisode.get(e.parent || e.title) ?? Infinity, e.viewedAt))
   const rewatches: PeriodSummary['rewatches'] = [
@@ -213,7 +222,7 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
       .filter(m => m.times > 1 || earlier.has(m.key) || reactedBefore.has(m.title) || before(pathOf(m.key), m.days[0]))
       .map(m => ({ title: m.title, path: pathOf(m.key), kind: 'movie' as const })),
     ...[...shows.values()]
-      .filter(sh => before(pathOf(sh.key), monthsBefore(localDay(firstEpisode.get(sh.key) ?? period.from))))
+      .filter(sh => cameBack(pathOf(sh.key), localDay(firstEpisode.get(sh.key) ?? period.from), sh.key))
       .map(sh => ({ title: sh.title, path: pathOf(sh.key), kind: 'show' as const })),
   ]
   return {
@@ -234,7 +243,7 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
       ...(['book', 'game'] as const).flatMap(group => daysSpent(days, period, group)
         .filter(d => {
           const first = days.filter(l => l.path === d.path && dayIn(l.day, period)).map(l => l.day).sort()[0]
-          return before(d.path, monthsBefore(first))
+          return cameBack(d.path, first)
         })
         .map(d => ({ title: d.title, path: d.path, kind: group }))),
     ],

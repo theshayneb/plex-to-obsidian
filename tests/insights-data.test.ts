@@ -97,4 +97,20 @@ describe('coming back to something', () => {
     // Logged twice the same evening: one viewing.
     expect(s.movies).toEqual([{ key: '9', title: 'Master of Dark Shadows', times: 1, days: ['2026-10-12'] }])
   })
+
+  it('doesn\'t count something you never stopped as back again', () => {
+    // A game played every weekend for two years, and a show watched in Plex all summer without daily-note links.
+    const days: { day: string, path: string, title: string, group: 'game' | 'video' }[] = []
+    for (let d = new Date(2024, 9, 5); d < new Date(2026, 9, 31); d.setDate(d.getDate() + 7)) {
+      days.push({ day: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, path: 'Games/Stardew Valley.md', title: 'Stardew Valley', group: 'game' })
+    }
+    days.push({ day: '2025-01-10', path: 'TV/Lost.md', title: 'Lost', group: 'video' })
+    const events = watchEvents([
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', ratingKey: '881', viewedAt: at(2026, 8, 20), accountID: 1 },
+      { type: 'episode', title: 'Tabula Rasa', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', ratingKey: '882', viewedAt: at(2026, 10, 11), accountID: 1 },
+    ])
+    const s = summarize(events, [], monthPeriod(2026, 9), undefined, days, key => key === '88' ? 'TV/Lost.md' : undefined)
+    expect(s.gameDays.map(g => g.title)).toEqual(['Stardew Valley'])
+    expect(s.rewatches).toEqual([])
+  })
 })

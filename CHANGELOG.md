@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.123] - 2026-10-16
+
+- The recommendations page is now a media dashboard with four tabs ("Open media dashboard"):
+  - Insights: a month or a year (‹ › to move between them) of what you watched, listened to, read and played: movies, TV episodes and shows, song plays and your most played artists and songs (from Plex's history), books and games you reacted to, your 🩷 favourites, the feelings that came up most, and rewatches.
+  - Recommendations: as before.
+  - Worth a review: what you just finished, to react to, and one thing at a time you rated 🩷 or 💣 but never wrote about ("Write about it", "Another one", or "Not this one" to never show it again).
+  - Habits: this week so far next to last week (hours of movies and TV, movies, episodes, songs played), and how many notes have each status. Just the numbers.
+- "Add a movie, show, game or book" asks "Why do you want it?" (optional). The answer goes in the note's Why property, and the reaction pop-up and Worth a review remind you of it, so you can see whether it lived up to it.
+
 ## [0.0.122] - 2026-10-16
 
 - Reactions: the pop-up's themes come from a list of your own in Settings → Reactions ("Themes to choose from"), starting with the twelve in your templates, so every one is offered even before any note has it. A box after them adds a theme of your own just for that note (press Enter); it goes in the note's Themes like the others.

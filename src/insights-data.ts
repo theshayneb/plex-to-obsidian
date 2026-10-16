@@ -1,0 +1,197 @@
+// The media dashboard's Insights and Habits: what you watched, played and listened to in a month,
+// a year or a week, from Plex's watch history and your reactions. No Obsidian imports, so it can be
+// unit tested; the view is recommend-view.ts.
+import type { HistoryEntry } from './daily-episodes'
+
+/** One viewing or play in Plex's watch history (the server owner's only). */
+export interface WatchEvent {
+  kind: 'movie' | 'episode' | 'track'
+  /** The movie's, episode's or track's rating key. */
+  key: string
+  /** The movie's or show's title, or the song's. */
+  title: string
+  /** For an episode, its show's rating key; for a song, its artist. */
+  parent?: string
+  viewedAt: number
+}
+
+/** The owner's viewings and plays (account 1) in Plex's watch history. */
+export function watchEvents(history: HistoryEntry[]): WatchEvent[] {
+  const out: WatchEvent[] = []
+  for (const h of history) {
+    if (!h.viewedAt || (h.accountID !== undefined && h.accountID !== 1)) continue
+    const key = h.ratingKey !== undefined ? String(h.ratingKey) : /\/library\/metadata\/(\d+)/.exec(h.key ?? '')?.[1] ?? ''
+    if (h.type === 'movie' && h.title) out.push({ kind: 'movie', key, title: h.title, viewedAt: h.viewedAt })
+    else if (h.type === 'episode' && h.grandparentTitle) {
+      const show = h.grandparentRatingKey !== undefined ? String(h.grandparentRatingKey) : /\/library\/metadata\/(\d+)/.exec(h.grandparentKey ?? '')?.[1] ?? ''
+      out.push({ kind: 'episode', key, title: h.grandparentTitle, parent: show, viewedAt: h.viewedAt })
+    } else if (h.type === 'track' && h.title) {
+      out.push({ kind: 'track', key, title: h.title, parent: h.originalTitle || h.grandparentTitle, viewedAt: h.viewedAt })
+    }
+  }
+  return out
+}
+
+/** A reaction line read back from a note: "2026-10-16 · 🩷 · moved, happy · words". */
+export interface ReactionEvent {
+  path: string
+  title: string
+  group: 'video' | 'music' | 'game' | 'book'
+  day: string
+  rating?: string
+  feelings: string[]
+  text?: string
+}
+
+const RATINGS = ['💣', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '🩷']
+
+/**
+ * A Reactions line's parts. The feelings part is told from a few words of your own by being a list
+ * of feelings the note has (its Feelings property); a line that isn't a reaction gives null.
+ */
+export function parseReaction(line: string, feelings: string[]): Pick<ReactionEvent, 'day' | 'rating' | 'feelings' | 'text'> | null {
+  const parts = line.split(' · ').map(p => p.trim())
+  const day = parts.shift() ?? ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  const out: Pick<ReactionEvent, 'day' | 'rating' | 'feelings' | 'text'> = { day, feelings: [] }
+  if (parts[0] && RATINGS.includes(parts[0])) out.rating = parts.shift()
+  const known = new Set(feelings.map(f => f.toLowerCase()))
+  if (parts[0]) {
+    const words = parts[0].split(',').map(w => w.trim()).filter(Boolean)
+    if (words.length && words.every(w => known.has(w.toLowerCase()))) {
+      out.feelings = words
+      parts.shift()
+    }
+  }
+  if (parts.length) out.text = parts.join(' · ')
+  return out
+}
+
+/** A stretch of time, in seconds since 1970 (from included, to not). */
+export interface Period { from: number, to: number }
+
+const seconds = (d: Date) => Math.floor(d.getTime() / 1000)
+
+/** A calendar month (month 0–11), in local time. */
+export function monthPeriod(year: number, month: number): Period {
+  return { from: seconds(new Date(year, month, 1)), to: seconds(new Date(year, month + 1, 1)) }
+}
+
+export function yearPeriod(year: number): Period {
+  return { from: seconds(new Date(year, 0, 1)), to: seconds(new Date(year + 1, 0, 1)) }
+}
+
+/** This week (from Monday) up to now, and the whole week before it. */
+export function weeks(now: Date): { thisWeek: Period, lastWeek: Period } {
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
+  const before = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7)
+  return { thisWeek: { from: seconds(monday), to: seconds(now) }, lastWeek: { from: seconds(before), to: seconds(monday) } }
+}
+
+const inPeriod = (at: number, p: Period) => at >= p.from && at < p.to
+const dayIn = (day: string, p: Period) => {
+  const [y, m, d] = day.split('-').map(Number)
+  return inPeriod(seconds(new Date(y, m - 1, d, 12)), p)
+}
+
+/** Most first, then alphabetically, at most `limit`. */
+function top(counts: Map<string, number>, limit: number): [string, number][] {
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit)
+}
+
+const tally = (values: string[]): Map<string, number> => {
+  const counts = new Map<string, number>()
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
+  return counts
+}
+
+export interface PeriodSummary {
+  movies: { key: string, title: string, times: number }[]
+  shows: { key: string, title: string, episodes: number }[]
+  episodes: number
+  songPlays: number
+  topArtists: [string, number][]
+  topSongs: [string, number][]
+  /** Books and games you reacted to then (each once). */
+  books: ReactionEvent[]
+  games: ReactionEvent[]
+  /** What you gave 🩷 then. */
+  favourites: ReactionEvent[]
+  feelings: [string, number][]
+  /** Movies seen then that you'd seen before (in the history read, or reacted to earlier). */
+  rewatches: { key: string, title: string }[]
+  reactions: number
+}
+
+/**
+ * A month's or year's watching, playing and listening. `events` may reach back before the period
+ * (they show what's a rewatch); `reactions` are every reaction in your notes.
+ */
+export function summarize(events: WatchEvent[], reactions: ReactionEvent[], period: Period, titleOf: (kind: 'movie' | 'show', key: string, fallback: string) => string = (_k, _key, t) => t): PeriodSummary {
+  const now = events.filter(e => inPeriod(e.viewedAt, period))
+  const moviesSeen = new Map<string, { key: string, title: string, times: number }>()
+  const shows = new Map<string, { key: string, title: string, episodes: number }>()
+  for (const e of now) {
+    if (e.kind === 'movie') {
+      const m = moviesSeen.get(e.key) ?? { key: e.key, title: titleOf('movie', e.key, e.title), times: 0 }
+      m.times++
+      moviesSeen.set(e.key, m)
+    } else if (e.kind === 'episode') {
+      const key = e.parent || e.title
+      const s = shows.get(key) ?? { key, title: titleOf('show', key, e.title), episodes: 0 }
+      s.episodes++
+      shows.set(key, s)
+    }
+  }
+  const songs = now.filter(e => e.kind === 'track')
+  const reacted = reactions.filter(r => dayIn(r.day, period))
+  const once = (list: ReactionEvent[]) => [...new Map(list.map(r => [r.path, r])).values()]
+  const earlier = new Set([
+    ...events.filter(e => e.kind === 'movie' && e.viewedAt < period.from).map(e => e.key),
+  ])
+  const start = new Date(period.from * 1000)
+  const startDay = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+  const reactedBefore = new Set(reactions.filter(r => r.day < startDay).map(r => r.title))
+  const rewatches = [...moviesSeen.values()].filter(m => m.times > 1 || earlier.has(m.key) || reactedBefore.has(m.title))
+  return {
+    movies: [...moviesSeen.values()].sort((a, b) => b.times - a.times || a.title.localeCompare(b.title)),
+    shows: [...shows.values()].sort((a, b) => b.episodes - a.episodes || a.title.localeCompare(b.title)),
+    episodes: now.filter(e => e.kind === 'episode').length,
+    songPlays: songs.length,
+    topArtists: top(tally(songs.map(s => s.parent ?? '').filter(Boolean)), 5),
+    topSongs: top(tally(songs.map(s => s.parent ? `${s.parent} – ${s.title}` : s.title)), 5),
+    books: once(reacted.filter(r => r.group === 'book')),
+    games: once(reacted.filter(r => r.group === 'game')),
+    favourites: once(reacted.filter(r => r.rating === '🩷')),
+    feelings: top(tally(reacted.flatMap(r => r.feelings.map(f => f.toLowerCase()))), 8),
+    rewatches: rewatches.map(m => ({ key: m.key, title: m.title })),
+    reactions: reacted.length,
+  }
+}
+
+export interface WeekNumbers {
+  /** Hours of movies and TV (where Plex knows how long they are). */
+  hours: number
+  movies: number
+  episodes: number
+  songs: number
+}
+
+/** A week's numbers, for comparing this week with last. `minutes` is each movie's and episode's length. */
+export function weekNumbers(events: WatchEvent[], period: Period, minutes: Map<string, number>): WeekNumbers {
+  const now = events.filter(e => inPeriod(e.viewedAt, period))
+  const video = now.filter(e => e.kind !== 'track')
+  return {
+    hours: Math.round(video.reduce((sum, e) => sum + (minutes.get(e.key) ?? 0), 0) / 6) / 10,
+    movies: now.filter(e => e.kind === 'movie').length,
+    episodes: now.filter(e => e.kind === 'episode').length,
+    songs: now.filter(e => e.kind === 'track').length,
+  }
+}
+
+/** "3 more than last week", "the same as last week", "1.5 fewer than last week": plain, never a judgement. */
+export function compared(now: number, before: number, unit = ''): string {
+  const diff = Math.round((now - before) * 10) / 10
+  if (!diff) return 'the same as last week'
+  return `${Math.abs(diff)}${unit} ${diff > 0 ? 'more' : 'fewer'} than last week`
+}

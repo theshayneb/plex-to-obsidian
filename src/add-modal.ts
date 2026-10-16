@@ -27,12 +27,13 @@ export class AddModal extends Modal {
   private pmnKind: FindKind = 'book'
   private pmnLibrary = ''
   private pmnQuery = ''
+  private pmnWhy = ''
 
   constructor(
     app: App,
     private readonly pmnSettings: PlexNotesSettings,
     private readonly pmnSave: () => Promise<void>,
-    private readonly pmnPick: (item: PlexItem, libraryKey: string) => Promise<void>,
+    private readonly pmnPick: (item: PlexItem, libraryKey: string, why: string) => Promise<void>,
   ) {
     super(app)
   }
@@ -81,6 +82,14 @@ export class AddModal extends Modal {
       .addDropdown(dropdown => {
         for (const [key, title] of libraries) dropdown.addOption(key, title)
         dropdown.setValue(this.pmnLibrary).onChange(value => { this.pmnLibrary = value })
+      })
+
+    new Setting(contentEl)
+      .setName('Why do you want it?')
+      .setDesc('Optional. Kept in the note, so you can see later whether it lived up to it.')
+      .addText(text => {
+        text.setPlaceholder('Optional').setValue(this.pmnWhy).onChange(value => { this.pmnWhy = value })
+        text.inputEl.addClass('pmn-add-input')
       })
 
     const results = createDiv('pmn-add-results')
@@ -142,7 +151,7 @@ export class AddModal extends Modal {
       const item = await itemDetails(result, this.pmnSettings.omdbKey ?? '', this.pmnSettings.googleBooksKey ?? '')
       await this.pmnSave()
       this.close()
-      await this.pmnPick(item, this.pmnLibrary)
+      await this.pmnPick(item, this.pmnLibrary, this.pmnWhy)
     } catch (err) {
       new Notice(`Couldn't add it: ${err instanceof Error ? err.message : String(err)}`)
     }

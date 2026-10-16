@@ -96,6 +96,10 @@ export interface PlexNotesSettings {
   reactionInbox: boolean
   /** Finishings answered or set aside (`finishedKey` → when), not asked about again. */
   reactionsDone: Record<string, number>
+  /** Notes "Worth a review" was told not to show again ("Not this one"). */
+  reviewSkipped: string[]
+  /** The property "Add something new" puts your reason for wanting it in. */
+  whyProperty: string
   /** Daily notes' folder and file name format (moment.js); empty uses Obsidian's Daily notes settings. */
   dailyFolder: string
   dailyFormat: string
@@ -212,6 +216,8 @@ export function defaultSettings(): PlexNotesSettings {
     themesProperty: 'Themes',
     reactionInbox: true,
     reactionsDone: {},
+    reviewSkipped: [],
+    whyProperty: 'Why',
     dailyFolder: '',
     dailyFormat: '',
     dailyEpisodesSince: 0,
@@ -350,7 +356,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -370,6 +376,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.feelings)) settings.feelings = saved.feelings.map(String)
   if (Array.isArray(saved.reactionTags)) settings.reactionTags = saved.reactionTags.map(String)
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
+  if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)

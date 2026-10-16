@@ -8,6 +8,8 @@ export interface ReactionChoices {
   title: string
   /** The day it was finished (YYYY-MM-DD). */
   date: string
+  /** Why you wanted it (from "Add something new"), shown to compare. */
+  why?: string
   /** The note's rating now, picked to begin with. */
   rating?: string
   feelings: string[]
@@ -43,6 +45,7 @@ export class ReactionModal extends Modal {
     const c = this.pmnChoices
     this.modalEl.addClass('pmn-reaction')
     this.titleEl.setText(`How was ${c.title}?`)
+    if (c.why) contentEl.createEl('p', { cls: 'pmn-review-wanted', text: `You wanted it because: ${c.why}` })
     contentEl.createEl('p', { cls: 'setting-item-description', text: `Everything here is optional. It's added to the note as a reaction for ${c.date}; nothing already there is removed.` })
 
     const ratings = this.pmnSection('Rating').createDiv('pmn-reaction-chips')

@@ -14,6 +14,7 @@ import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
 import { vaultPropertyValues } from './property-suggest'
+import type { Finished } from './reactions'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -162,7 +163,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       id: 'add-new',
       name: 'Add a movie, show, game or book…',
       callback: () => {
-        new AddModal(this.app, this.settings, () => this.saveSettings(), (item, libraryKey) => this.addNew(item, libraryKey)).open()
+        new AddModal(this.app, this.settings, () => this.saveSettings(), (item, libraryKey, why) => this.addNew(item, libraryKey, why)).open()
       },
     })
 
@@ -197,10 +198,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
 
     this.registerView(RECOMMEND_VIEW, leaf => new RecommendView(leaf, this))
-    this.addRibbonIcon('sparkles', 'Open recommendations', () => void this.openRecommendations())
+    this.addRibbonIcon('sparkles', 'Open media dashboard', () => void this.openRecommendations())
     this.addCommand({
       id: 'open-recommendations',
-      name: 'Open recommendations',
+      name: 'Open media dashboard',
       callback: () => void this.openRecommendations(),
     })
 
@@ -271,15 +272,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
       return
     }
     try {
-      const sync = this.newSync()
-      const items = await sync.finishedItems()
-      new FinishedModal(this.app, items, async item => {
-        const file = this.app.vault.getAbstractFileByPath(item.path)
-        if (!(file instanceof TFile)) return 'never'
-        const answer = await this.reactTo(file, moment.unix(item.viewedAt).format('YYYY-MM-DD'), true)
-        if (answer !== 'later') await sync.setFinishedDone(item)
-        return answer
-      }).open()
+      const items = await this.newSync().finishedItems()
+      new FinishedModal(this.app, items, item => this.reactToFinished(item)).open()
     } catch (err) {
       new Notice(`Couldn't read what you finished: ${errorMessage(err)}`)
     } finally {
@@ -287,8 +281,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
   }
 
+  /** The reaction pop-up for something you finished; answered or set aside, it isn't offered again. */
+  async reactToFinished(item: Finished): Promise<ReactionAnswer> {
+    const file = this.app.vault.getAbstractFileByPath(item.path)
+    if (!(file instanceof TFile)) return 'never'
+    const answer = await this.reactTo(file, moment.unix(item.viewedAt).format('YYYY-MM-DD'), true)
+    if (answer !== 'later') await new PlexSync(this.app, this.settings, () => this.saveSettings()).setFinishedDone(item)
+    return answer
+  }
+
   /** The reaction pop-up for a note; a reaction given is added to it. */
-  private reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
+  reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
     const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
     const names = sync.reactionProperties(file)
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
@@ -298,6 +301,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       new ReactionModal(this.app, {
         title: file.basename,
         date,
+        why: typeof fm[this.settings.whyProperty || 'Why'] === 'string' ? String(fm[this.settings.whyProperty || 'Why']).trim() || undefined : undefined,
         rating: typeof rating === 'string' ? rating.trim() : undefined,
         feelings: this.settings.feelings,
         // Your list of themes; without one, the themes your notes use.
@@ -364,7 +368,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /** Makes a note for an item picked in "Add something new", or opens the one it already has. */
-  async addNew(item: PlexItem, libraryKey: string): Promise<void> {
+  async addNew(item: PlexItem, libraryKey: string, why?: string): Promise<void> {
     try {
       const sync = this.newSync()
       const { created, existing } = await sync.addNew(item, libraryKey)
@@ -372,6 +376,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (existing) new Notice(`It already has a note: ${existing}`)
       if (!path) return
       const file = this.app.vault.getAbstractFileByPath(path)
+      // Why you wanted it, kept for later (an existing note's own reason is never replaced).
+      const name = this.settings.whyProperty || 'Why'
+      if (why?.trim() && file instanceof TFile) {
+        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+          if (!(typeof fm[name] === 'string' && String(fm[name]).trim())) fm[name] = why.trim()
+        })
+      }
       if (file instanceof TFile) await this.app.workspace.getLeaf(false).openFile(file)
     } catch (err) {
       new Notice(`Couldn't add it: ${errorMessage(err)}`, 10000)

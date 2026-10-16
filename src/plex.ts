@@ -90,10 +90,9 @@ export class PlexClient {
    * Plex's watch history from `since` (seconds since 1970) on, newest first, read in pages until
    * older entries.
    */
-  async history(since: number): Promise<HistoryEntry[]> {
-    const pageSize = 100
+  async history(since: number, pageSize = 100, most = 5000): Promise<HistoryEntry[]> {
     const out: HistoryEntry[] = []
-    for (let start = 0; start < 5000; start += pageSize) {
+    for (let start = 0; start < most; start += pageSize) {
       const page = await this.get(`/status/sessions/history/all?sort=viewedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`)
       const batch = (page.Metadata ?? []) as HistoryEntry[]
       out.push(...batch.filter(h => (h.viewedAt ?? 0) >= since))

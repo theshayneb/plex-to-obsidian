@@ -37,6 +37,7 @@ import {
   trackArtist,
 } from './notes'
 import { lookUpBook } from './discover'
+import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
 import { episodeEntry, episodesByDay, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
@@ -110,6 +111,9 @@ interface Approval {
   /** "Use an existing note": the note chosen instead of creating one. */
   mergeWith?: string
 }
+
+/** Movies' and episodes' lengths in minutes, by rating key, while Obsidian runs (see `lengths`). */
+const KNOWN_LENGTHS = new Map<string, number>()
 
 /** Runs at most `n` of the tasks given to it at a time, the rest waiting their turn. */
 function limited(n: number): <T>(task: () => Promise<T>) => Promise<T> {
@@ -1150,6 +1154,28 @@ export class PlexSync {
       out.push({ key, title: note.basename, kind: 'show', viewedAt: at, path: note.path })
     }
     return out.sort((a, b) => b.viewedAt - a.viewedAt)
+  }
+
+  /**
+   * Plex's watch history from `since` on (the owner's), for the dashboard, with each movie's and
+   * show's note by rating key.
+   */
+  async watchHistory(since: number): Promise<{ events: WatchEvent[], notes: Map<string, TFile> }> {
+    if (!plexReady(this.settings)) return { events: [], notes: new Map() }
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const events = watchEvents(await plex.history(since, 500, 100_000))
+    return { events, notes: this.watchNotes().notes }
+  }
+
+  /** How long movies and episodes are, in minutes, by rating key (asked of Plex a few at a time, kept while Obsidian runs). */
+  async lengths(keys: string[]): Promise<Map<string, number>> {
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const slot = limited(4)
+    await Promise.all([...new Set(keys)].filter(key => key && !KNOWN_LENGTHS.has(key)).map(key => slot(async () => {
+      const item = await plex.item(key).catch(() => null)
+      KNOWN_LENGTHS.set(key, item?.duration ? Math.round(item.duration / 60000) : 0)
+    })))
+    return KNOWN_LENGTHS
   }
 
   /** Remembers a finishing as answered or set aside, so it isn't offered again (forgetting those over a month old). */

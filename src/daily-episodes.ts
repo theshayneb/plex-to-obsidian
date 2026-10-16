@@ -18,6 +18,8 @@ export interface HistoryEntry {
   type?: string
   title?: string
   grandparentTitle?: string
+  /** A song's own artist, when it isn't the album's. */
+  originalTitle?: string
   grandparentKey?: string
   grandparentRatingKey?: string | number
   parentIndex?: number

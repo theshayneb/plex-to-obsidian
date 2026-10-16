@@ -472,6 +472,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     property('Reactions property', () => settings.reactionsProperty, value => { settings.reactionsProperty = value }, 'Reactions')
     property('Feelings property', () => settings.feelingsProperty, value => { settings.feelingsProperty = value }, 'Feelings')
     property('Themes property', () => settings.themesProperty, value => { settings.themesProperty = value }, 'Themes')
+    property('Why property', () => settings.whyProperty, value => { settings.whyProperty = value }, 'Why')
   }
 
   private displaySyncing(containerEl: HTMLElement): void {

@@ -378,7 +378,7 @@ export class RecommendView extends ItemView {
   }
 
   /** A card with a title and a list of rows, or a line saying there's nothing. */
-  private pmnListCard(grid: HTMLElement, title: string, rows: { title: string, path?: string, detail?: string, divider?: boolean }[], empty: string): void {
+  private pmnListCard(grid: HTMLElement, title: string, rows: { title: string, path?: string, detail?: string, divider?: boolean, action?: { text: string, tip: string, run: () => void } }[], empty: string): void {
     const card = grid.createDiv('pmn-card')
     card.createDiv({ cls: 'pmn-card-title', text: title })
     if (!rows.length) {
@@ -392,6 +392,10 @@ export class RecommendView extends ItemView {
       const line = rowEl.createDiv('pmn-rec-text')
       this.pmnLink(line, row.title, row.path)
       if (row.detail) line.createSpan({ cls: 'pmn-rec-why', text: ` ${row.detail}` })
+      if (row.action) {
+        const { run } = row.action
+        rowEl.createEl('button', { cls: 'pmn-rec-action', text: row.action.text, attr: { 'aria-label': row.action.tip } }).addEventListener('click', run)
+      }
     }
   }
 
@@ -532,7 +536,21 @@ export class RecommendView extends ItemView {
     // What you came back to, below the rest for now (the owner is still thinking about where).
     const grid = el.createDiv('pmn-dash-grid')
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
-    this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: r.why ? `${again[r.kind]} · ${r.why}` : again[r.kind] })), 'Nothing you came back to then.')
+    const settings = this.pmnPlugin.settings
+    const notAgain = new Set(settings.notRewatches)
+    this.pmnListCard(grid, 'Back again', s.rewatches.filter(r => !notAgain.has(r.id)).map(r => ({
+      title: r.title,
+      path: r.path,
+      detail: r.why ? `${again[r.kind]} · ${r.why}` : again[r.kind],
+      action: {
+        text: 'Not a rewatch',
+        tip: 'Take it off this list',
+        run: () => {
+          settings.notRewatches.push(r.id)
+          void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
+        },
+      },
+    })), 'Nothing you came back to then.')
   }
 
   /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */

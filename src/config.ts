@@ -102,6 +102,8 @@ export interface PlexNotesSettings {
   reactionsDone: Record<string, number>
   /** Notes "Worth a review" was told not to show again ("Not this one"). */
   reviewSkipped: string[]
+  /** "Back again" entries marked "Not a rewatch" (the summary's `id`: item and day), not shown again. */
+  notRewatches: string[]
   /** The property "Add something new" puts your reason for wanting it in. */
   whyProperty: string
   /** Daily notes' folder and file name format (moment.js); empty uses Obsidian's Daily notes settings. */
@@ -224,6 +226,7 @@ export function defaultSettings(): PlexNotesSettings {
     reactionInbox: true,
     reactionsDone: {},
     reviewSkipped: [],
+    notRewatches: [],
     whyProperty: 'Why',
     dailyFolder: '',
     dailyFormat: '',
@@ -384,6 +387,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reactionTags)) settings.reactionTags = saved.reactionTags.map(String)
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
+  if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
   if (Array.isArray(saved.bedtimeShows)) settings.bedtimeShows = saved.bedtimeShows.map(String)
   if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)

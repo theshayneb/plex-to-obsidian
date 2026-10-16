@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.138] - 2026-10-16
+
+- Media dashboard, "Back again": each entry has a "Not a rewatch" button that takes it off the list for good. Plex's history sometimes has a second viewing you never made (such as an earlier entry for a movie you've only seen once). A real rewatch later on still shows.
+
 ## [0.0.137] - 2026-10-16
 
 - Media dashboard: a movie Plex logged more than once in one sitting (such as a late film whose entries fall on both sides of midnight, or of the first of the month) now counts as one viewing, on the day you started it, so it's no longer called rewatched.

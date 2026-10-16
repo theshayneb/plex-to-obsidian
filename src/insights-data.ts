@@ -162,7 +162,15 @@ export interface PeriodSummary {
    * daily notes or a reaction), and shows, books and games back after a break: linked before,
    * then nothing for the three months before this time's first day (so carrying on isn't a return).
    */
-  rewatches: { title: string, path?: string, kind: 'movie' | 'show' | 'book' | 'game', /** For a movie, what showed it was seen before. */ why?: string }[]
+  rewatches: {
+    title: string
+    path?: string
+    kind: 'movie' | 'show' | 'book' | 'game'
+    /** For a movie, what showed it was seen before. */
+    why?: string
+    /** What "Not a rewatch" remembers: the item and the day judged (a movie's latest viewing, else the first day then). */
+    id: string
+  }[]
   reactions: number
 }
 
@@ -234,11 +242,12 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
         : seen ? `Plex has it on ${seen}`
         : noted ? `daily note ${noted} links it`
         : reacted ? `reaction from ${reacted}` : undefined
-      return why ? [{ title: m.title, path, kind: 'movie' as const, why }] : []
+      return why ? [{ title: m.title, path, kind: 'movie' as const, why, id: `movie:${m.key}@${m.days[0]}` }] : []
     }),
-    ...[...shows.values()]
-      .filter(sh => cameBack(pathOf(sh.key), localDay(firstEpisode.get(sh.key) ?? period.from), sh.key))
-      .map(sh => ({ title: sh.title, path: pathOf(sh.key), kind: 'show' as const })),
+    ...[...shows.values()].flatMap(sh => {
+      const first = localDay(firstEpisode.get(sh.key) ?? period.from)
+      return cameBack(pathOf(sh.key), first, sh.key) ? [{ title: sh.title, path: pathOf(sh.key), kind: 'show' as const, id: `show:${sh.key}@${first}` }] : []
+    }),
   ]
   return {
     movies: [...moviesSeen.values()].sort((a, b) => b.times - a.times || a.title.localeCompare(b.title)),
@@ -256,11 +265,10 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     rewatches: [
       ...rewatches,
       ...(['book', 'game'] as const).flatMap(group => daysSpent(days, period, group)
-        .filter(d => {
+        .flatMap(d => {
           const first = days.filter(l => l.path === d.path && dayIn(l.day, period)).map(l => l.day).sort()[0]
-          return cameBack(d.path, first)
-        })
-        .map(d => ({ title: d.title, path: d.path, kind: group }))),
+          return cameBack(d.path, first) ? [{ title: d.title, path: d.path, kind: group, id: `${group}:${d.path}@${first}` }] : []
+        })),
     ],
     reactions: reacted.length,
   }

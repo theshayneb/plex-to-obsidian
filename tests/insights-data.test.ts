@@ -36,7 +36,7 @@ describe('insights', () => {
     expect(s.games).toEqual([])
     expect(s.favourites.map(f => f.title)).toEqual(['Dune'])
     expect(s.feelings).toEqual([['moved', 2], ['sad', 1]])
-    expect(s.rewatches).toEqual([{ title: 'Arrival', path: undefined, kind: 'movie', why: 'Plex has it on 2026-09-02' }])
+    expect(s.rewatches).toEqual([{ title: 'Arrival', path: undefined, kind: 'movie', why: 'Plex has it on 2026-09-02', id: 'movie:1@2026-10-03' }])
   })
 
   it('counts one late-night viewing that Plex logged twice, across midnight or the month\'s start, once', () => {
@@ -106,8 +106,8 @@ describe('coming back to something', () => {
     const paths: Record<string, string> = { 50: 'TV/Over the Garden Wall.md', 88: 'TV/Lost.md' }
     const s = summarize(events, [], monthPeriod(2026, 9), undefined, days, key => paths[key])
     expect(s.rewatches).toEqual([
-      { title: 'Over the Garden Wall', path: 'TV/Over the Garden Wall.md', kind: 'show' },
-      { title: 'Dune', path: 'Books/Dune.md', kind: 'book' },
+      { title: 'Over the Garden Wall', path: 'TV/Over the Garden Wall.md', kind: 'show', id: 'show:50@2026-10-10' },
+      { title: 'Dune', path: 'Books/Dune.md', kind: 'book', id: 'book:Books/Dune.md@2026-10-02' },
     ])
     // Logged twice the same evening: one viewing.
     expect(s.movies).toEqual([{ key: '9', title: 'Master of Dark Shadows', times: 1, days: ['2026-10-12'] }])

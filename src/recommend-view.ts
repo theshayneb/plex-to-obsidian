@@ -482,7 +482,10 @@ export class RecommendView extends ItemView {
       const [y, mo, d] = day.split('-').map(Number)
       return new Date(y, mo - 1, d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
     }
-    this.pmnListCard(grid, 'Movies', s.movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
+    // Newest first, by the last day each was watched.
+    const latest = (days: string[]) => [...days].sort().pop() ?? ''
+    const movies = [...s.movies].sort((a, b) => latest(b.days).localeCompare(latest(a.days)))
+    this.pmnListCard(grid, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
     this.pmnListCard(grid, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
     this.pmnListCard(grid, 'Most played', [
       ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.128] - 2026-10-17
+
+- Insights: the Movies card lists the newest first.
+
 ## [0.0.127] - 2026-10-17
 
 - Worth a review: the kinds of media (a movie, a TV show, a song, a book, a game) are back in one "Worth a few words" card beside "Just finished", one section each, still with their own buttons.

@@ -382,7 +382,7 @@ export class RecommendView extends ItemView {
     const card = grid.createDiv('pmn-card')
     card.createDiv({ cls: 'pmn-card-title', text: title })
     if (!rows.length) {
-      card.createEl('p', { cls: 'pmn-dash-empty', text: empty })
+      if (empty) card.createEl('p', { cls: 'pmn-dash-empty', text: empty })
       return
     }
     for (const row of rows) {
@@ -537,7 +537,8 @@ export class RecommendView extends ItemView {
     // What you came back to: a card of its own at the bottom of each kind's column.
     const settings = this.pmnPlugin.settings
     const notAgain = new Set(settings.notRewatches)
-    const backAgain = (parent: HTMLElement, kind: PeriodSummary['rewatches'][number]['kind'], button: string, empty: string) => {
+    // Empty, a card shows just its title.
+    const backAgain = (parent: HTMLElement, kind: PeriodSummary['rewatches'][number]['kind'], button: string) => {
       this.pmnListCard(parent, 'Back again', s.rewatches.filter(r => r.kind === kind && !notAgain.has(r.id)).map(r => ({
         title: r.title,
         path: r.path,
@@ -550,12 +551,12 @@ export class RecommendView extends ItemView {
             void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
           },
         },
-      })), empty)
+      })), '')
     }
-    backAgain(movieCol, 'movie', 'Not a rewatch', 'No movie you\'d seen before then.')
-    backAgain(tvCol, 'show', 'Not a rewatch', 'No show you came back to after a break then.')
-    backAgain(bookCol, 'book', 'Not a reread', 'No book you came back to after a break then.')
-    backAgain(gameCol, 'game', 'Not a replay', 'No game you came back to after a break then.')
+    backAgain(movieCol, 'movie', 'Not a rewatch')
+    backAgain(tvCol, 'show', 'Not a rewatch')
+    backAgain(bookCol, 'book', 'Not a reread')
+    backAgain(gameCol, 'game', 'Not a replay')
   }
 
   /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */

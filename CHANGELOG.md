@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.143] - 2026-10-16
+
+- Media dashboard, Insights: an empty "Back again" card now shows just its title, with no "nothing then" text.
+
 ## [0.0.142] - 2026-10-16
 
 - Media dashboard, Insights: "Back again" is now a card of its own at the bottom of the Movies, TV shows, Books and Games columns, each listing only its own kind, with "Not a rewatch", "Not a reread" or "Not a replay".

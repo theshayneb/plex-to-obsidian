@@ -26,7 +26,7 @@ describe('insights', () => {
       { path: 'Games/Hades.md', title: 'Hades', group: 'game', day: '2026-09-30', feelings: ['happy'] },
     ]
     const s = summarize(events, reactions, monthPeriod(2026, 9))
-    expect(s.movies).toEqual([{ key: '1', title: 'Arrival', times: 1 }])
+    expect(s.movies).toEqual([{ key: '1', title: 'Arrival', times: 1, days: ['2026-10-03'] }])
     expect(s.shows).toEqual([{ key: '88', title: 'Lost', episodes: 2 }])
     expect(s.episodes).toBe(2)
     expect(s.songPlays).toBe(2)
@@ -36,7 +36,7 @@ describe('insights', () => {
     expect(s.games).toEqual([])
     expect(s.favourites.map(f => f.title)).toEqual(['Dune'])
     expect(s.feelings).toEqual([['moved', 2], ['sad', 1]])
-    expect(s.rewatches).toEqual([{ key: '1', title: 'Arrival' }])
+    expect(s.rewatches).toEqual([{ title: 'Arrival', path: undefined, kind: 'movie' }])
   })
 
   it('compares this week with last, plainly', () => {
@@ -70,5 +70,31 @@ describe('days from daily notes', () => {
     ])
     expect(daysWith(links, october, 'book')).toBe(2)
     expect(daysWith(links, october, 'game')).toBe(0)
+  })
+})
+
+describe('coming back to something', () => {
+  it('counts a show your daily notes linked long before as rewatched, but not one carried on from last month', () => {
+    const events = watchEvents([
+      { type: 'episode', title: 'Chapter 1', grandparentTitle: 'Over the Garden Wall', grandparentKey: '/library/metadata/50', ratingKey: '51', viewedAt: at(2026, 10, 10), accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', ratingKey: '881', viewedAt: at(2026, 10, 11), accountID: 1 },
+      { type: 'movie', title: 'Master of Dark Shadows', ratingKey: '9', viewedAt: at(2026, 10, 12, 20), accountID: 1 },
+      { type: 'movie', title: 'Master of Dark Shadows', ratingKey: '9', viewedAt: at(2026, 10, 12, 21), accountID: 1 },
+    ])
+    const days = [
+      { day: '2020-10-31', path: 'TV/Over the Garden Wall.md', title: 'Over the Garden Wall', group: 'video' as const },
+      { day: '2024-10-30', path: 'TV/Over the Garden Wall.md', title: 'Over the Garden Wall', group: 'video' as const },
+      { day: '2026-09-28', path: 'TV/Lost.md', title: 'Lost', group: 'video' as const },
+      { day: '2026-10-02', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2021-01-02', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+    ]
+    const paths: Record<string, string> = { 50: 'TV/Over the Garden Wall.md', 88: 'TV/Lost.md' }
+    const s = summarize(events, [], monthPeriod(2026, 9), undefined, days, key => paths[key])
+    expect(s.rewatches).toEqual([
+      { title: 'Over the Garden Wall', path: 'TV/Over the Garden Wall.md', kind: 'show' },
+      { title: 'Dune', path: 'Books/Dune.md', kind: 'book' },
+    ])
+    // Logged twice the same evening: one viewing.
+    expect(s.movies).toEqual([{ key: '9', title: 'Master of Dark Shadows', times: 1, days: ['2026-10-12'] }])
   })
 })

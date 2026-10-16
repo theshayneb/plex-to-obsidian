@@ -50,7 +50,8 @@ export class RecommendView extends ItemView {
   /** Movies' and episodes' lengths, for the Habits tab's hours (null: not looked up yet). */
   private pmnLengths: Map<string, number> | null = null
   private pmnFinished: Finished[] | null = null
-  private pmnReviewAt = 0
+  /** Which of each kind's candidates "Worth a few words" shows ("Another one" moves on). */
+  private readonly pmnReviewAt = new Map<string, number>()
 
   constructor(leaf: WorkspaceLeaf, private readonly pmnPlugin: PlexMediaNotesPlugin) {
     super(leaf)
@@ -454,7 +455,7 @@ export class RecommendView extends ItemView {
 
     const notes = this.pmnHistory?.notes ?? new Map<string, TFile>()
     const days = this.pmnDays()
-    const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days)
+    const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days, key => notes.get(key)?.path)
     // Books and games: the days your daily notes link them, and those you reacted to then.
     const withReacted = (spent: DaysSpent[], reacted: ReactionEvent[]) => [
       ...spent.map(d => ({ title: d.title, path: d.path, detail: `${d.days} day${d.days === 1 ? '' : 's'}${reacted.find(r => r.path === d.path)?.rating ? ` · ${reacted.find(r => r.path === d.path)!.rating}` : ''}` })),
@@ -475,9 +476,13 @@ export class RecommendView extends ItemView {
 
     const grid = el.createDiv('pmn-dash-grid')
     const pathOf = (key: string) => notes.get(key)?.path
-    this.pmnListCard(grid, 'Favourites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
+    this.pmnListCard(grid, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
     this.pmnListCard(grid, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
-    this.pmnListCard(grid, 'Movies', s.movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.times > 1 ? `×${m.times}` : undefined })), 'No movies then.')
+    const dayName = (day: string) => {
+      const [y, mo, d] = day.split('-').map(Number)
+      return new Date(y, mo - 1, d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
+    }
+    this.pmnListCard(grid, 'Movies', s.movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
     this.pmnListCard(grid, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
     this.pmnListCard(grid, 'Most played', [
       ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
@@ -485,22 +490,24 @@ export class RecommendView extends ItemView {
     ], 'No songs then.')
     this.pmnListCard(grid, 'Books', books, 'No books in your daily notes or reactions then.')
     this.pmnListCard(grid, 'Games', games, 'No games in your daily notes or reactions then.')
-    this.pmnListCard(grid, 'Rewatched', s.rewatches.map(m => ({ title: m.title, path: pathOf(m.key) })), 'No rewatches then.')
+    const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
+    this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: again[r.kind] })), 'Nothing you came back to then.')
   }
 
   /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */
-  private pmnReviewCandidates(): { path: string, title: string, level: number }[] {
+  private pmnReviewCandidates(): { path: string, title: string, level: number, kind: string }[] {
     const settings = this.pmnPlugin.settings
     const skipped = new Set(settings.reviewSkipped)
     const written = new Set(this.pmnReactions().filter(r => r.text).map(r => r.path))
-    const out: { path: string, title: string, level: number }[] = []
+    const out: { path: string, title: string, level: number, kind: string }[] = []
+    const libs = Object.values(settings.libraries).map(lib => ({ folder: `${lib.folder.replace(/\/+$/, '')}/`, target: lib.target }))
     for (const note of noteEntries(this.app, settings)) {
       if ((note.level !== 5 && note.level !== 1) || skipped.has(note.path) || written.has(note.path)) continue
       const file = this.app.vault.getAbstractFileByPath(note.path)
       const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
       const notesValue: unknown = fm.Notes ?? fm.notes
       if (typeof notesValue === 'string' ? notesValue.trim() : Array.isArray(notesValue) && notesValue.length) continue
-      out.push({ path: note.path, title: note.title, level: note.level })
+      out.push({ path: note.path, title: note.title, level: note.level, kind: libs.find(l => note.path.startsWith(l.folder))?.target ?? note.group })
     }
     // A different order each time the dashboard opens, the same while it's open.
     const order = (path: string) => [...`${path}${this.pmnSeed}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1_000_003, 7)
@@ -530,19 +537,31 @@ export class RecommendView extends ItemView {
       })
     }
 
-    const card = grid.createDiv('pmn-card')
-    card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
+    // One of each kind (a movie, a TV show, a song, a book, a game), each with its own buttons.
     const candidates = this.pmnReviewCandidates()
     if (!candidates.length) {
+      const card = grid.createDiv('pmn-card')
+      card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
       card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: everything you rated 🩷 or 💣 has a few words.' })
       return
     }
-    const pick = candidates[this.pmnReviewAt % candidates.length]
+    const KINDS: [string, string][] = [['movie', 'A movie'], ['tv', 'A TV show'], ['documentary', 'A documentary'], ['music', 'A song'], ['book', 'A book'], ['game', 'A game']]
+    for (const [kind, label] of KINDS) {
+      const ofKind = candidates.filter(c => c.kind === kind)
+      if (ofKind.length) this.pmnReviewCard(grid, label, kind, ofKind)
+    }
+  }
+
+  /** One thing you rated 🩷 or 💣 but haven't written about, of one kind. */
+  private pmnReviewCard(grid: HTMLElement, label: string, kind: string, candidates: { path: string, title: string, level: number }[]): void {
+    const card = grid.createDiv('pmn-card')
+    card.createDiv({ cls: 'pmn-card-title', text: `Worth a few words: ${label.toLowerCase()}` })
+    const pick = candidates[(this.pmnReviewAt.get(kind) ?? 0) % candidates.length]
     const text = card.createDiv('pmn-review')
     this.pmnLink(text.createDiv('pmn-review-title'), pick.title, pick.path)
     const file = this.app.vault.getAbstractFileByPath(pick.path)
     const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
-    text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and haven't written about it yet. ${candidates.length - 1} more like it.` })
+    text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and haven't written about it yet.${candidates.length > 1 ? ` ${candidates.length - 1} more like it.` : ''}` })
     const why: unknown = fm[this.pmnPlugin.settings.whyProperty || 'Why']
     if (typeof why === 'string' && why.trim()) text.createDiv({ cls: 'pmn-review-wanted', text: `You wanted it because: ${why.trim()}` })
     const buttons = card.createDiv('pmn-rec-buttons')
@@ -552,7 +571,7 @@ export class RecommendView extends ItemView {
     })
     if (candidates.length > 1) {
       buttons.createEl('button', { text: 'Another one' }).addEventListener('click', () => {
-        this.pmnReviewAt++
+        this.pmnReviewAt.set(kind, (this.pmnReviewAt.get(kind) ?? 0) + 1)
         this.pmnRender()
       })
     }

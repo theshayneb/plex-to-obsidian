@@ -118,6 +118,12 @@ export function weeks(now: Date): { thisWeek: Period, lastWeek: Period } {
 }
 
 const inPeriod = (at: number, p: Period) => at >= p.from && at < p.to
+
+/** The local day (YYYY-MM-DD) of a time in seconds. */
+export function localDay(at: number): string {
+  const d = new Date(at * 1000)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const dayIn = (day: string, p: Period) => {
   const [y, m, d] = day.split('-').map(Number)
   return inPeriod(seconds(new Date(y, m - 1, d, 12)), p)
@@ -135,7 +141,8 @@ const tally = (values: string[]): Map<string, number> => {
 }
 
 export interface PeriodSummary {
-  movies: { key: string, title: string, times: number }[]
+  /** Each movie, with the days it was watched (several viewings on one day count once). */
+  movies: { key: string, title: string, times: number, days: string[] }[]
   shows: { key: string, title: string, episodes: number }[]
   episodes: number
   songPlays: number
@@ -150,8 +157,12 @@ export interface PeriodSummary {
   /** What you gave 🩷 then. */
   favourites: ReactionEvent[]
   feelings: [string, number][]
-  /** Movies seen then that you'd seen before (in the history read, or reacted to earlier). */
-  rewatches: { key: string, title: string }[]
+  /**
+   * What you came back to then: movies seen on another day before (in Plex's history, your
+   * daily notes or a reaction), and shows, books and games your daily notes link at least three
+   * months before this time (so carrying on from last month isn't a return).
+   */
+  rewatches: { title: string, path?: string, kind: 'movie' | 'show' | 'book' | 'game' }[]
   reactions: number
 }
 
@@ -159,14 +170,18 @@ export interface PeriodSummary {
  * A month's or year's watching, playing and listening. `events` may reach back before the period
  * (they show what's a rewatch); `reactions` are every reaction in your notes.
  */
-export function summarize(events: WatchEvent[], reactions: ReactionEvent[], period: Period, titleOf: (kind: 'movie' | 'show', key: string, fallback: string) => string = (_k, _key, t) => t, days: DayLink[] = []): PeriodSummary {
+export function summarize(events: WatchEvent[], reactions: ReactionEvent[], period: Period, titleOf: (kind: 'movie' | 'show', key: string, fallback: string) => string = (_k, _key, t) => t, days: DayLink[] = [], pathOf: (key: string) => string | undefined = () => undefined): PeriodSummary {
   const now = events.filter(e => inPeriod(e.viewedAt, period))
-  const moviesSeen = new Map<string, { key: string, title: string, times: number }>()
+  const moviesSeen = new Map<string, { key: string, title: string, times: number, days: string[] }>()
   const shows = new Map<string, { key: string, title: string, episodes: number }>()
   for (const e of now) {
     if (e.kind === 'movie') {
-      const m = moviesSeen.get(e.key) ?? { key: e.key, title: titleOf('movie', e.key, e.title), times: 0 }
-      m.times++
+      const m = moviesSeen.get(e.key) ?? { key: e.key, title: titleOf('movie', e.key, e.title), times: 0, days: [] }
+      const day = localDay(e.viewedAt)
+      if (!m.days.includes(day)) {
+        m.days.push(day)
+        m.times++
+      }
       moviesSeen.set(e.key, m)
     } else if (e.kind === 'episode') {
       const key = e.parent || e.title
@@ -178,13 +193,29 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
   const songs = now.filter(e => e.kind === 'track')
   const reacted = reactions.filter(r => dayIn(r.day, period))
   const once = (list: ReactionEvent[]) => [...new Map(list.map(r => [r.path, r])).values()]
-  const earlier = new Set([
-    ...events.filter(e => e.kind === 'movie' && e.viewedAt < period.from).map(e => e.key),
-  ])
+  // A movie seen on an earlier day (not just logged twice by Plex the same day).
+  const earlier = new Set(events.filter(e => e.kind === 'movie' && e.viewedAt < period.from && localDay(e.viewedAt) !== localDay(period.from)).map(e => e.key))
   const start = new Date(period.from * 1000)
   const startDay = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
   const reactedBefore = new Set(reactions.filter(r => r.day < startDay).map(r => r.title))
-  const rewatches = [...moviesSeen.values()].filter(m => m.times > 1 || earlier.has(m.key) || reactedBefore.has(m.title))
+  // The days your daily notes link each note.
+  const linked = new Map<string, string[]>()
+  for (const l of days) linked.set(l.path, [...linked.get(l.path) ?? [], l.day])
+  const before = (path: string | undefined, day: string) => Boolean(path && (linked.get(path) ?? []).some(d => d < day))
+  const monthsBefore = (day: string) => {
+    const [y, m, d] = day.split('-').map(Number)
+    return localDay(seconds(new Date(y, m - 1, d - 90, 12)))
+  }
+  const firstEpisode = new Map<string, number>()
+  for (const e of now) if (e.kind === 'episode') firstEpisode.set(e.parent || e.title, Math.min(firstEpisode.get(e.parent || e.title) ?? Infinity, e.viewedAt))
+  const rewatches: PeriodSummary['rewatches'] = [
+    ...[...moviesSeen.values()]
+      .filter(m => m.times > 1 || earlier.has(m.key) || reactedBefore.has(m.title) || before(pathOf(m.key), m.days[0]))
+      .map(m => ({ title: m.title, path: pathOf(m.key), kind: 'movie' as const })),
+    ...[...shows.values()]
+      .filter(sh => before(pathOf(sh.key), monthsBefore(localDay(firstEpisode.get(sh.key) ?? period.from))))
+      .map(sh => ({ title: sh.title, path: pathOf(sh.key), kind: 'show' as const })),
+  ]
   return {
     movies: [...moviesSeen.values()].sort((a, b) => b.times - a.times || a.title.localeCompare(b.title)),
     shows: [...shows.values()].sort((a, b) => b.episodes - a.episodes || a.title.localeCompare(b.title)),
@@ -198,7 +229,15 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     gameDays: daysSpent(days, period, 'game'),
     favourites: once(reacted.filter(r => r.rating === '🩷')),
     feelings: top(tally(reacted.flatMap(r => r.feelings.map(f => f.toLowerCase()))), 8),
-    rewatches: rewatches.map(m => ({ key: m.key, title: m.title })),
+    rewatches: [
+      ...rewatches,
+      ...(['book', 'game'] as const).flatMap(group => daysSpent(days, period, group)
+        .filter(d => {
+          const first = days.filter(l => l.path === d.path && dayIn(l.day, period)).map(l => l.day).sort()[0]
+          return before(d.path, monthsBefore(first))
+        })
+        .map(d => ({ title: d.title, path: d.path, kind: group }))),
+    ],
     reactions: reacted.length,
   }
 }

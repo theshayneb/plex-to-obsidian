@@ -655,8 +655,8 @@
 }
 
 .pmn-reaction-chip.is-kept {
-  background: var(--background-modifier-hover);
-  color: var(--text-muted);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
   cursor: default;
 }
 

@@ -37,6 +37,8 @@ export function noteEntries(app: App, settings: PlexNotesSettings): (RecEntry & 
       const fm = app.metadataCache.getFileCache(file)?.frontmatter ?? {}
       // A rating not yet reviewed is still in the library's old scale.
       const noteKey = kind === 'book' ? `book:${file.path}` : links.map(name => ratingKeyFromLink(fm[name])).find(Boolean) ?? ''
+      // What you said to skip or ignore in syncs and checks isn't counted or suggested either.
+      if (settings.unmatchedIgnored.includes(file.path) || (noteKey && noteKey in settings.ignored)) continue
       const scale = settings.ratingsReviewed[noteKey] ? 'stars' : kind === 'music' ? 'plain' : 'emoji'
       const level = ratingProps.map(m => noteStars(fm[m.name.trim()], m.source === 'userRating' ? 'stars' : scale)).find(l => l !== null) ?? null
       const unwatched = lib.values.unwatched.trim().toLowerCase()

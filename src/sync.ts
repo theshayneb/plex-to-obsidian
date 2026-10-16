@@ -1163,8 +1163,11 @@ export class PlexSync {
   async watchHistory(since: number): Promise<{ events: WatchEvent[], notes: Map<string, TFile> }> {
     if (!plexReady(this.settings)) return { events: [], notes: new Map() }
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
-    const events = watchEvents(await plex.history(since, 500, 100_000))
-    return { events, notes: this.watchNotes().notes }
+    const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
+    // What you said to skip or ignore in syncs and checks is left out here too.
+    const events = watchEvents(await plex.history(since, 500, 100_000)).filter(e =>
+      e.kind === 'movie' ? !ignoredMovie(e.key, e.title) : e.kind === 'episode' ? !ignoredShow(e.parent ?? '', e.title) : !(e.key in this.settings.ignored))
+    return { events, notes }
   }
 
   /**

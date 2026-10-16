@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.125] - 2026-10-16
+
+- Media dashboard:
+  - Anything you told syncs and checks to skip or ignore is left out of the dashboard too (Insights, Worth a review, Habits and Recommendations).
+  - "Favorites", spelled the American way.
+  - Movies show the days you watched them. A movie Plex logged twice on the same day counts once, and isn't called a rewatch.
+  - "Rewatched" is now "Back again": besides movies, it finds shows, books and games your daily notes linked at least three months before (Over the Garden Wall in 2020 and 2024, say), so carrying on with a show from last month doesn't count.
+  - Worth a review shows one card for each kind of media (a movie, a TV show, a song, a book, a game), each with its own "Another one".
+- Reaction pop-up: the rating, feelings, themes and tags a note already has are shown in the same purple as the ones you pick. "holiday" is added to the tags to choose from.
+
 ## [0.0.124] - 2026-10-16
 
 - The media dashboard reads the days you read and played from your daily notes: every book and game linked in a daily note's Related property counts for that day. Insights lists your books and games with how many days you spent on each (and your reaction's rating), and Habits shows days reading and days playing this week next to last week.

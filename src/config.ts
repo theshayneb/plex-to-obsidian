@@ -471,6 +471,10 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       lib.values.collectionStatus = lib.values.collectionStatus?.map(p => p.status.trim().toLowerCase() === 'planned' ? { ...p, untilStarted: true } : p)
     }
   })
+  migrateOnce(settings, saved, 'holiday-tag', () => {
+    // Asked for: "holiday" among the reaction tags.
+    if (!settings.reactionTags.some(t => t.toLowerCase() === 'holiday')) settings.reactionTags.push('holiday')
+  })
   migrateOnce(settings, saved, 'music-progress', () => {
     // Songs' play counts go in Progress, as you asked.
     for (const lib of Object.values(settings.libraries)) {

@@ -307,7 +307,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         // Your list of themes; without one, the themes your notes use.
         themes: this.settings.reactionThemes.length ? this.settings.reactionThemes : (vaultPropertyValues(this.app).get(names.themes.toLowerCase()) ?? []).slice(0, 40),
         tags: this.settings.reactionTags,
-        has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags) },
+        has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags).map(t => t.replace(/^#/, '')) },
       }, answer => {
         if (typeof answer === 'object') {
           void sync.addReactionTo(file, answer.reaction).then(() => new Notice(`Reaction added to ${file.basename}`), err => new Notice(`Couldn't add the reaction: ${errorMessage(err)}`))

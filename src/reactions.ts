@@ -8,7 +8,7 @@ export const DEFAULT_FEELINGS = ['confused', 'unsettled', 'bored', 'annoyed', 'm
 export const DEFAULT_REACTION_THEMES = ['bravery', 'chosen family', 'finding peace', 'forgiveness', 'loyalty', 'non-conformity', 'questioning authority', 'self-discovery/self-acceptance', 'true love', 'what is a "good" person?', 'what is it to be "human?"', 'what is reality?']
 
 /** Your own tags (also used for quotes and memes) offered with them. */
-export const DEFAULT_REACTION_TAGS = ['insightful', 'inspirational', 'feminism', 'atheism', 'comfort', 'funny', 'relatable']
+export const DEFAULT_REACTION_TAGS = ['insightful', 'inspirational', 'feminism', 'atheism', 'comfort', 'funny', 'relatable', 'holiday']
 
 /** One reaction, as given in the pop-up. */
 export interface Reaction {

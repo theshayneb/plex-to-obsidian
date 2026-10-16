@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.122] - 2026-10-16
+
+- Reactions: the pop-up's themes come from a list of your own in Settings → Reactions ("Themes to choose from"), starting with the twelve in your templates, so every one is offered even before any note has it. A box after them adds a theme of your own just for that note (press Enter); it goes in the note's Themes like the others.
+
 ## [0.0.121] - 2026-10-16
 
 - Reactions: say how you felt about something in a few taps. "React to this note…" works on any note (books, games, songs, rewatches); "React to what you just finished…" lists the movies and shows (once every episode is watched) you finished in the last two weeks. After the background update, a notice tells you when something is waiting; click it to answer.

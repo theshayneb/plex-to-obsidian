@@ -461,6 +461,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         })
       })
     words('Feelings to choose from', 'One per line. Taking one out only stops it being offered: notes that have it keep it.', () => settings.feelings, list => { settings.feelings = list })
+    words('Themes to choose from', 'One per line. The pop-up also has a box for a theme of your own, just for that note. Taking one out only stops it being offered.', () => settings.reactionThemes, list => { settings.reactionThemes = list })
     words('Tags to choose from', 'Your own tags offered with them (added to the note\'s tags), one per line.', () => settings.reactionTags, list => { settings.reactionTags = list })
     const property = (name: string, get: () => string, set: (value: string) => void, fallback: string) => new Setting(containerEl)
       .setName(name)

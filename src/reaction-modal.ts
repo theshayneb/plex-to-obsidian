@@ -30,6 +30,8 @@ export class ReactionModal extends Modal {
   private readonly pmnPicked = { feelings: new Set<string>(), themes: new Set<string>(), tags: new Set<string>() }
   private pmnText = ''
   private pmnAnswered = false
+  /** The "Add your own" box's theme not yet added with Enter: added when saving. */
+  private pmnOwnTheme: HTMLInputElement | null = null
 
   constructor(app: App, private readonly pmnChoices: ReactionChoices, private readonly pmnDone: (answer: ReactionAnswer) => void, private readonly pmnInbox = false) {
     super(app)
@@ -55,7 +57,7 @@ export class ReactionModal extends Modal {
     buttons.forEach((b, i) => b.toggleClass('is-active', RATINGS[i] === this.pmnRating))
 
     this.pmnChips('Feelings', c.feelings, c.has.feelings, this.pmnPicked.feelings)
-    this.pmnChips('Themes', c.themes, c.has.themes, this.pmnPicked.themes)
+    this.pmnOwnTheme = this.pmnChips('Themes', c.themes, c.has.themes, this.pmnPicked.themes, true)
     this.pmnChips('Tags', c.tags, c.has.tags, this.pmnPicked.tags)
 
     new Setting(contentEl)
@@ -90,25 +92,45 @@ export class ReactionModal extends Modal {
     return section
   }
 
-  /** A row of words to tap; those the note already has are marked and can't be untapped. */
-  private pmnChips(name: string, words: string[], has: string[], picked: Set<string>): void {
+  /**
+   * A row of words to tap; those the note already has are marked and can't be untapped. With
+   * `own`, a box after them adds a word of your own (Enter), just for this note; it's returned.
+   */
+  private pmnChips(name: string, words: string[], has: string[], picked: Set<string>, own = false): HTMLInputElement | null {
     const lower = new Set(has.map(w => w.toLowerCase()))
     const all = [...words, ...has.filter(w => !words.some(x => x.toLowerCase() === w.toLowerCase()))]
-    if (!all.length) return
+    if (!all.length && !own) return null
     const row = this.pmnSection(name).createDiv('pmn-reaction-chips')
-    for (const word of all) {
-      const chip = row.createEl('button', { cls: 'pmn-reaction-chip', text: word })
+    const chips = new Map<string, HTMLButtonElement>()
+    const addChip = (word: string, before: HTMLElement | null = null): HTMLButtonElement => {
+      const chip = createEl('button', { cls: 'pmn-reaction-chip', text: word })
+      row.insertBefore(chip, before)
+      chips.set(word.toLowerCase(), chip)
       if (lower.has(word.toLowerCase())) {
         chip.addClass('is-kept')
         chip.setAttr('aria-label', 'Already in the note')
-        continue
+        return chip
       }
       chip.addEventListener('click', () => {
         if (picked.has(word)) picked.delete(word)
         else picked.add(word)
         chip.toggleClass('is-active', picked.has(word))
       })
+      return chip
     }
+    for (const word of all) addChip(word)
+    if (!own) return null
+    const box = row.createEl('input', { type: 'text', cls: 'pmn-reaction-own', placeholder: 'Add your own…' })
+    box.addEventListener('keydown', evt => {
+      if (evt.key !== 'Enter') return
+      evt.preventDefault()
+      const word = box.value.trim()
+      box.value = ''
+      if (!word) return
+      const chip = chips.get(word.toLowerCase()) ?? addChip(word, box)
+      if (!lower.has(word.toLowerCase()) && !picked.has(chip.getText())) chip.click()
+    })
+    return box
   }
 
   private pmnSave(): void {
@@ -116,7 +138,7 @@ export class ReactionModal extends Modal {
       date: this.pmnChoices.date,
       rating: this.pmnRating,
       feelings: [...this.pmnPicked.feelings],
-      themes: [...this.pmnPicked.themes],
+      themes: [...this.pmnPicked.themes, ...this.pmnOwnTheme?.value.trim() ? [this.pmnOwnTheme.value.trim()] : []],
       tags: [...this.pmnPicked.tags],
       text: this.pmnText.trim() || undefined,
     } })

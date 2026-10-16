@@ -660,6 +660,11 @@
   cursor: default;
 }
 
+.pmn-reaction-own {
+  width: 12em;
+  border-radius: var(--radius-l);
+}
+
 .pmn-reaction-text {
   width: 100%;
 }

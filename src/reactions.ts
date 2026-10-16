@@ -4,6 +4,9 @@
 /** The feelings offered to begin with (Settings → Reactions changes them). */
 export const DEFAULT_FEELINGS = ['confused', 'unsettled', 'bored', 'annoyed', 'moved', 'surprised', 'thoughtful', 'sad', 'happy']
 
+/** The themes offered to begin with: the ones in your note templates. */
+export const DEFAULT_REACTION_THEMES = ['bravery', 'chosen family', 'finding peace', 'forgiveness', 'loyalty', 'non-conformity', 'questioning authority', 'self-discovery/self-acceptance', 'true love', 'what is a "good" person?', 'what is it to be "human?"', 'what is reality?']
+
 /** Your own tags (also used for quotes and memes) offered with them. */
 export const DEFAULT_REACTION_TAGS = ['insightful', 'inspirational', 'feminism', 'atheism', 'comfort', 'funny', 'relatable']
 

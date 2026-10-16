@@ -1,5 +1,5 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
-import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS } from './reactions'
+import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES } from './reactions'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
 import {
   DEFAULT_TAGS,
@@ -87,6 +87,7 @@ export interface PlexNotesSettings {
   dailyRelated: string
   /** Reactions: the feelings and your own tags offered, and the properties they go in. */
   feelings: string[]
+  reactionThemes: string[]
   reactionTags: string[]
   reactionsProperty: string
   feelingsProperty: string
@@ -204,6 +205,7 @@ export function defaultSettings(): PlexNotesSettings {
     dailyQuote: '> >',
     dailyRelated: 'Related',
     feelings: [...DEFAULT_FEELINGS],
+    reactionThemes: [...DEFAULT_REACTION_THEMES],
     reactionTags: [...DEFAULT_REACTION_TAGS],
     reactionsProperty: 'Reactions',
     feelingsProperty: 'Feelings',
@@ -367,6 +369,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.unmatchedIgnored)) settings.unmatchedIgnored = saved.unmatchedIgnored.map(String)
   if (Array.isArray(saved.feelings)) settings.feelings = saved.feelings.map(String)
   if (Array.isArray(saved.reactionTags)) settings.reactionTags = saved.reactionTags.map(String)
+  if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)

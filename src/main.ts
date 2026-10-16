@@ -300,7 +300,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         date,
         rating: typeof rating === 'string' ? rating.trim() : undefined,
         feelings: this.settings.feelings,
-        themes: (vaultPropertyValues(this.app).get(names.themes.toLowerCase()) ?? []).slice(0, 40),
+        // Your list of themes; without one, the themes your notes use.
+        themes: this.settings.reactionThemes.length ? this.settings.reactionThemes : (vaultPropertyValues(this.app).get(names.themes.toLowerCase()) ?? []).slice(0, 40),
         tags: this.settings.reactionTags,
         has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags) },
       }, answer => {

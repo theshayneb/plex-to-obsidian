@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.130] - 2026-10-17
+
+- The Worth a review tab is folded into Insights: each kind's "Worth a few words" (something you rated 🩷 or 💣 but never wrote about) sits under its count and list (documentaries under Movies), and "Just finished" is at the bottom beside "Back again". The dashboard now has three tabs: Insights, Recommendations and Habits.
+- Most played: a purple line between your top artists and your top songs.
+
 ## [0.0.129] - 2026-10-17
 
 - Insights is laid out in columns: each count (Movies, TV, Songs, Books, Games, Reactions) has its own list under it, with Favorites and How it felt under Reactions, and Back again on its own at the bottom.

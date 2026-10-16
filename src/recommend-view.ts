@@ -12,8 +12,8 @@ import { PlexSync } from './sync'
 
 export const RECOMMEND_VIEW = 'pmn-recommendations'
 
-type Tab = 'insights' | 'recommendations' | 'review' | 'habits'
-const TABS: [Tab, string][] = [['insights', 'Insights'], ['recommendations', 'Recommendations'], ['review', 'Worth a review'], ['habits', 'Habits']]
+type Tab = 'insights' | 'recommendations' | 'habits'
+const TABS: [Tab, string][] = [['insights', 'Insights'], ['recommendations', 'Recommendations'], ['habits', 'Habits']]
 
 const GROUP_TITLES: Record<RecGroup, string> = {
   video: 'Movies and TV',
@@ -74,7 +74,7 @@ export class RecommendView extends ItemView {
       await this.pmnReadHistory(weeks(new Date()).lastWeek.from)
       await this.pmnReadLengths()
     }
-    if (this.pmnTab === 'review' && !this.pmnFinished) {
+    if (this.pmnTab === 'insights' && !this.pmnFinished) {
       try {
         this.pmnFinished = await new PlexSync(this.app, this.pmnPlugin.settings, () => this.pmnPlugin.saveSettings()).finishedItems()
       } catch {
@@ -221,7 +221,6 @@ export class RecommendView extends ItemView {
     }
     const body = contentEl.createDiv('pmn-dash-body')
     if (this.pmnTab === 'insights') this.pmnInsights(body)
-    else if (this.pmnTab === 'review') this.pmnReview(body)
     else if (this.pmnTab === 'habits') this.pmnHabits(body)
     else this.pmnRecommendations(body)
   }
@@ -368,7 +367,7 @@ export class RecommendView extends ItemView {
   }
 
   /** A card with a title and a list of rows, or a line saying there's nothing. */
-  private pmnListCard(grid: HTMLElement, title: string, rows: { title: string, path?: string, detail?: string }[], empty: string): void {
+  private pmnListCard(grid: HTMLElement, title: string, rows: { title: string, path?: string, detail?: string, divider?: boolean }[], empty: string): void {
     const card = grid.createDiv('pmn-card')
     card.createDiv({ cls: 'pmn-card-title', text: title })
     if (!rows.length) {
@@ -376,7 +375,10 @@ export class RecommendView extends ItemView {
       return
     }
     for (const row of rows) {
-      const line = card.createDiv('pmn-rec-row').createDiv('pmn-rec-text')
+      const rowEl = card.createDiv('pmn-rec-row')
+      // A heavier line where a list's next part starts (Most played: artists, then songs).
+      if (row.divider) rowEl.addClass('pmn-rec-divider')
+      const line = rowEl.createDiv('pmn-rec-text')
       this.pmnLink(line, row.title, row.path)
       if (row.detail) line.createSpan({ cls: 'pmn-rec-why', text: ` ${row.detail}` })
     }
@@ -480,34 +482,41 @@ export class RecommendView extends ItemView {
     // Newest first, by the last day each was watched.
     const latest = (days: string[]) => [...days].sort().pop() ?? ''
     const movies = [...s.movies].sort((a, b) => latest(b.days).localeCompare(latest(a.days)))
+    const worth = this.pmnReviewCandidates()
     this.pmnListCard(movieCol, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
+    this.pmnWorthCard(movieCol, [['movie', 'A movie'], ['documentary', 'A documentary']], worth)
 
     const tvCol = column()
     this.pmnMetric(tvCol, 'TV', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
     this.pmnListCard(tvCol, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
+    this.pmnWorthCard(tvCol, [['tv', 'A TV show']], worth)
 
     const songCol = column()
     this.pmnMetric(songCol, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
     this.pmnListCard(songCol, 'Most played', [
       ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
-      ...s.topSongs.map(([name, n]) => ({ title: name, detail: `×${n}` })),
+      ...s.topSongs.map(([name, n], i) => ({ title: name, detail: `×${n}`, divider: i === 0 && s.topArtists.length > 0 })),
     ], 'No songs then.')
+    this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
     const bookCol = column()
     this.pmnMetric(bookCol, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
     this.pmnListCard(bookCol, 'Books', books, 'No books in your daily notes or reactions then.')
+    this.pmnWorthCard(bookCol, [['book', 'A book']], worth)
 
     const gameCol = column()
     this.pmnMetric(gameCol, 'Games', String(games.length), `${playingDays} day${playingDays === 1 ? '' : 's'} of playing`)
     this.pmnListCard(gameCol, 'Games', games, 'No games in your daily notes or reactions then.')
+    this.pmnWorthCard(gameCol, [['game', 'A game']], worth)
 
     const reactionCol = column()
     this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
     this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
     this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
 
-    // Rewatches, below the rest for now (the owner is still thinking about them).
+    // What you just finished and rewatches, below the rest for now (the owner is still thinking about where).
     const grid = el.createDiv('pmn-dash-grid')
+    this.pmnFinishedCard(grid)
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
     this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: again[r.kind] })), 'Nothing you came back to then.')
   }
@@ -534,11 +543,9 @@ export class RecommendView extends ItemView {
 
   private readonly pmnSeed = Math.random()
 
-  /** Worth a review: what you just finished, and one thing you loved or hated but never wrote about. */
-  private pmnReview(el: HTMLElement): void {
-    this.pmnHeader(el, 'Worth a review', 'What you just finished, and one thing at a time you rated 🩷 or 💣 but never wrote about.')
-    const grid = el.createDiv('pmn-dash-grid')
-    const finished = grid.createDiv('pmn-card')
+  /** What you finished lately (movies, and shows once every episode is watched), each to react to. */
+  private pmnFinishedCard(parent: HTMLElement): void {
+    const finished = parent.createDiv('pmn-card')
     finished.createDiv({ cls: 'pmn-card-title', text: 'Just finished' })
     if (!this.pmnFinished) finished.createEl('p', { cls: 'pmn-dash-empty', text: 'Looking in Plex…' })
     else if (!this.pmnFinished.length) finished.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
@@ -554,26 +561,24 @@ export class RecommendView extends ItemView {
         })
       })
     }
+  }
 
-    // One card beside it: one of each kind (a movie, a TV show, a song, a book, a game), each with its own buttons.
-    const card = grid.createDiv('pmn-card')
+  /**
+   * "Worth a few words" for some kinds of media (under their count in Insights): one thing of each
+   * you rated 🩷 or 💣 but haven't written about. Nothing shown when there's none.
+   */
+  private pmnWorthCard(parent: HTMLElement, kinds: [string, string][], candidates: { path: string, title: string, level: number, kind: string }[]): void {
+    const found = kinds.map(([kind, label]) => ({ kind, label, list: candidates.filter(c => c.kind === kind) })).filter(k => k.list.length)
+    if (!found.length) return
+    const card = parent.createDiv('pmn-card')
     card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
-    const candidates = this.pmnReviewCandidates()
-    if (!candidates.length) {
-      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: everything you rated 🩷 or 💣 has a few words.' })
-      return
-    }
-    const KINDS: [string, string][] = [['movie', 'A movie'], ['tv', 'A TV show'], ['documentary', 'A documentary'], ['music', 'A song'], ['book', 'A book'], ['game', 'A game']]
-    for (const [kind, label] of KINDS) {
-      const ofKind = candidates.filter(c => c.kind === kind)
-      if (ofKind.length) this.pmnReviewCard(card, label, kind, ofKind)
-    }
+    for (const { kind, label, list } of found) this.pmnReviewCard(card, found.length > 1 ? label : '', kind, list)
   }
 
   /** One thing you rated 🩷 or 💣 but haven't written about, of one kind. */
   private pmnReviewCard(parent: HTMLElement, label: string, kind: string, candidates: { path: string, title: string, level: number }[]): void {
     const card = parent.createDiv('pmn-review-kind')
-    card.createDiv({ cls: 'pmn-review-kind-label', text: label })
+    if (label) card.createDiv({ cls: 'pmn-review-kind-label', text: label })
     const pick = candidates[(this.pmnReviewAt.get(kind) ?? 0) % candidates.length]
     const text = card.createDiv('pmn-review')
     this.pmnLink(text.createDiv('pmn-review-title'), pick.title, pick.path)

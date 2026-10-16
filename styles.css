@@ -783,3 +783,8 @@
   color: var(--text-muted);
   margin-bottom: var(--size-4-1);
 }
+
+/* Most played: a line in the accent colour between the artists and the songs. */
+.pmn-rec-row.pmn-rec-divider {
+  border-top: 2px solid var(--interactive-accent);
+}

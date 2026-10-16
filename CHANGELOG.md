@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.134] - 2026-10-17
+
+- The dashboard redraws once a note you reacted to (or changed) has been saved, so "Worth a few words" moves on as soon as you've written a few words about something. A reaction with only a rating or feelings, and no words, still leaves it there.
+
 ## [0.0.133] - 2026-10-17
 
 - Reaction pop-up: the tags that only say what something is (movie, tv_show, documentary, music or song, book, video_game, and each library's own tag) aren't shown among the tags any more. They stay in the note as they are.

@@ -312,8 +312,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
         // Type tags (movie, tv_show, song…) say what it is, not how it felt: not shown.
         has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags).map(t => t.replace(/^#/, '')).filter(t => !typeTags.has(t.toLowerCase())) },
       }, answer => {
+        // Answered once the reaction is in the note, so whatever shows it can redraw with it.
         if (typeof answer === 'object') {
-          void sync.addReactionTo(file, answer.reaction).then(() => new Notice(`Reaction added to ${file.basename}`), err => new Notice(`Couldn't add the reaction: ${errorMessage(err)}`))
+          void sync.addReactionTo(file, answer.reaction).then(
+            () => new Notice(`Reaction added to ${file.basename}`),
+            err => new Notice(`Couldn't add the reaction: ${errorMessage(err)}`),
+          ).then(() => resolve(answer))
+          return
         }
         resolve(answer)
       }, inbox).open()

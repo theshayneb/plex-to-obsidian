@@ -62,6 +62,17 @@ export class RecommendView extends ItemView {
   getIcon(): string { return 'sparkles' }
 
   async onOpen(): Promise<void> {
+    // A note changed (a reaction written, a rating set): redrawn shortly after, once Obsidian has read it.
+    let pending: number | null = null
+    this.registerEvent(this.app.metadataCache.on('changed', file => {
+      const inLibrary = Object.values(this.pmnPlugin.settings.libraries).some(lib => lib.target !== 'skip' && file.path.startsWith(`${lib.folder.replace(/\/+$/, '')}/`))
+      if (this.pmnTab === 'recommendations' || !inLibrary) return
+      if (pending !== null) window.clearTimeout(pending)
+      pending = window.setTimeout(() => {
+        pending = null
+        this.pmnRender()
+      }, 500)
+    }))
     this.pmnRender()
     await this.pmnLoadTab()
   }

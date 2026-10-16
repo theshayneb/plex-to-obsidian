@@ -1,4 +1,5 @@
 import { App, Modal, moment, Setting } from 'obsidian'
+import { LinkSuggest, typingLink } from './link-suggest'
 import type { Finished, Reaction } from './reactions'
 
 /** The star scale, lowest first, as the rating buttons show it. */
@@ -68,8 +69,10 @@ export class ReactionModal extends Modal {
       .addText(text => {
         text.setPlaceholder('Optional').onChange(value => { this.pmnText = value })
         text.inputEl.addClass('pmn-reaction-text')
+        // "[[" looks for a note to link, as in the editor.
+        new LinkSuggest(this.app, text.inputEl)
         text.inputEl.addEventListener('keydown', evt => {
-          if (evt.key === 'Enter') this.pmnSave()
+          if (evt.key === 'Enter' && !typingLink(text.inputEl)) this.pmnSave()
         })
       })
 

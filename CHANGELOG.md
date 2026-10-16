@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.135] - 2026-10-17
+
+- Note links while you type: in "Why do you want it?" (Add a movie, show, game or book, and a sync's new-note pop-up) and in the reaction pop-up's "In a few words", typing "[[" and a few letters lists your notes (those starting with what you typed first), and picking one puts in the link, such as [[Mom]]. Enter picks a note while the list is open, rather than saving.
+
 ## [0.0.134] - 2026-10-17
 
 - The dashboard redraws once a note you reacted to (or changed) has been saved, so "Worth a few words" moves on as soon as you've written a few words about something. A reaction with only a rating or feelings, and no words, still leaves it there.

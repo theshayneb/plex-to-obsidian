@@ -3,6 +3,7 @@ import { addLibrary, type PlexNotesSettings } from './config'
 import type { Found } from './discover-data'
 import { findItems, itemDetails, moreRatings, type FindKind } from './discover'
 import type { PlexItem } from './notes'
+import { LinkSuggest } from './link-suggest'
 
 const KIND_LABELS: Record<FindKind, string> = {
   movie: 'Movie',
@@ -90,6 +91,8 @@ export class AddModal extends Modal {
       .addText(text => {
         text.setPlaceholder('Optional').setValue(this.pmnWhy).onChange(value => { this.pmnWhy = value })
         text.inputEl.addClass('pmn-add-input')
+        // "[[" looks for a note to link, as in the editor.
+        new LinkSuggest(this.app, text.inputEl)
       })
 
     const results = createDiv('pmn-add-results')

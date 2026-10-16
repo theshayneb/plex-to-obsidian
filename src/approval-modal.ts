@@ -1,4 +1,5 @@
 import { App, FuzzySuggestModal, Modal, Setting, TFile, setIcon } from 'obsidian'
+import { LinkSuggest } from './link-suggest'
 import { matchValues, PropertyValueSuggest, vaultPropertyValues, type VaultValues } from './property-suggest'
 import type { CoverChoice } from './steamgriddb'
 
@@ -174,7 +175,14 @@ export class ApprovalModal extends Modal {
         input = this.pmnListEditor(newCell(), key, items ?? [], undefined, label)
       } else if (edit) {
         const original = value ?? ''
-        input = this.pmnTextField(newCell(), label, original, edit, Boolean(choices?.length) || key === 'file')
+        if (key === 'why') {
+          // Your reason for wanting it: a line of text, where "[[" looks for a note to link.
+          const field = newCell().createEl('input', { type: 'text', cls: 'pmn-approval-input' })
+          field.value = original
+          field.placeholder = 'Optional'
+          new LinkSuggest(this.app, field)
+          input = field
+        } else input = this.pmnTextField(newCell(), label, original, edit, Boolean(choices?.length) || key === 'file')
         const field = input
         field.addEventListener('input', () => {
           if (field.value === original) delete this.pmnEdits[key]

@@ -806,3 +806,9 @@
 .pmn-dash-column > .pmn-dash-metric {
   min-height: 6.5em;
 }
+
+/* "[[" note suggestions in text boxes: the folder under the name. */
+.pmn-link-suggest-path {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}

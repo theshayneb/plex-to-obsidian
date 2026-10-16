@@ -36,7 +36,22 @@ describe('insights', () => {
     expect(s.games).toEqual([])
     expect(s.favourites.map(f => f.title)).toEqual(['Dune'])
     expect(s.feelings).toEqual([['moved', 2], ['sad', 1]])
-    expect(s.rewatches).toEqual([{ title: 'Arrival', path: undefined, kind: 'movie' }])
+    expect(s.rewatches).toEqual([{ title: 'Arrival', path: undefined, kind: 'movie', why: 'Plex has it on 2026-09-02' }])
+  })
+
+  it('counts one late-night viewing that Plex logged twice, across midnight or the month\'s start, once', () => {
+    const events = watchEvents([
+      { type: 'movie', title: 'Master of Dark Shadows', ratingKey: '9', viewedAt: at(2026, 10, 12, 23), accountID: 1 },
+      { type: 'movie', title: 'Master of Dark Shadows', ratingKey: '9', viewedAt: at(2026, 10, 13, 1), accountID: 1 },
+      { type: 'movie', title: 'Coco', ratingKey: '3', viewedAt: at(2026, 9, 30, 23), accountID: 1 },
+      { type: 'movie', title: 'Coco', ratingKey: '3', viewedAt: at(2026, 10, 1, 0), accountID: 1 },
+    ])
+    const s = summarize(events, [], monthPeriod(2026, 9))
+    expect(s.movies).toEqual([
+      { key: '3', title: 'Coco', times: 1, days: ['2026-09-30'] },
+      { key: '9', title: 'Master of Dark Shadows', times: 1, days: ['2026-10-12'] },
+    ])
+    expect(s.rewatches).toEqual([])
   })
 
   it('compares this week with last, plainly', () => {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.137] - 2026-10-16
+
+- Media dashboard: a movie Plex logged more than once in one sitting (such as a late film whose entries fall on both sides of midnight, or of the first of the month) now counts as one viewing, on the day you started it, so it's no longer called rewatched.
+- "Back again" now says why each movie is there: watched more than once then, the earlier day Plex has it, the daily note that linked it before, or an earlier reaction.
+
 ## [0.0.136] - 2026-10-16
 
 - Media dashboard, Insights: "Just finished" is now at the bottom of the Reactions column.

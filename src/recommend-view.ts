@@ -532,7 +532,7 @@ export class RecommendView extends ItemView {
     // What you came back to, below the rest for now (the owner is still thinking about where).
     const grid = el.createDiv('pmn-dash-grid')
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
-    this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: again[r.kind] })), 'Nothing you came back to then.')
+    this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: r.why ? `${again[r.kind]} · ${r.why}` : again[r.kind] })), 'Nothing you came back to then.')
   }
 
   /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */

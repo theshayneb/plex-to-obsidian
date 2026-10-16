@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.142] - 2026-10-16
+
+- Media dashboard, Insights: "Back again" is now a card of its own at the bottom of the Movies, TV shows, Books and Games columns, each listing only its own kind, with "Not a rewatch", "Not a reread" or "Not a replay".
+
 ## [0.0.141] - 2026-10-16
 
 - Media dashboard, Insights: reacting to something no longer puts it in that month's Books or Games list. Those lists only show what your daily notes link (the days you read or played it), so going through "Worth a few words" from memory doesn't look like reading them today. Reactions still count under Reactions, Favorites and How it felt.

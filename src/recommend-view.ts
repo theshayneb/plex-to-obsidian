@@ -1,5 +1,5 @@
 import { ItemView, moment, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
-import { compared, daysWith, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type DayLink, type DaysSpent, type Period, type ReactionEvent, type WatchEvent } from './insights-data'
+import { compared, daysWith, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type DayLink, type DaysSpent, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
 import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
 import { artistsOf, type PlexItem } from './notes'
@@ -534,23 +534,28 @@ export class RecommendView extends ItemView {
     ], 'No songs then.')
     this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
-    // What you came back to, at the bottom of the Reactions column.
-    const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
+    // What you came back to: a card of its own at the bottom of each kind's column.
     const settings = this.pmnPlugin.settings
     const notAgain = new Set(settings.notRewatches)
-    this.pmnListCard(reactionCol, 'Back again', s.rewatches.filter(r => !notAgain.has(r.id)).map(r => ({
-      title: r.title,
-      path: r.path,
-      detail: r.why ? `${again[r.kind]} · ${r.why}` : again[r.kind],
-      action: {
-        text: 'Not a rewatch',
-        tip: 'Take it off this list',
-        run: () => {
-          settings.notRewatches.push(r.id)
-          void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
+    const backAgain = (parent: HTMLElement, kind: PeriodSummary['rewatches'][number]['kind'], button: string, empty: string) => {
+      this.pmnListCard(parent, 'Back again', s.rewatches.filter(r => r.kind === kind && !notAgain.has(r.id)).map(r => ({
+        title: r.title,
+        path: r.path,
+        detail: r.why,
+        action: {
+          text: button,
+          tip: 'Take it off this list',
+          run: () => {
+            settings.notRewatches.push(r.id)
+            void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
+          },
         },
-      },
-    })), 'Nothing you came back to then.')
+      })), empty)
+    }
+    backAgain(movieCol, 'movie', 'Not a rewatch', 'No movie you\'d seen before then.')
+    backAgain(tvCol, 'show', 'Not a rewatch', 'No show you came back to after a break then.')
+    backAgain(bookCol, 'book', 'Not a reread', 'No book you came back to after a break then.')
+    backAgain(gameCol, 'game', 'Not a replay', 'No game you came back to after a break then.')
   }
 
   /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */

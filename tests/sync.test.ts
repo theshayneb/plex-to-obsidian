@@ -1460,7 +1460,7 @@ describe('PlexSync', () => {
     const settings = settingsWith()
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
-    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [], edits: r.action === 'create' ? { why: ' A friend loved it ' } : {} }))
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [], edits: (r.action === 'create' ? { why: ' A friend loved it ' } : {}) as Record<string, string> }))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
     expect(approve.mock.calls[0][0].lines).toContainEqual({ key: 'why', label: 'Why', value: '', edit: 'text', source: 'You (optional: why you want it)' })
     expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Why).toBe('A friend loved it')

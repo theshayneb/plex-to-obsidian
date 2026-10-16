@@ -396,7 +396,8 @@ export class RecommendView extends ItemView {
     const metric = parent.createDiv('pmn-dash-metric')
     metric.createDiv({ cls: 'pmn-dash-metric-label', text: label })
     metric.createDiv({ cls: 'pmn-dash-metric-value', text: value })
-    if (sub) metric.createDiv({ cls: 'pmn-dash-metric-sub', text: sub })
+    // Always a line under the number, so the cards in a row are the same height.
+    metric.createDiv({ cls: 'pmn-dash-metric-sub', text: sub ?? '\u00a0' })
   }
 
   /** Every day your daily notes link a media note in Related (a day you watched, read or played it). */
@@ -476,28 +477,27 @@ export class RecommendView extends ItemView {
       return new Date(y, mo - 1, d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
     }
 
+    // In this order: Reactions, Movies, TV shows, Books, Games, Songs.
+    const worth = this.pmnReviewCandidates()
+
+    const reactionCol = column()
+    this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
+    this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
+    this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
+
     const movieCol = column()
     const viewings = s.movies.reduce((n, m) => n + m.times, 0)
     this.pmnMetric(movieCol, 'Movies', String(s.movies.length), viewings > s.movies.length ? `${viewings} viewings` : undefined)
     // Newest first, by the last day each was watched.
     const latest = (days: string[]) => [...days].sort().pop() ?? ''
     const movies = [...s.movies].sort((a, b) => latest(b.days).localeCompare(latest(a.days)))
-    const worth = this.pmnReviewCandidates()
     this.pmnListCard(movieCol, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
     this.pmnWorthCard(movieCol, [['movie', 'A movie'], ['documentary', 'A documentary']], worth)
 
     const tvCol = column()
-    this.pmnMetric(tvCol, 'TV', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
-    this.pmnListCard(tvCol, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
+    this.pmnMetric(tvCol, 'TV shows', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
+    this.pmnListCard(tvCol, 'TV shows', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
     this.pmnWorthCard(tvCol, [['tv', 'A TV show']], worth)
-
-    const songCol = column()
-    this.pmnMetric(songCol, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
-    this.pmnListCard(songCol, 'Most played', [
-      ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
-      ...s.topSongs.map(([name, n], i) => ({ title: name, detail: `×${n}`, divider: i === 0 && s.topArtists.length > 0 })),
-    ], 'No songs then.')
-    this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
     const bookCol = column()
     this.pmnMetric(bookCol, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
@@ -509,10 +509,13 @@ export class RecommendView extends ItemView {
     this.pmnListCard(gameCol, 'Games', games, 'No games in your daily notes or reactions then.')
     this.pmnWorthCard(gameCol, [['game', 'A game']], worth)
 
-    const reactionCol = column()
-    this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
-    this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
-    this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
+    const songCol = column()
+    this.pmnMetric(songCol, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
+    this.pmnListCard(songCol, 'Most played', [
+      ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
+      ...s.topSongs.map(([name, n], i) => ({ title: name, detail: `×${n}`, divider: i === 0 && s.topArtists.length > 0 })),
+    ], 'No songs then.')
+    this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
     // What you just finished and rewatches, below the rest for now (the owner is still thinking about where).
     const grid = el.createDiv('pmn-dash-grid')
@@ -587,18 +590,18 @@ export class RecommendView extends ItemView {
     text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and haven't written about it yet.${candidates.length > 1 ? ` ${candidates.length - 1} more like it.` : ''}` })
     const why: unknown = fm[this.pmnPlugin.settings.whyProperty || 'Why']
     if (typeof why === 'string' && why.trim()) text.createDiv({ cls: 'pmn-review-wanted', text: `You wanted it because: ${why.trim()}` })
-    const buttons = card.createDiv('pmn-rec-buttons')
+    const buttons = card.createDiv('pmn-rec-buttons pmn-review-buttons')
     buttons.createEl('button', { cls: 'mod-cta', text: 'Write about it' }).addEventListener('click', () => {
       if (!(file instanceof TFile)) return
       void this.pmnPlugin.reactTo(file, moment.unix(Math.floor(Date.now() / 1000)).format('YYYY-MM-DD')).then(() => this.pmnRender())
     })
     if (candidates.length > 1) {
-      buttons.createEl('button', { text: 'Another one' }).addEventListener('click', () => {
+      buttons.createEl('button', { text: 'Next', attr: { 'aria-label': 'Another one' } }).addEventListener('click', () => {
         this.pmnReviewAt.set(kind, (this.pmnReviewAt.get(kind) ?? 0) + 1)
         this.pmnRender()
       })
     }
-    buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Not this one' }).addEventListener('click', () => {
+    buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Ignore', attr: { 'aria-label': 'Don\'t show this one again' } }).addEventListener('click', () => {
       this.pmnPlugin.settings.reviewSkipped.push(pick.path)
       void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
     })

@@ -788,3 +788,21 @@
 .pmn-rec-row.pmn-rec-divider {
   border-top: 2px solid var(--interactive-accent);
 }
+
+/* Worth a few words: small buttons on one line. */
+.pmn-review-buttons {
+  flex-wrap: nowrap;
+  gap: var(--size-4-1);
+}
+
+.pmn-review-buttons button {
+  font-size: var(--font-ui-smaller);
+  padding: var(--size-2-1) var(--size-4-2);
+  height: auto;
+  white-space: nowrap;
+}
+
+/* Insights' count cards: the same height in every column. */
+.pmn-dash-column > .pmn-dash-metric {
+  min-height: 6.5em;
+}

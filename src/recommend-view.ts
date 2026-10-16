@@ -533,12 +533,11 @@ export class RecommendView extends ItemView {
     ], 'No songs then.')
     this.pmnWorthCard(songCol, [['music', 'A song']], worth)
 
-    // What you came back to, below the rest for now (the owner is still thinking about where).
-    const grid = el.createDiv('pmn-dash-grid')
+    // What you came back to, at the bottom of the Reactions column.
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
     const settings = this.pmnPlugin.settings
     const notAgain = new Set(settings.notRewatches)
-    this.pmnListCard(grid, 'Back again', s.rewatches.filter(r => !notAgain.has(r.id)).map(r => ({
+    this.pmnListCard(reactionCol, 'Back again', s.rewatches.filter(r => !notAgain.has(r.id)).map(r => ({
       title: r.title,
       path: r.path,
       detail: r.why ? `${again[r.kind]} · ${r.why}` : again[r.kind],

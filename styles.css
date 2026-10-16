@@ -597,6 +597,11 @@
   flex-shrink: 0;
 }
 
+/* In a narrow column, "Not a rewatch" goes under its line rather than squeezing it. */
+.pmn-rec-row:has(.pmn-rec-action) {
+  flex-wrap: wrap;
+}
+
 .pmn-rec-buttons {
   display: flex;
   flex-wrap: wrap;

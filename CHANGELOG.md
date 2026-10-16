@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.139] - 2026-10-16
+
+- Media dashboard, Insights: "Back again" is now at the bottom of the Reactions column, under "Just finished".
+
 ## [0.0.138] - 2026-10-16
 
 - Media dashboard, "Back again": each entry has a "Not a rewatch" button that takes it off the list for good. Plex's history sometimes has a second viewing you never made (such as an earlier entry for a movie you've only seen once). A real rewatch later on still shows.

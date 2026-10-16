@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.140] - 2026-10-16
+
+- Media dashboard: every button on the cards now looks the same, at the size "How was it?" had ("Write about it" is no longer coloured), and "Worth a few words" shows its title at the same size as every other title on the cards.
+
 ## [0.0.139] - 2026-10-16
 
 - Media dashboard, Insights: "Back again" is now at the bottom of the Reactions column, under "Just finished".

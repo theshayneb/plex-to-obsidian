@@ -591,8 +591,6 @@
 
 .pmn-rec-action {
   font-size: var(--font-ui-smaller);
-  padding: var(--size-2-1) var(--size-4-2);
-  height: auto;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -760,7 +758,6 @@
 }
 
 .pmn-review-title {
-  font-size: var(--font-ui-medium);
   font-weight: var(--font-semibold);
   margin-bottom: var(--size-4-1);
 }
@@ -810,8 +807,6 @@
 
 .pmn-review-buttons button {
   font-size: var(--font-ui-smaller);
-  padding: var(--size-2-1) var(--size-4-2);
-  height: auto;
   white-space: nowrap;
 }
 

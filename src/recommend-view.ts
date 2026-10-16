@@ -619,7 +619,7 @@ export class RecommendView extends ItemView {
     const why: unknown = fm[this.pmnPlugin.settings.whyProperty || 'Why']
     if (typeof why === 'string' && why.trim()) text.createDiv({ cls: 'pmn-review-wanted', text: `You wanted it because: ${why.trim()}` })
     const buttons = card.createDiv('pmn-rec-buttons pmn-review-buttons')
-    buttons.createEl('button', { cls: 'mod-cta', text: 'Write about it' }).addEventListener('click', () => {
+    buttons.createEl('button', { text: 'Write about it' }).addEventListener('click', () => {
       if (!(file instanceof TFile)) return
       void this.pmnPlugin.reactTo(file, moment.unix(Math.floor(Date.now() / 1000)).format('YYYY-MM-DD')).then(() => this.pmnRender())
     })

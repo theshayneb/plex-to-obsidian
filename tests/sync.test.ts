@@ -1455,6 +1455,17 @@ describe('PlexSync', () => {
     expect(texts.get(daily)!.split('\n')).toEqual(['> >[!writing] Journaling', '> >', '> >- ▶️ [[Futurama]]: S01E01 – Space Pilot 3000'])
   })
 
+  it('asks why you want something a sync is about to make a note for, and keeps the reason', async () => {
+    const { app, frontmatter } = makeApp({})
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [], edits: r.action === 'create' ? { why: ' A friend loved it ' } : {} }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(approve.mock.calls[0][0].lines).toContainEqual({ key: 'why', label: 'Why', value: '', edit: 'text', source: 'You (optional: why you want it)' })
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Why).toBe('A friend loved it')
+  })
+
   it('leaves ignored shows out of daily notes', async () => {
     const day = new Date()
     day.setDate(day.getDate() - 1)

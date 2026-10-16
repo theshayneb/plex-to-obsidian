@@ -1025,7 +1025,10 @@ export class PlexSync {
         const item = await this.fullItem(listed, listedLib)
         const { lib, kind } = this.libraryFor(item, listedLib)
         const preview = this.previewNote(item, lib, kind)
-        const approval = await this.ask({ action: 'create', path: preview.path, lines: preview.lines, position, total: toCreate.length }, result, item, lib)
+        // Why you want it, as "Add something new" asks: optional, written only when you type a reason.
+        const whyName = this.settings.whyProperty || 'Why'
+        const lines: ApprovalLine[] = [...preview.lines, { key: 'why', label: whyName, value: '', edit: 'text', source: 'You (optional: why you want it)' }]
+        const approval = await this.ask({ action: 'create', path: preview.path, lines, position, total: toCreate.length }, result, item, lib)
         if (!approval) continue
         if (approval.mergeWith) {
           await this.mergeInto(item, lib, kind, approval.mergeWith, index, result, position, toCreate.length)
@@ -1043,6 +1046,9 @@ export class PlexSync {
           ? sanitizeFileName(edits.file, this.settings.fileNameReplacements) || undefined
           : undefined
         const path = await this.createNote(item, lib, kind, left, overrides, fileName)
+        const why = typeof edits.why === 'string' && !excluded.has('why') ? edits.why.trim() : ''
+        const created = why ? this.app.vault.getAbstractFileByPath(path) : null
+        if (created instanceof TFile) await this.app.fileManager.processFrontMatter(created, (fm: Record<string, unknown>) => { fm[whyName] = why })
         result.created.push(path)
         const baseName = path.split('/').pop()!.replace(/\.md$/, '')
         addToIndex(index, path, renderFileName(this.naming(lib), item), [item.ratingKey])

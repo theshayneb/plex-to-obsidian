@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.132] - 2026-10-17
+
+- Syncs ask "why" too: when a sync is about to make a new note (with "Ask before changes" on), the pop-up has a Why line to type your reason in, as "Add a movie, show, game or book" does. Leave it empty to skip it; whatever you type goes in the new note's Why property.
+
 ## [0.0.131] - 2026-10-17
 
 - Insights: the columns go Reactions, Movies, TV shows, Books, Games, Songs; the count cards at the top are all the same height; and Worth a few words has smaller buttons on one line: "Write about it", "Next" and "Ignore" (never show it again).

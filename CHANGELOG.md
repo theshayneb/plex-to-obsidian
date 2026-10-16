@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.129] - 2026-10-17
+
+- Insights is laid out in columns: each count (Movies, TV, Songs, Books, Games, Reactions) has its own list under it, with Favorites and How it felt under Reactions, and Back again on its own at the bottom.
+
 ## [0.0.128] - 2026-10-17
 
 - Insights: the Movies card lists the newest first.

@@ -517,6 +517,21 @@
   font-size: var(--font-ui-smaller);
 }
 
+.pmn-dash-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--size-4-3);
+  align-items: start;
+  margin-bottom: var(--size-4-3);
+}
+
+.pmn-dash-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  min-width: 0;
+}
+
 .pmn-dash-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));

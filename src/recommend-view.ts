@@ -465,34 +465,49 @@ export class RecommendView extends ItemView {
     const games = withReacted(s.gameDays, s.games)
     const readingDays = daysWith(days, period, 'book')
     const playingDays = daysWith(days, period, 'game')
-    const metrics = el.createDiv('pmn-dash-metrics')
-    const viewings = s.movies.reduce((n, m) => n + m.times, 0)
-    this.pmnMetric(metrics, 'Movies', String(s.movies.length), viewings > s.movies.length ? `${viewings} viewings` : undefined)
-    this.pmnMetric(metrics, 'TV', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
-    this.pmnMetric(metrics, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
-    this.pmnMetric(metrics, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
-    this.pmnMetric(metrics, 'Games', String(games.length), `${playingDays} day${playingDays === 1 ? '' : 's'} of playing`)
-    this.pmnMetric(metrics, 'Reactions', String(s.reactions))
-
-    const grid = el.createDiv('pmn-dash-grid')
+    // A column per kind: its count on top, its lists below it.
+    const columns = el.createDiv('pmn-dash-columns')
+    const column = () => columns.createDiv('pmn-dash-column')
     const pathOf = (key: string) => notes.get(key)?.path
-    this.pmnListCard(grid, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
-    this.pmnListCard(grid, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
     const dayName = (day: string) => {
       const [y, mo, d] = day.split('-').map(Number)
       return new Date(y, mo - 1, d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
     }
+
+    const movieCol = column()
+    const viewings = s.movies.reduce((n, m) => n + m.times, 0)
+    this.pmnMetric(movieCol, 'Movies', String(s.movies.length), viewings > s.movies.length ? `${viewings} viewings` : undefined)
     // Newest first, by the last day each was watched.
     const latest = (days: string[]) => [...days].sort().pop() ?? ''
     const movies = [...s.movies].sort((a, b) => latest(b.days).localeCompare(latest(a.days)))
-    this.pmnListCard(grid, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
-    this.pmnListCard(grid, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
-    this.pmnListCard(grid, 'Most played', [
+    this.pmnListCard(movieCol, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
+
+    const tvCol = column()
+    this.pmnMetric(tvCol, 'TV', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
+    this.pmnListCard(tvCol, 'TV', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
+
+    const songCol = column()
+    this.pmnMetric(songCol, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
+    this.pmnListCard(songCol, 'Most played', [
       ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
       ...s.topSongs.map(([name, n]) => ({ title: name, detail: `×${n}` })),
     ], 'No songs then.')
-    this.pmnListCard(grid, 'Books', books, 'No books in your daily notes or reactions then.')
-    this.pmnListCard(grid, 'Games', games, 'No games in your daily notes or reactions then.')
+
+    const bookCol = column()
+    this.pmnMetric(bookCol, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
+    this.pmnListCard(bookCol, 'Books', books, 'No books in your daily notes or reactions then.')
+
+    const gameCol = column()
+    this.pmnMetric(gameCol, 'Games', String(games.length), `${playingDays} day${playingDays === 1 ? '' : 's'} of playing`)
+    this.pmnListCard(gameCol, 'Games', games, 'No games in your daily notes or reactions then.')
+
+    const reactionCol = column()
+    this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
+    this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
+    this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
+
+    // Rewatches, below the rest for now (the owner is still thinking about them).
+    const grid = el.createDiv('pmn-dash-grid')
     const again = { movie: 'rewatched', show: 'rewatched', book: 'reread', game: 'replayed' }
     this.pmnListCard(grid, 'Back again', s.rewatches.map(r => ({ title: r.title, path: r.path, detail: again[r.kind] })), 'Nothing you came back to then.')
   }

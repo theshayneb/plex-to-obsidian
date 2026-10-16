@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.124] - 2026-10-16
+
+- The media dashboard reads the days you read and played from your daily notes: every book and game linked in a daily note's Related property counts for that day. Insights lists your books and games with how many days you spent on each (and your reaction's rating), and Habits shows days reading and days playing this week next to last week.
+
 ## [0.0.123] - 2026-10-16
 
 - The recommendations page is now a media dashboard with four tabs ("Open media dashboard"):

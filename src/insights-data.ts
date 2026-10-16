@@ -67,6 +67,35 @@ export function parseReaction(line: string, feelings: string[]): Pick<ReactionEv
   return out
 }
 
+/** A day a daily note links a media note in its Related property (a day you watched, read or played it). */
+export interface DayLink {
+  day: string
+  path: string
+  title: string
+  group: ReactionEvent['group']
+}
+
+/** A note and how many days in a period your daily notes link it, and the last of them. */
+export interface DaysSpent { path: string, title: string, days: number, last: string }
+
+/** The notes of a kind your daily notes link in a period, most days first. */
+export function daysSpent(links: DayLink[], period: Period, group: DayLink['group']): DaysSpent[] {
+  const byPath = new Map<string, { title: string, days: Set<string> }>()
+  for (const l of links) {
+    if (l.group !== group || !dayIn(l.day, period)) continue
+    const entry = byPath.get(l.path) ?? { title: l.title, days: new Set<string>() }
+    entry.days.add(l.day)
+    byPath.set(l.path, entry)
+  }
+  return [...byPath].map(([path, e]) => ({ path, title: e.title, days: e.days.size, last: [...e.days].sort().pop() ?? '' }))
+    .sort((a, b) => b.days - a.days || a.title.localeCompare(b.title))
+}
+
+/** How many days in a period your daily notes link something of a kind. */
+export function daysWith(links: DayLink[], period: Period, group: DayLink['group']): number {
+  return new Set(links.filter(l => l.group === group && dayIn(l.day, period)).map(l => l.day)).size
+}
+
 /** A stretch of time, in seconds since 1970 (from included, to not). */
 export interface Period { from: number, to: number }
 
@@ -115,6 +144,9 @@ export interface PeriodSummary {
   /** Books and games you reacted to then (each once). */
   books: ReactionEvent[]
   games: ReactionEvent[]
+  /** Books and games your daily notes link then, with the days. */
+  bookDays: DaysSpent[]
+  gameDays: DaysSpent[]
   /** What you gave 🩷 then. */
   favourites: ReactionEvent[]
   feelings: [string, number][]
@@ -127,7 +159,7 @@ export interface PeriodSummary {
  * A month's or year's watching, playing and listening. `events` may reach back before the period
  * (they show what's a rewatch); `reactions` are every reaction in your notes.
  */
-export function summarize(events: WatchEvent[], reactions: ReactionEvent[], period: Period, titleOf: (kind: 'movie' | 'show', key: string, fallback: string) => string = (_k, _key, t) => t): PeriodSummary {
+export function summarize(events: WatchEvent[], reactions: ReactionEvent[], period: Period, titleOf: (kind: 'movie' | 'show', key: string, fallback: string) => string = (_k, _key, t) => t, days: DayLink[] = []): PeriodSummary {
   const now = events.filter(e => inPeriod(e.viewedAt, period))
   const moviesSeen = new Map<string, { key: string, title: string, times: number }>()
   const shows = new Map<string, { key: string, title: string, episodes: number }>()
@@ -162,6 +194,8 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     topSongs: top(tally(songs.map(s => s.parent ? `${s.parent} – ${s.title}` : s.title)), 5),
     books: once(reacted.filter(r => r.group === 'book')),
     games: once(reacted.filter(r => r.group === 'game')),
+    bookDays: daysSpent(days, period, 'book'),
+    gameDays: daysSpent(days, period, 'game'),
     favourites: once(reacted.filter(r => r.rating === '🩷')),
     feelings: top(tally(reacted.flatMap(r => r.feelings.map(f => f.toLowerCase()))), 8),
     rewatches: rewatches.map(m => ({ key: m.key, title: m.title })),

@@ -1,5 +1,5 @@
 import { ItemView, moment, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
-import { compared, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type Period, type ReactionEvent, type WatchEvent } from './insights-data'
+import { compared, daysWith, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type DayLink, type DaysSpent, type Period, type ReactionEvent, type WatchEvent } from './insights-data'
 import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
 import { artistsOf, type PlexItem } from './notes'
@@ -396,6 +396,16 @@ export class RecommendView extends ItemView {
     if (sub) metric.createDiv({ cls: 'pmn-dash-metric-sub', text: sub })
   }
 
+  /** Every day your daily notes link a media note in Related (a day you watched, read or played it). */
+  private pmnDays(): DayLink[] {
+    const notes = new Map(noteEntries(this.app, this.pmnPlugin.settings).map(n => [n.path, n]))
+    const sync = new PlexSync(this.app, this.pmnPlugin.settings, () => this.pmnPlugin.saveSettings())
+    return sync.relatedDays().flatMap(({ day, path }) => {
+      const note = notes.get(path)
+      return note ? [{ day, path, title: note.title, group: note.group }] : []
+    })
+  }
+
   /** Every reaction in your notes. */
   private pmnReactions(): ReactionEvent[] {
     const settings = this.pmnPlugin.settings
@@ -443,14 +453,24 @@ export class RecommendView extends ItemView {
     if (this.pmnHistoryState) el.createDiv({ cls: 'pmn-dash-note', text: this.pmnHistoryState })
 
     const notes = this.pmnHistory?.notes ?? new Map<string, TFile>()
-    const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback)
+    const days = this.pmnDays()
+    const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days)
+    // Books and games: the days your daily notes link them, and those you reacted to then.
+    const withReacted = (spent: DaysSpent[], reacted: ReactionEvent[]) => [
+      ...spent.map(d => ({ title: d.title, path: d.path, detail: `${d.days} day${d.days === 1 ? '' : 's'}${reacted.find(r => r.path === d.path)?.rating ? ` · ${reacted.find(r => r.path === d.path)!.rating}` : ''}` })),
+      ...reacted.filter(r => !spent.some(d => d.path === r.path)).map(r => ({ title: r.title, path: r.path, detail: r.rating })),
+    ]
+    const books = withReacted(s.bookDays, s.books)
+    const games = withReacted(s.gameDays, s.games)
+    const readingDays = daysWith(days, period, 'book')
+    const playingDays = daysWith(days, period, 'game')
     const metrics = el.createDiv('pmn-dash-metrics')
     const viewings = s.movies.reduce((n, m) => n + m.times, 0)
     this.pmnMetric(metrics, 'Movies', String(s.movies.length), viewings > s.movies.length ? `${viewings} viewings` : undefined)
     this.pmnMetric(metrics, 'TV', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
     this.pmnMetric(metrics, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
-    this.pmnMetric(metrics, 'Books', String(s.books.length), 'reacted to')
-    this.pmnMetric(metrics, 'Games', String(s.games.length), 'reacted to')
+    this.pmnMetric(metrics, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
+    this.pmnMetric(metrics, 'Games', String(games.length), `${playingDays} day${playingDays === 1 ? '' : 's'} of playing`)
     this.pmnMetric(metrics, 'Reactions', String(s.reactions))
 
     const grid = el.createDiv('pmn-dash-grid')
@@ -463,7 +483,8 @@ export class RecommendView extends ItemView {
       ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
       ...s.topSongs.map(([name, n]) => ({ title: name, detail: `×${n}` })),
     ], 'No songs then.')
-    this.pmnListCard(grid, 'Books and games', [...s.books, ...s.games].map(r => ({ title: r.title, path: r.path, detail: r.rating })), 'No books or games reacted to then.')
+    this.pmnListCard(grid, 'Books', books, 'No books in your daily notes or reactions then.')
+    this.pmnListCard(grid, 'Games', games, 'No games in your daily notes or reactions then.')
     this.pmnListCard(grid, 'Rewatched', s.rewatches.map(m => ({ title: m.title, path: pathOf(m.key) })), 'No rewatches then.')
   }
 
@@ -555,6 +576,13 @@ export class RecommendView extends ItemView {
     this.pmnMetric(metrics, 'Movies', String(now.movies), compared(now.movies, before.movies))
     this.pmnMetric(metrics, 'Episodes', String(now.episodes), compared(now.episodes, before.episodes))
     this.pmnMetric(metrics, 'Songs played', String(now.songs), compared(now.songs, before.songs))
+    // Books and games, from the days your daily notes link them.
+    const days = this.pmnDays()
+    for (const [group, label] of [['book', 'Days reading'], ['game', 'Days playing']] as const) {
+      const a = daysWith(days, thisWeek, group)
+      const b = daysWith(days, lastWeek, group)
+      this.pmnMetric(metrics, label, String(a), compared(a, b))
+    }
 
     // Where things stand, from your notes' statuses.
     const counts = new Map<string, { all: number, month: number }>()

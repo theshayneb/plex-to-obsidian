@@ -1167,6 +1167,29 @@ export class PlexSync {
     return { events, notes: this.watchNotes().notes }
   }
 
+  /**
+   * Every link in your daily notes' Related property (`settings.dailyRelated`) to a note: the day
+   * (from the daily note's name, in the daily notes' format) and the note linked.
+   */
+  relatedDays(): { day: string, path: string }[] {
+    const name = this.settings.dailyRelated || 'Related'
+    const { folder, format } = this.dailyNotes()
+    const parse = moment as unknown as (input: string, format: string, strict: boolean) => { isValid(): boolean, format(f: string): string }
+    const out: { day: string, path: string }[] = []
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (folder ? !file.path.startsWith(`${normalizePath(folder)}/`) : file.path.includes('/')) continue
+      const date = parse(file.basename, format, true)
+      if (!date.isValid()) continue
+      const day = date.format('YYYY-MM-DD')
+      for (const link of this.app.metadataCache.getFileCache(file)?.frontmatterLinks ?? []) {
+        if (link.key !== name && !link.key.startsWith(`${name}.`)) continue
+        const target = this.app.metadataCache.getFirstLinkpathDest(link.link.split('#')[0], file.path)
+        if (target) out.push({ day, path: target.path })
+      }
+    }
+    return out
+  }
+
   /** How long movies and episodes are, in minutes, by rating key (asked of Plex a few at a time, kept while Obsidian runs). */
   async lengths(keys: string[]): Promise<Map<string, number>> {
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)

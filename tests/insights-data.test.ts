@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compared, monthPeriod, parseReaction, summarize, watchEvents, weekNumbers, weeks, type ReactionEvent } from '../src/insights-data'
+import { compared, daysSpent, daysWith, monthPeriod, parseReaction, summarize, watchEvents, weekNumbers, weeks, type ReactionEvent } from '../src/insights-data'
 
 const at = (y: number, m: number, d: number, h = 20) => Math.floor(new Date(y, m - 1, d, h).getTime() / 1000)
 
@@ -51,5 +51,24 @@ describe('insights', () => {
     expect(weekNumbers(events, lastWeek, minutes)).toEqual({ hours: 0.8, movies: 0, episodes: 1, songs: 0 })
     expect(compared(2, 0.8, ' h')).toBe('1.2 h more than last week')
     expect(compared(1, 1)).toBe('the same as last week')
+  })
+})
+
+describe('days from daily notes', () => {
+  it('counts the days your daily notes link a book or game', () => {
+    const links = [
+      { day: '2026-10-01', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2026-10-02', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2026-10-02', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2026-10-02', path: 'Books/Emma.md', title: 'Emma', group: 'book' as const },
+      { day: '2026-09-30', path: 'Games/Hades.md', title: 'Hades', group: 'game' as const },
+    ]
+    const october = monthPeriod(2026, 9)
+    expect(daysSpent(links, october, 'book')).toEqual([
+      { path: 'Books/Dune.md', title: 'Dune', days: 2, last: '2026-10-02' },
+      { path: 'Books/Emma.md', title: 'Emma', days: 1, last: '2026-10-02' },
+    ])
+    expect(daysWith(links, october, 'book')).toBe(2)
+    expect(daysWith(links, october, 'game')).toBe(0)
   })
 })

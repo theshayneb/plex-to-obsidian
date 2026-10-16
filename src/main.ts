@@ -10,6 +10,7 @@ import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
 import { displayName, ratingKeyFromLink, type PlexItem } from './notes'
 import { PlexSync } from './sync'
+import { DEFAULT_TAGS } from './properties'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
@@ -297,6 +298,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const list = (value: unknown): string[] => (Array.isArray(value) ? value : value ? [value] : []).map(String)
     const rating: unknown = fm[names.rating]
+    const typeTags = new Set([...Object.values(DEFAULT_TAGS), 'song', ...Object.values(this.settings.libraries).map(lib => lib.values.tag)].filter(Boolean).map(t => t.replace(/^#/, '').toLowerCase()))
     return new Promise(resolve => {
       new ReactionModal(this.app, {
         title: file.basename,
@@ -307,7 +309,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         // Your list of themes; without one, the themes your notes use.
         themes: this.settings.reactionThemes.length ? this.settings.reactionThemes : (vaultPropertyValues(this.app).get(names.themes.toLowerCase()) ?? []).slice(0, 40),
         tags: this.settings.reactionTags,
-        has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags).map(t => t.replace(/^#/, '')) },
+        // Type tags (movie, tv_show, song…) say what it is, not how it felt: not shown.
+        has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags).map(t => t.replace(/^#/, '')).filter(t => !typeTags.has(t.toLowerCase())) },
       }, answer => {
         if (typeof answer === 'object') {
           void sync.addReactionTo(file, answer.reaction).then(() => new Notice(`Reaction added to ${file.basename}`), err => new Notice(`Couldn't add the reaction: ${errorMessage(err)}`))

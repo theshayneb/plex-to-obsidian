@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.133] - 2026-10-17
+
+- Reaction pop-up: the tags that only say what something is (movie, tv_show, documentary, music or song, book, video_game, and each library's own tag) aren't shown among the tags any more. They stay in the note as they are.
+
 ## [0.0.132] - 2026-10-17
 
 - Syncs ask "why" too: when a sync is about to make a new note (with "Ask before changes" on), the pop-up has a Why line to type your reason in, as "Add a movie, show, game or book" does. Leave it empty to skip it; whatever you type goes in the new note's Why property.

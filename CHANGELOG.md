@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.127] - 2026-10-17
+
+- Worth a review: the kinds of media (a movie, a TV show, a song, a book, a game) are back in one "Worth a few words" card beside "Just finished", one section each, still with their own buttons.
+
 ## [0.0.126] - 2026-10-16
 
 - Bedtime shows (Settings, under the daily notes settings): episodes of the shows you list (to begin with Dilbert, Mission Hill and Futurama) watched between the times you set (to begin with 10pm and 7am) aren't counted anywhere: not in daily notes or their Related links, not in the dashboard's Insights and Habits, and not in what you just finished. Watched at any other time, they count as usual. Change the shows and the times whenever you like.

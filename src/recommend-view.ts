@@ -537,25 +537,25 @@ export class RecommendView extends ItemView {
       })
     }
 
-    // One of each kind (a movie, a TV show, a song, a book, a game), each with its own buttons.
+    // One card beside it: one of each kind (a movie, a TV show, a song, a book, a game), each with its own buttons.
+    const card = grid.createDiv('pmn-card')
+    card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
     const candidates = this.pmnReviewCandidates()
     if (!candidates.length) {
-      const card = grid.createDiv('pmn-card')
-      card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
       card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: everything you rated 🩷 or 💣 has a few words.' })
       return
     }
     const KINDS: [string, string][] = [['movie', 'A movie'], ['tv', 'A TV show'], ['documentary', 'A documentary'], ['music', 'A song'], ['book', 'A book'], ['game', 'A game']]
     for (const [kind, label] of KINDS) {
       const ofKind = candidates.filter(c => c.kind === kind)
-      if (ofKind.length) this.pmnReviewCard(grid, label, kind, ofKind)
+      if (ofKind.length) this.pmnReviewCard(card, label, kind, ofKind)
     }
   }
 
   /** One thing you rated 🩷 or 💣 but haven't written about, of one kind. */
-  private pmnReviewCard(grid: HTMLElement, label: string, kind: string, candidates: { path: string, title: string, level: number }[]): void {
-    const card = grid.createDiv('pmn-card')
-    card.createDiv({ cls: 'pmn-card-title', text: `Worth a few words: ${label.toLowerCase()}` })
+  private pmnReviewCard(parent: HTMLElement, label: string, kind: string, candidates: { path: string, title: string, level: number }[]): void {
+    const card = parent.createDiv('pmn-review-kind')
+    card.createDiv({ cls: 'pmn-review-kind-label', text: label })
     const pick = candidates[(this.pmnReviewAt.get(kind) ?? 0) % candidates.length]
     const text = card.createDiv('pmn-review')
     this.pmnLink(text.createDiv('pmn-review-title'), pick.title, pick.path)

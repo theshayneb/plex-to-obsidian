@@ -753,3 +753,18 @@
     padding: var(--size-4-1);
   }
 }
+
+/* Worth a review: one section per kind of media, inside one card. */
+.pmn-review-kind + .pmn-review-kind {
+  margin-top: var(--size-4-3);
+  padding-top: var(--size-4-3);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.pmn-review-kind-label {
+  font-size: var(--font-ui-smaller);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: var(--size-4-1);
+}

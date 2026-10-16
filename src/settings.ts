@@ -4,6 +4,7 @@ import { cleanOmdbKey } from './discover-data'
 import { testGoogleBooks, testOmdbKey } from './discover'
 import { steamGridCovers } from './steamgriddb'
 import { testLastfmKey } from './lastfm'
+import { wordList } from './reactions'
 import {
   DEFAULT_FILE_NAMES,
   DEFAULT_FOLDERS,
@@ -84,6 +85,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     this.displaySetup(this.section(containerEl, 'setup', 'Connections', 'Plex, Steam and the other sources, with a test for each.'))
     this.displaySyncing(this.section(containerEl, 'syncing', 'Syncing', 'What a sync may change in your notes, and when.'))
     this.displayNewNotes(this.section(containerEl, 'general', 'New notes', 'Genres, file names and images, in every library.'))
+    this.displayReactions(this.section(containerEl, 'reactions', 'Reactions', 'How you felt about what you finished: the words to tap, and where they go.'))
     this.displayLibraries(containerEl)
     this.displayRemembered(this.section(containerEl, 'remembered', 'Remembered choices', 'What the plugin remembers from your answers in pop-ups, to forget.'))
   }
@@ -437,6 +439,38 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             await this.save()
           })
       })
+  }
+
+  private displayReactions(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+    new Setting(containerEl)
+      .setName('Point out what you finish')
+      .setDesc('After each background update, a notice lists the movies and shows (once every episode is watched) you finished lately, to react to. "React to what you just finished" and "React to this note" work either way.')
+      .addToggle(toggle => toggle.setValue(settings.reactionInbox).onChange(async value => {
+        settings.reactionInbox = value
+        await this.save()
+      }))
+    const words = (name: string, desc: string, get: () => string[], set: (words: string[]) => void) => new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc)
+      .addTextArea(text => {
+        text.inputEl.rows = 6
+        text.setValue(get().join('\n')).onChange(async value => {
+          set(wordList(value))
+          await this.save()
+        })
+      })
+    words('Feelings to choose from', 'One per line. Taking one out only stops it being offered: notes that have it keep it.', () => settings.feelings, list => { settings.feelings = list })
+    words('Tags to choose from', 'Your own tags offered with them (added to the note\'s tags), one per line.', () => settings.reactionTags, list => { settings.reactionTags = list })
+    const property = (name: string, get: () => string, set: (value: string) => void, fallback: string) => new Setting(containerEl)
+      .setName(name)
+      .addText(text => text.setPlaceholder(fallback).setValue(get()).onChange(async value => {
+        set(value.trim() || fallback)
+        await this.save()
+      }))
+    property('Reactions property', () => settings.reactionsProperty, value => { settings.reactionsProperty = value }, 'Reactions')
+    property('Feelings property', () => settings.feelingsProperty, value => { settings.feelingsProperty = value }, 'Feelings')
+    property('Themes property', () => settings.themesProperty, value => { settings.themesProperty = value }, 'Themes')
   }
 
   private displaySyncing(containerEl: HTMLElement): void {

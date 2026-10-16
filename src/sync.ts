@@ -37,6 +37,7 @@ import {
   trackArtist,
 } from './notes'
 import { lookUpBook } from './discover'
+import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
 import { episodeEntry, episodesByDay, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
@@ -1083,6 +1084,108 @@ export class PlexSync {
    * time, for up to a week. `wholeWeek` (the command) looks through the last week again, whatever
    * was added before. Returns the daily notes changed.
    */
+  /**
+   * Each show's and movie's note by rating key (through its link, or a tie), and whether a show or
+   * movie is left out: set to "Skip every time" (by key, or by name in its kind of library), or its
+   * note ignored as unmatched.
+   */
+  private watchNotes(): { notes: Map<string, TFile>, ignoredShow: (key: string, title: string) => boolean, ignoredMovie: (key: string, title: string) => boolean } {
+    const notes = new Map<string, TFile>()
+    const video = Object.values(this.settings.libraries).filter(lib => lib.target === 'tv' || lib.target === 'movie' || lib.target === 'documentary')
+    const linkNames = [...new Set(video.flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = video.map(lib => normalizePath(lib.folder))
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      for (const name of linkNames) {
+        const key = ratingKeyFromLink(frontmatter[name])
+        if (key && !notes.has(key)) notes.set(key, file)
+      }
+    }
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      const file = this.app.vault.getAbstractFileByPath(merged.path)
+      if (file instanceof TFile) notes.set(key, file)
+    }
+    const ignoredNames = (targets: string[]) => {
+      const titles = new Set(Object.values(this.settings.libraries).filter(lib => targets.includes(lib.target)).map(lib => lib.title))
+      return Object.values(this.settings.ignored).filter(entry => titles.has(entry.library)).map(entry => entry.name.toLowerCase())
+    }
+    const ignored = (names: string[]) => (key: string, title: string): boolean => {
+      if (key && key in this.settings.ignored) return true
+      const name = title.toLowerCase()
+      if (names.some(n => n === name || n.startsWith(`${name} (`))) return true
+      const note = notes.get(key)
+      return !!note && this.settings.unmatchedIgnored.includes(note.path)
+    }
+    return { notes, ignoredShow: ignored(ignoredNames(['tv'])), ignoredMovie: ignored(ignoredNames(['movie', 'documentary'])) }
+  }
+
+  /**
+   * Movies and shows you finished in the last two weeks (a show once every episode is watched),
+   * that have a note and that you haven't reacted to or set aside, newest first.
+   */
+  async finishedItems(): Promise<Finished[]> {
+    if (!plexReady(this.settings)) return []
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const now = Math.floor(Date.now() / 1000)
+    const history = await plex.history(now - 14 * 86400)
+    const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
+    const done = (key: string, at: number) => finishedKey(key, moment.unix(at).format('YYYY-MM-DD')) in this.settings.reactionsDone
+    const out: Finished[] = []
+    for (const m of watchedMovies(history)) {
+      const note = notes.get(m.key)
+      if (!note || ignoredMovie(m.key, m.title) || done(m.key, m.viewedAt) || out.some(f => f.key === m.key)) continue
+      out.push({ key: m.key, title: note.basename, kind: 'movie', viewedAt: m.viewedAt, path: note.path })
+    }
+    const lastSeen = new Map<string, number>()
+    for (const e of watchedEpisodes(history)) {
+      if (e.showKey && !ignoredShow(e.showKey, e.show)) lastSeen.set(e.showKey, Math.max(lastSeen.get(e.showKey) ?? 0, e.viewedAt))
+    }
+    for (const [key, at] of lastSeen) {
+      const note = notes.get(key)
+      if (!note || done(key, at)) continue
+      // Finished: every episode Plex has is watched.
+      const show = await plex.item(key).catch(() => null)
+      if (!show?.leafCount || (show.viewedLeafCount ?? 0) < show.leafCount) continue
+      out.push({ key, title: note.basename, kind: 'show', viewedAt: at, path: note.path })
+    }
+    return out.sort((a, b) => b.viewedAt - a.viewedAt)
+  }
+
+  /** Remembers a finishing as answered or set aside, so it isn't offered again (forgetting those over a month old). */
+  async setFinishedDone(item: Finished): Promise<void> {
+    const cutoff = Date.now() - 31 * 86400 * 1000
+    for (const [key, at] of Object.entries(this.settings.reactionsDone)) if (at < cutoff) delete this.settings.reactionsDone[key]
+    this.settings.reactionsDone[finishedKey(item.key, moment.unix(item.viewedAt).format('YYYY-MM-DD'))] = Date.now()
+    await this.saveSettings()
+  }
+
+  /** The properties a note's reactions go in: the settings' names, and its library's rating property. */
+  reactionProperties(file: TFile): ReactionProperties {
+    const lib = Object.values(this.settings.libraries).find(l => file.path.startsWith(`${normalizePath(l.folder)}/`))
+    const ratingOf = (l: LibrarySetting | undefined) => l?.properties.find(m => m.source === 'userRatingEmoji' && m.name.trim())?.name.trim()
+    const rating = ratingOf(lib) ?? Object.values(this.settings.libraries).map(ratingOf).find(Boolean) ?? 'Rating'
+    return { reactions: this.settings.reactionsProperty || 'Reactions', feelings: this.settings.feelingsProperty || 'Feelings', themes: this.settings.themesProperty || 'Themes', rating }
+  }
+
+  /** Adds a reaction to a note (nothing in it is removed; a rating picked becomes its rating, in the star scale). */
+  async addReactionTo(file: TFile, reaction: Reaction): Promise<void> {
+    const names = this.reactionProperties(file)
+    await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => addReaction(fm, reaction, names))
+    // A rating given here is in the star scale: the note doesn't need converting.
+    if (reaction.rating) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const lib = Object.values(this.settings.libraries).find(l => file.path.startsWith(`${normalizePath(l.folder)}/`))
+      const keys = [
+        ...linkPropertyNames(lib?.properties ?? []).map(name => ratingKeyFromLink(fm[name])),
+        ...Object.entries(this.settings.merged).filter(([, m]) => m.path === file.path).map(([key]) => key),
+        lib?.target === 'book' ? `book:${file.path}` : null,
+      ]
+      for (const key of keys) if (key) this.reviewRating(key)
+    }
+    await this.saveSettings()
+  }
+
   async writeDailyEpisodes(wholeWeek = false): Promise<string[]> {
     if (!this.settings.dailyEpisodes || !plexReady(this.settings)) return []
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
@@ -1095,41 +1198,10 @@ export class PlexSync {
     const since = wholeWeek ? now - 7 * 86400 : Math.max(this.settings.dailyEpisodesSince || today, now - 7 * 86400)
     const { folder, format } = this.dailyNotes()
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
-    // Each show's and movie's note, through its link (or a tie).
-    const shows = new Map<string, TFile>()
-    const video = Object.values(this.settings.libraries).filter(lib => lib.target === 'tv' || lib.target === 'movie' || lib.target === 'documentary')
-    const linkNames = [...new Set(video.flatMap(lib => linkPropertyNames(lib.properties)))]
-    const folders = video.map(lib => normalizePath(lib.folder))
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-      for (const name of linkNames) {
-        const key = ratingKeyFromLink(frontmatter[name])
-        if (key && !shows.has(key)) shows.set(key, file)
-      }
-    }
-    for (const [key, merged] of Object.entries(this.settings.merged)) {
-      const file = this.app.vault.getAbstractFileByPath(merged.path)
-      if (file instanceof TFile) shows.set(key, file)
-    }
-    // Shows and movies set to "Skip every time" (by key, or by name in their kind of library) and
-    // those whose note is ignored as unmatched are left out.
-    const ignoredNames = (targets: string[]) => {
-      const titles = new Set(Object.values(this.settings.libraries).filter(lib => targets.includes(lib.target)).map(lib => lib.title))
-      return Object.values(this.settings.ignored).filter(entry => titles.has(entry.library)).map(entry => entry.name.toLowerCase())
-    }
-    const ignored = (key: string, title: string, names: string[]): boolean => {
-      if (key && key in this.settings.ignored) return true
-      const name = title.toLowerCase()
-      if (names.some(n => n === name || n.startsWith(`${name} (`))) return true
-      const note = shows.get(key)
-      return !!note && this.settings.unmatchedIgnored.includes(note.path)
-    }
-    const showNames = ignoredNames(['tv'])
-    const movieNames = ignoredNames(['movie', 'documentary'])
+    const { notes: shows, ignoredShow, ignoredMovie } = this.watchNotes()
     const history = await plex.history(since)
-    const episodes = watchedEpisodes(history).filter(e => !ignored(e.showKey, e.show, showNames))
-    const movies = this.settings.dailyRelated ? watchedMovies(history).filter(m => !ignored(m.key, m.title, movieNames)) : []
+    const episodes = watchedEpisodes(history).filter(e => !ignoredShow(e.showKey, e.show))
+    const movies = this.settings.dailyRelated ? watchedMovies(history).filter(m => !ignoredMovie(m.key, m.title)) : []
     const episodeDays = episodesByDay(episodes, pathOf)
     const movieDays = moviesByDay(movies, pathOf)
     const changed: string[] = []

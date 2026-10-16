@@ -628,3 +628,47 @@
   cursor: pointer;
   font-weight: var(--font-semibold);
 }
+
+/* Reactions: "How was it?" and "Just finished". */
+.pmn-reaction-section {
+  margin-bottom: var(--size-4-3);
+}
+
+.pmn-reaction-label {
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--size-4-1);
+}
+
+.pmn-reaction-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1);
+}
+
+.pmn-reaction-chip {
+  border-radius: var(--radius-l);
+}
+
+.pmn-reaction-chip.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.pmn-reaction-chip.is-kept {
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.pmn-reaction-text {
+  width: 100%;
+}
+
+.pmn-reaction-item {
+  display: block;
+  width: 100%;
+  height: auto;
+  text-align: left;
+  margin-bottom: var(--size-4-1);
+  padding: var(--size-4-2);
+}

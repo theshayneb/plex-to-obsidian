@@ -1403,6 +1403,38 @@ describe('PlexSync', () => {
     expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([])
   })
 
+  it('lists movies and fully watched shows you finished, to react to, and adds a reaction to the note', async () => {
+    const at = Math.floor(Date.now() / 1000) - 3600
+    const { app, frontmatter } = makeApp({
+      'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Rating: '⭐⭐⭐', Themes: ['loyalty'] },
+      'Media/TV Shows/Lost (2004).md': { Link: 'http://plex:32400/library/metadata/88' },
+      'Media/TV Shows/Fargo (2014).md': { Link: 'http://plex:32400/library/metadata/77' },
+    })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 2: newLibrary('TV Shows', 'show', 'tv') }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at, accountID: 1 },
+      { type: 'episode', title: 'The End', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 6, index: 17, viewedAt: at + 60, accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Fargo', grandparentKey: '/library/metadata/77', parentIndex: 1, index: 1, viewedAt: at + 120, accountID: 1 },
+    ] } })
+    responses.set('/library/metadata/88', { MediaContainer: { Metadata: [{ ratingKey: '88', type: 'show', title: 'Lost', leafCount: 121, viewedLeafCount: 121 }] } })
+    responses.set('/library/metadata/77', { MediaContainer: { Metadata: [{ ratingKey: '77', type: 'show', title: 'Fargo', leafCount: 51, viewedLeafCount: 1 }] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    const items = await sync.finishedItems()
+    expect(items.map(i => [i.title, i.kind])).toEqual([['Lost (2004)', 'show'], ['Arrival (2016)', 'movie']])
+    // Answered (or set aside): not listed again.
+    await sync.setFinishedDone(items[1])
+    expect((await sync.finishedItems()).map(i => i.title)).toEqual(['Lost (2004)'])
+
+    const arrival = app.vault.getAbstractFileByPath('Media/Movies/Arrival (2016).md')
+    settings.libraries[1].properties.push({ name: 'Rating', source: 'userRatingEmoji' })
+    await sync.addReactionTo(arrival as never, { date: '2026-10-16', rating: '🩷', feelings: ['moved'], themes: ['loyalty', 'chosen family'], tags: ['comfort'], text: 'so good' })
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')).toMatchObject({
+      Reactions: ['2026-10-16 · 🩷 · moved · so good'], Feelings: ['moved'], Themes: ['loyalty', 'chosen family'], tags: ['comfort'], Rating: '🩷',
+    })
+    expect(settings.ratingsReviewed['1']).toBe(true)
+  })
+
   it('leaves ignored shows out of daily notes', async () => {
     const day = new Date()
     day.setDate(day.getDate() - 1)

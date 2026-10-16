@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.121] - 2026-10-16
+
+- Reactions: say how you felt about something in a few taps. "React to this note…" works on any note (books, games, songs, rewatches); "React to what you just finished…" lists the movies and shows (once every episode is watched) you finished in the last two weeks. After the background update, a notice tells you when something is waiting; click it to answer.
+  - The pop-up offers a rating (💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷), your feelings, the themes you already use in your notes, your own tags (insightful, inspirational, comfort, funny…) and a few words of your own. Everything is optional.
+  - Each answer adds one line to the note's Reactions property ("2026-10-16 · 🩷 · moved, happy · cried at the end"), and adds the feelings to Feelings, the themes to Themes and the tags to tags. Nothing already in the note is removed; a rating you pick becomes the note's rating.
+  - Settings → Reactions: the feelings and tags to choose from (taking one out only stops it being offered), the property names, and whether to point out what you finish. "Not now" keeps something in the list; "Don't ask about this" removes it.
+
 ## [0.0.120] - 2026-10-15
 
 - A song's play count in a note is never offered a lower number any more: syncs and checks only suggest Plex's or Last.fm's count when it's higher than the note's. (Before, only the plain Plex update held back; the Plex/Last.fm choice and checks still offered lower counts.)

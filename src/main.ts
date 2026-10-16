@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from 'obsidian'
+import { moment, Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
 import { CheckModal, checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
@@ -12,6 +12,8 @@ import { displayName, ratingKeyFromLink, type PlexItem } from './notes'
 import { PlexSync } from './sync'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
+import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
+import { vaultPropertyValues } from './property-suggest'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -101,6 +103,25 @@ export default class PlexMediaNotesPlugin extends Plugin {
           this.plexSyncRunning = false
           this.syncs.clear()
         }
+      },
+    })
+
+    this.addCommand({
+      id: 'react-to-note',
+      name: 'React to this note…',
+      checkCallback: checking => {
+        const file = this.app.workspace.getActiveFile()
+        if (!file || file.extension !== 'md') return false
+        if (!checking) void this.reactTo(file, moment.unix(Math.floor(Date.now() / 1000)).format('YYYY-MM-DD'))
+        return true
+      },
+    })
+
+    this.addCommand({
+      id: 'just-finished',
+      name: 'React to what you just finished…',
+      callback: () => {
+        void this.openFinished()
       },
     })
 
@@ -212,6 +233,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (days.length) console.log('Media Manager: episodes added to daily notes', days)
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
+      void this.pointOutFinished()
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
@@ -220,6 +242,74 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.plexSyncRunning = false
       this.syncs.clear()
     }
+  }
+
+  /** Finishings already pointed out since Obsidian started (not pointed out again until it restarts). */
+  private readonly pointedOut = new Set<string>()
+
+  /** A notice, when something you finished is waiting for your reaction; clicking it opens the list. */
+  private async pointOutFinished(): Promise<void> {
+    if (!this.settings.reactionInbox) return
+    try {
+      const items = await this.newSync().finishedItems()
+      const fresh = items.filter(item => !this.pointedOut.has(`${item.key}@${item.viewedAt}`))
+      if (!fresh.length) return
+      items.forEach(item => this.pointedOut.add(`${item.key}@${item.viewedAt}`))
+      const notice = new Notice(`${items.length === 1 ? `You finished ${items[0].title}` : `${items.length} things you finished are waiting`}: click to say how ${items.length === 1 ? 'it' : 'they'} went`, 15000)
+      notice.messageEl.addEventListener('click', () => void this.openFinished())
+    } catch (err) {
+      console.warn('Media Manager: looking for what you finished failed', err)
+    } finally {
+      this.syncs.clear()
+    }
+  }
+
+  /** "Just finished": what you finished lately, to react to. */
+  private async openFinished(): Promise<void> {
+    if (!plexReady(this.settings)) {
+      new Notice('Connect to Plex in the plugin settings first')
+      return
+    }
+    try {
+      const sync = this.newSync()
+      const items = await sync.finishedItems()
+      new FinishedModal(this.app, items, async item => {
+        const file = this.app.vault.getAbstractFileByPath(item.path)
+        if (!(file instanceof TFile)) return 'never'
+        const answer = await this.reactTo(file, moment.unix(item.viewedAt).format('YYYY-MM-DD'), true)
+        if (answer !== 'later') await sync.setFinishedDone(item)
+        return answer
+      }).open()
+    } catch (err) {
+      new Notice(`Couldn't read what you finished: ${errorMessage(err)}`)
+    } finally {
+      this.syncs.clear()
+    }
+  }
+
+  /** The reaction pop-up for a note; a reaction given is added to it. */
+  private reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
+    const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
+    const names = sync.reactionProperties(file)
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const list = (value: unknown): string[] => (Array.isArray(value) ? value : value ? [value] : []).map(String)
+    const rating: unknown = fm[names.rating]
+    return new Promise(resolve => {
+      new ReactionModal(this.app, {
+        title: file.basename,
+        date,
+        rating: typeof rating === 'string' ? rating.trim() : undefined,
+        feelings: this.settings.feelings,
+        themes: (vaultPropertyValues(this.app).get(names.themes.toLowerCase()) ?? []).slice(0, 40),
+        tags: this.settings.reactionTags,
+        has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags) },
+      }, answer => {
+        if (typeof answer === 'object') {
+          void sync.addReactionTo(file, answer.reaction).then(() => new Notice(`Reaction added to ${file.basename}`), err => new Notice(`Couldn't add the reaction: ${errorMessage(err)}`))
+        }
+        resolve(answer)
+      }, inbox).open()
+    })
   }
 
   /** Episodes watched in Plex, added to their days' daily notes (when switched on); the notes changed. */

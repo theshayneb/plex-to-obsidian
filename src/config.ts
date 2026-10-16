@@ -1,4 +1,5 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
+import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS } from './reactions'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
 import {
   DEFAULT_TAGS,
@@ -84,6 +85,16 @@ export interface PlexNotesSettings {
   dailyQuote: string
   /** The daily note property every movie and show watched that day is linked in (empty: none). */
   dailyRelated: string
+  /** Reactions: the feelings and your own tags offered, and the properties they go in. */
+  feelings: string[]
+  reactionTags: string[]
+  reactionsProperty: string
+  feelingsProperty: string
+  themesProperty: string
+  /** Point out (in a notice) movies and shows you finished, to react to. */
+  reactionInbox: boolean
+  /** Finishings answered or set aside (`finishedKey` → when), not asked about again. */
+  reactionsDone: Record<string, number>
   /** Daily notes' folder and file name format (moment.js); empty uses Obsidian's Daily notes settings. */
   dailyFolder: string
   dailyFormat: string
@@ -192,6 +203,13 @@ export function defaultSettings(): PlexNotesSettings {
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
     dailyRelated: 'Related',
+    feelings: [...DEFAULT_FEELINGS],
+    reactionTags: [...DEFAULT_REACTION_TAGS],
+    reactionsProperty: 'Reactions',
+    feelingsProperty: 'Feelings',
+    themesProperty: 'Themes',
+    reactionInbox: true,
+    reactionsDone: {},
     dailyFolder: '',
     dailyFormat: '',
     dailyEpisodesSince: 0,
@@ -330,7 +348,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -347,6 +365,9 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   settings.ratingsSeen = { ...saved.ratingsSeen }
   settings.ratingsReviewed = { ...saved.ratingsReviewed }
   if (Array.isArray(saved.unmatchedIgnored)) settings.unmatchedIgnored = saved.unmatchedIgnored.map(String)
+  if (Array.isArray(saved.feelings)) settings.feelings = saved.feelings.map(String)
+  if (Array.isArray(saved.reactionTags)) settings.reactionTags = saved.reactionTags.map(String)
+  if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)

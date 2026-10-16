@@ -540,6 +540,35 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
+      .setName('Bedtime shows')
+      .setDesc('Episodes of these shows watched between these times (someone else\'s bedtime viewing) aren\'t counted anywhere: not in daily notes, the dashboard\'s insights and habits, or what you just finished. One show per line; watched at other times, they count as usual.')
+      .addTextArea(text => {
+        text.inputEl.rows = 4
+        text.setValue(settings.bedtimeShows.join('\n')).onChange(async value => {
+          settings.bedtimeShows = wordList(value)
+          await this.save()
+        })
+      })
+    new Setting(containerEl)
+      .setClass('pmn-indent')
+      .setName('Between')
+      .setDesc('24-hour times, such as 22:00 and 07:00 (overnight is fine).')
+      .addText(text => text
+        .setPlaceholder('22:00')
+        .setValue(settings.bedtimeFrom)
+        .onChange(async value => {
+          settings.bedtimeFrom = value.trim()
+          await this.save()
+        }))
+      .addText(text => text
+        .setPlaceholder('07:00')
+        .setValue(settings.bedtimeTo)
+        .onChange(async value => {
+          settings.bedtimeTo = value.trim()
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Ask before every change')
       .setDesc('Show each new note, and each change to an existing one, in a pop-up to approve, untick or edit first. Checks against sources always ask.')
       .addToggle(toggle => toggle

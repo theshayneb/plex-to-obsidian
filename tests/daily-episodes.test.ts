@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { episodeEntry, episodeLabel, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
+import { inWindow, isListedShow, episodeEntry, episodeLabel, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
 
 const ep = (show: string, season: number, episode: number, title: string, viewedAt: number): WatchedEpisode =>
   ({ show, showKey: show, season, episode, title, viewedAt })
@@ -59,5 +59,22 @@ describe('insertEntries', () => {
     expect(insertEntries(outer, '[!writing] Journaling', [{ lead: '▶️ [[B]]:', parts: ['S01E01 – b'] }], '> >').text.split('\n'))
       .toEqual(['> > >[!writing] Journaling', '>', '> >- ▶️ [[A]]: S01E01 – one', '> >- ▶️ [[B]]: S01E01 – b'])
     expect(insertEntries('# Nothing here', '[!writing] Journaling', [a('x')])).toEqual({ text: '# Nothing here', added: 0, found: false })
+  })
+})
+
+describe('bedtime shows', () => {
+  const at = (h: number, m = 0) => Math.floor(new Date(2026, 9, 16, h, m).getTime() / 1000)
+  it('tells a time in an overnight window, or a daytime one', () => {
+    expect(inWindow(at(23), '22:00', '07:00')).toBe(true)
+    expect(inWindow(at(3, 30), '22:00', '7:00')).toBe(true)
+    expect(inWindow(at(7), '22:00', '07:00')).toBe(false)
+    expect(inWindow(at(20), '22:00', '07:00')).toBe(false)
+    expect(inWindow(at(13), '12:00', '14:00')).toBe(true)
+    expect(inWindow(at(13), 'noon', '14:00')).toBe(false)
+  })
+  it('knows a listed show by name, with or without its year', () => {
+    expect(isListedShow('Futurama', ['Dilbert', 'futurama'])).toBe(true)
+    expect(isListedShow('Futurama (1999)', ['Futurama'])).toBe(true)
+    expect(isListedShow('Futurama Forever', ['Futurama'])).toBe(false)
   })
 })

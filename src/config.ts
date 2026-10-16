@@ -85,6 +85,10 @@ export interface PlexNotesSettings {
   dailyQuote: string
   /** The daily note property every movie and show watched that day is linked in (empty: none). */
   dailyRelated: string
+  /** Shows whose episodes watched between these times aren't counted anywhere (someone else's bedtime viewing). */
+  bedtimeShows: string[]
+  bedtimeFrom: string
+  bedtimeTo: string
   /** Reactions: the feelings and your own tags offered, and the properties they go in. */
   feelings: string[]
   reactionThemes: string[]
@@ -208,6 +212,9 @@ export function defaultSettings(): PlexNotesSettings {
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
     dailyRelated: 'Related',
+    bedtimeShows: ['Dilbert', 'Mission Hill', 'Futurama'],
+    bedtimeFrom: '22:00',
+    bedtimeTo: '07:00',
     feelings: [...DEFAULT_FEELINGS],
     reactionThemes: [...DEFAULT_REACTION_THEMES],
     reactionTags: [...DEFAULT_REACTION_TAGS],
@@ -356,7 +363,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -377,6 +384,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reactionTags)) settings.reactionTags = saved.reactionTags.map(String)
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
+  if (Array.isArray(saved.bedtimeShows)) settings.bedtimeShows = saved.bedtimeShows.map(String)
   if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)
   if (Array.isArray(saved.allowedGenres)) settings.allowedGenres = saved.allowedGenres.map(String)

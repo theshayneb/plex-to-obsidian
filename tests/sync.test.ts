@@ -1435,6 +1435,26 @@ describe('PlexSync', () => {
     expect(settings.ratingsReviewed['1']).toBe(true)
   })
 
+  it('leaves bedtime shows watched at bedtime out of daily notes, but not watched at other times', async () => {
+    const day = new Date()
+    day.setDate(day.getDate() - 1)
+    const evening = new Date(day)
+    evening.setHours(19, 0, 0, 0)
+    const night = new Date(day)
+    night.setHours(23, 30, 0, 0)
+    const daily = `Daily/${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}.md`
+    const { app, texts } = makeApp({ [daily]: {} })
+    texts.set(daily, ['> >[!writing] Journaling', '> >'].join('\n'))
+    const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD' })
+    settings.libraries = { 2: newLibrary('TV Shows', 'show', 'tv') }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'episode', title: 'Space Pilot 3000', grandparentTitle: 'Futurama', grandparentKey: '/library/metadata/91', parentIndex: 1, index: 1, viewedAt: Math.floor(evening.getTime() / 1000), accountID: 1 },
+      { type: 'episode', title: 'The Series Has Landed', grandparentTitle: 'Futurama', grandparentKey: '/library/metadata/91', parentIndex: 1, index: 2, viewedAt: Math.floor(night.getTime() / 1000), accountID: 1 },
+    ] } })
+    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
+    expect(texts.get(daily)!.split('\n')).toEqual(['> >[!writing] Journaling', '> >', '> >- ▶️ [[Futurama]]: S01E01 – Space Pilot 3000'])
+  })
+
   it('leaves ignored shows out of daily notes', async () => {
     const day = new Date()
     day.setDate(day.getDate() - 1)

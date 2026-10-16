@@ -39,7 +39,7 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -1125,6 +1125,14 @@ export class PlexSync {
   }
 
   /**
+   * Whether an episode of this show watched then is someone else's bedtime viewing (one of
+   * `settings.bedtimeShows`, between `bedtimeFrom` and `bedtimeTo`), which isn't counted anywhere.
+   */
+  private bedtime(show: string, at: number): boolean {
+    return isListedShow(show, this.settings.bedtimeShows) && inWindow(at, this.settings.bedtimeFrom, this.settings.bedtimeTo)
+  }
+
+  /**
    * Movies and shows you finished in the last two weeks (a show once every episode is watched),
    * that have a note and that you haven't reacted to or set aside, newest first.
    */
@@ -1143,7 +1151,7 @@ export class PlexSync {
     }
     const lastSeen = new Map<string, number>()
     for (const e of watchedEpisodes(history)) {
-      if (e.showKey && !ignoredShow(e.showKey, e.show)) lastSeen.set(e.showKey, Math.max(lastSeen.get(e.showKey) ?? 0, e.viewedAt))
+      if (e.showKey && !ignoredShow(e.showKey, e.show) && !this.bedtime(e.show, e.viewedAt)) lastSeen.set(e.showKey, Math.max(lastSeen.get(e.showKey) ?? 0, e.viewedAt))
     }
     for (const [key, at] of lastSeen) {
       const note = notes.get(key)
@@ -1166,7 +1174,7 @@ export class PlexSync {
     const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
     // What you said to skip or ignore in syncs and checks is left out here too.
     const events = watchEvents(await plex.history(since, 500, 100_000)).filter(e =>
-      e.kind === 'movie' ? !ignoredMovie(e.key, e.title) : e.kind === 'episode' ? !ignoredShow(e.parent ?? '', e.title) : !(e.key in this.settings.ignored))
+      e.kind === 'movie' ? !ignoredMovie(e.key, e.title) : e.kind === 'episode' ? !ignoredShow(e.parent ?? '', e.title) && !this.bedtime(e.title, e.viewedAt) : !(e.key in this.settings.ignored))
     return { events, notes }
   }
 
@@ -1252,7 +1260,7 @@ export class PlexSync {
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
     const { notes: shows, ignoredShow, ignoredMovie } = this.watchNotes()
     const history = await plex.history(since)
-    const episodes = watchedEpisodes(history).filter(e => !ignoredShow(e.showKey, e.show))
+    const episodes = watchedEpisodes(history).filter(e => !ignoredShow(e.showKey, e.show) && !this.bedtime(e.show, e.viewedAt))
     const movies = this.settings.dailyRelated ? watchedMovies(history).filter(m => !ignoredMovie(m.key, m.title)) : []
     const episodeDays = episodesByDay(episodes, pathOf)
     const movieDays = moviesByDay(movies, pathOf)

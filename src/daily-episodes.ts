@@ -178,3 +178,29 @@ export function insertEntries(text: string, anchor: string, entries: DailyEntry[
   lines.splice(to, 0, ...fresh)
   return { text: added || fixed ? lines.join('\n') : text, added, found: true }
 }
+
+/** Minutes after midnight of "22:00" or "7:30" (null when it isn't a time). */
+function minutesOf(time: string): number | null {
+  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*$/.exec(time)
+  if (!m || Number(m[1]) > 23 || Number(m[2] ?? 0) > 59) return null
+  return Number(m[1]) * 60 + Number(m[2] ?? 0)
+}
+
+/** Whether a time (seconds since 1970, local time) falls between `from` and `to`, across midnight when `from` is later. */
+export function inWindow(at: number, from: string, to: string): boolean {
+  const start = minutesOf(from)
+  const end = minutesOf(to)
+  if (start === null || end === null || start === end) return false
+  const d = new Date(at * 1000)
+  const now = d.getHours() * 60 + d.getMinutes()
+  return start < end ? now >= start && now < end : now >= start || now < end
+}
+
+/** Whether a show is one of these, by name (any case; "Futurama" also covers "Futurama (1999)"). */
+export function isListedShow(title: string, shows: string[]): boolean {
+  const name = title.trim().toLowerCase()
+  return shows.some(s => {
+    const want = s.trim().toLowerCase()
+    return Boolean(want) && (name === want || name.startsWith(`${want} (`))
+  })
+}

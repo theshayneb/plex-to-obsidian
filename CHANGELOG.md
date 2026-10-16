@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.126] - 2026-10-16
+
+- Bedtime shows (Settings, under the daily notes settings): episodes of the shows you list (to begin with Dilbert, Mission Hill and Futurama) watched between the times you set (to begin with 10pm and 7am) aren't counted anywhere: not in daily notes or their Related links, not in the dashboard's Insights and Habits, and not in what you just finished. Watched at any other time, they count as usual. Change the shows and the times whenever you like.
+
 ## [0.0.125] - 2026-10-16
 
 - Media dashboard:

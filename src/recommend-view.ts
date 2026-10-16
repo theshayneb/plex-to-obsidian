@@ -474,11 +474,12 @@ export class RecommendView extends ItemView {
     const notes = this.pmnHistory?.notes ?? new Map<string, TFile>()
     const days = this.pmnDays()
     const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days, key => notes.get(key)?.path)
-    // Books and games: the days your daily notes link them, and those you reacted to then.
-    const withReacted = (spent: DaysSpent[], reacted: ReactionEvent[]) => [
-      ...spent.map(d => ({ title: d.title, path: d.path, detail: `${d.days} day${d.days === 1 ? '' : 's'}${reacted.find(r => r.path === d.path)?.rating ? ` · ${reacted.find(r => r.path === d.path)!.rating}` : ''}` })),
-      ...reacted.filter(r => !spent.some(d => d.path === r.path)).map(r => ({ title: r.title, path: r.path, detail: r.rating })),
-    ]
+    // Books and games: only the days your daily notes link them. A reaction is when you wrote it,
+    // often looking back, not a day you read or played; its rating is shown beside a linked one.
+    const withReacted = (spent: DaysSpent[], reacted: ReactionEvent[]) => spent.map(d => {
+      const rating = reacted.find(r => r.path === d.path)?.rating
+      return { title: d.title, path: d.path, detail: `${d.days} day${d.days === 1 ? '' : 's'}${rating ? ` · ${rating}` : ''}` }
+    })
     const books = withReacted(s.bookDays, s.books)
     const games = withReacted(s.gameDays, s.games)
     const readingDays = daysWith(days, period, 'book')

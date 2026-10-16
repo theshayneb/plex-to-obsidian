@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.141] - 2026-10-16
+
+- Media dashboard, Insights: reacting to something no longer puts it in that month's Books or Games list. Those lists only show what your daily notes link (the days you read or played it), so going through "Worth a few words" from memory doesn't look like reading them today. Reactions still count under Reactions, Favorites and How it felt.
+
 ## [0.0.140] - 2026-10-16
 
 - Media dashboard: every button on the cards now looks the same, at the size "How was it?" had ("Write about it" is no longer coloured), and "Worth a few words" shows its title at the same size as every other title on the cards.

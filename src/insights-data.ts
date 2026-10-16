@@ -148,7 +148,7 @@ export interface PeriodSummary {
   songPlays: number
   topArtists: [string, number][]
   topSongs: [string, number][]
-  /** Books and games you reacted to then (each once). */
+  /** Books and games you reacted to then (each once): for their ratings, not as days read or played. */
   books: ReactionEvent[]
   games: ReactionEvent[]
   /** Books and games your daily notes link then, with the days. */

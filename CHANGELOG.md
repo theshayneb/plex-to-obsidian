@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.148] - 2026-10-17
+
+- Checking books: a year in brackets at the end of a book note's name, as in "In the Valley of the Sun (2017)", is no longer searched for as part of the title, so Open Library finds the book.
+
 ## [0.0.147] - 2026-10-17
 
 - Checking books: a book note linked to Google Books is now looked for on Open Library first (the same title by the same author). When Open Library has it, its details are used and its link is offered in place of the Google Books one, so Google Books' daily allowance isn't needed for it.

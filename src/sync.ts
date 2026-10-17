@@ -2074,12 +2074,14 @@ export class PlexSync {
       const authors = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1'))
       // A name like "Dune by Frank Herbert" is searched for as "Dune", by Frank Herbert, whether or
       // not the note has an author; failing that (say, "Stand by Me"), as the whole name.
-      const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
-      const title = byName ? byName[1] : file.basename
+      // A year in brackets at the end ("In the Valley of the Sun (2017)") isn't part of the title.
+      const name = file.basename.replace(/\s*[([]\d{4}[)\]]\s*$/, '').trim() || file.basename
+      const byName = /^(.+?)\s+by\s+(.+)$/i.exec(name)
+      const title = byName ? byName[1] : name
       // A note linked to Google Books is looked for on Open Library first, unless its Open Library match was turned down.
       const lookByName = !volume || !(`book:${file.path}` in this.settings.keptLinks)
       const book = await lookUpBook({ work, volume, title: lookByName ? title : undefined, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
-      if (!book && byName && !work && !volume) return lookUpBook({ title: file.basename, author: authors[0], googleInfo }, googleKey)
+      if (!book && byName && !work && !volume) return lookUpBook({ title: name, author: authors[0], googleInfo }, googleKey)
       return book
     }
     // The books are looked up a few at a time, ahead of the loop below (the questions only come once

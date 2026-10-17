@@ -914,7 +914,8 @@ describe('PlexSync', () => {
       ] },
       'https://openlibrary.org/works/OL19712346W.json': { subjects: ['Horror'] },
     }
-    const { app } = makeApp({ 'Media/Books/In the Valley of the Sun.md': { Author: ['A. Davidson'], Genre: [] } })
+    // The year in the file name isn't searched for.
+    const { app } = makeApp({ 'Media/Books/In the Valley of the Sun (2017).md': { Author: ['A. Davidson'], Genre: [] } })
     const settings = settingsWith({ allowedGenres: ['Horror'] })
     settings.libraries = {}
     const { addLibrary } = await import('../src/config')

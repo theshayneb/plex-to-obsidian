@@ -29,6 +29,8 @@ export interface HistoryEntry {
   ratingKey?: string | number
   key?: string
   year?: number
+  /** The Plex library it's in. */
+  librarySectionID?: string | number
 }
 
 /** A movie watched in Plex. */

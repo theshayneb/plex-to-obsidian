@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.150] - 2026-10-17
+
+- What you watch in a Plex library set to "Skip" in Settings → Libraries (such as Yoga & Exercise) is no longer counted anywhere: not on the dashboard (Insights, Habits, Just finished), not in daily notes' episode lines or Related links.
+
 ## [0.0.149] - 2026-10-17
 
 - New book notes are named "Title by Author (Year)", such as "In the Valley of the Sun by Andy Davidson (2017)". If your Books library's file name format was still the old "Title (Year)", it's changed to the new one; a format you set yourself is left alone.

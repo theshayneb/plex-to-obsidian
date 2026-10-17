@@ -39,7 +39,7 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -1144,11 +1144,24 @@ export class PlexSync {
    * Movies and shows you finished in the last two weeks (a show once every episode is watched),
    * that have a note and that you haven't reacted to or set aside, newest first.
    */
+  /**
+   * Plex's watch history without what's watched in libraries set to "Skip" (say, a yoga and
+   * exercise library): those aren't movies or shows of yours, so nothing counts them. An entry
+   * that doesn't say its library is kept.
+   */
+  private counted(history: HistoryEntry[]): HistoryEntry[] {
+    return history.filter(h => {
+      if (h.librarySectionID === undefined || h.librarySectionID === null || h.librarySectionID === '') return true
+      const lib = this.settings.libraries[String(h.librarySectionID)] as LibrarySetting | undefined
+      return Boolean(lib && lib.target !== 'skip')
+    })
+  }
+
   async finishedItems(): Promise<Finished[]> {
     if (!plexReady(this.settings)) return []
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
     const now = Math.floor(Date.now() / 1000)
-    const history = await plex.history(now - 14 * 86400)
+    const history = this.counted(await plex.history(now - 14 * 86400))
     const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
     const done = (key: string, at: number) => finishedKey(key, moment.unix(at).format('YYYY-MM-DD')) in this.settings.reactionsDone
     const out: Finished[] = []
@@ -1181,7 +1194,7 @@ export class PlexSync {
     const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
     const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
     // What you said to skip or ignore in syncs and checks is left out here too.
-    const events = watchEvents(await plex.history(since, 500, 100_000)).filter(e =>
+    const events = watchEvents(this.counted(await plex.history(since, 500, 100_000))).filter(e =>
       e.kind === 'movie' ? !ignoredMovie(e.key, e.title) : e.kind === 'episode' ? !ignoredShow(e.parent ?? '', e.title) && !this.bedtime(e.title, e.viewedAt) : !(e.key in this.settings.ignored))
     // Songs are counted under the track's own artist, which the history leaves out (it has the album artist).
     const missing = [...new Set(events.filter(e => e.kind === 'track' && e.key && !KNOWN_ARTISTS.has(e.key)).map(e => e.key))]
@@ -1275,7 +1288,7 @@ export class PlexSync {
     const { folder, format } = this.dailyNotes()
     const pathOf = (seconds: number) => normalizePath(`${folder ? `${folder}/` : ''}${moment.unix(seconds).format(format)}.md`)
     const { notes: shows, ignoredShow, ignoredMovie } = this.watchNotes()
-    const history = await plex.history(since)
+    const history = this.counted(await plex.history(since))
     const episodes = watchedEpisodes(history).filter(e => !ignoredShow(e.showKey, e.show) && !this.bedtime(e.show, e.viewedAt))
     const movies = this.settings.dailyRelated ? watchedMovies(history).filter(m => !ignoredMovie(m.key, m.title)) : []
     const episodeDays = episodesByDay(episodes, pathOf)

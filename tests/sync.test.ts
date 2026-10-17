@@ -1480,9 +1480,12 @@ describe('PlexSync', () => {
     const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD' })
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 2: newLibrary('TV Shows', 'show', 'tv') }
     settings.ignored = { 5: { name: 'Cats (2019)', library: 'Movies', since: 0 } }
+    // A library set to skip (yoga and exercise videos) isn't counted at all.
+    settings.libraries[9] = { ...newLibrary('Yoga & Exercise', 'movie', 'movie'), target: 'skip' }
     responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
-      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 1, index: 1, viewedAt: at, accountID: 1 },
-      { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at + 60, accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 1, index: 1, viewedAt: at, accountID: 1, librarySectionID: '2' },
+      { type: 'movie', title: 'Morning Flow', ratingKey: '901', viewedAt: at + 30, accountID: 1, librarySectionID: '9' },
+      { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at + 60, accountID: 1, librarySectionID: 1 },
       { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at + 90, accountID: 1 },
       { type: 'movie', title: 'Cats', ratingKey: '5', viewedAt: at + 120, accountID: 1 },
       { type: 'movie', title: 'Heat', ratingKey: '2', viewedAt: at + 180, accountID: 7 },

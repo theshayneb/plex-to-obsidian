@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.145] - 2026-10-17
+
+- Media dashboard, Insights: "Most played" now counts songs under the song's own artist rather than the album artist, and names songs that way too. Plex's watch history only gives the album artist, so the dashboard asks Plex for each played track's artist (the first time it opens, then remembered while Obsidian runs).
+
 ## [0.0.144] - 2026-10-17
 
 - Media dashboard, "Back again": entries no longer say why they're there, just the title and the "Not a rewatch" (or reread, replay) button.

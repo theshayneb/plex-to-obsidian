@@ -114,6 +114,8 @@ interface Approval {
 
 /** Movies' and episodes' lengths in minutes, by rating key, while Obsidian runs (see `lengths`). */
 const KNOWN_LENGTHS = new Map<string, number>()
+/** Each played track's own artist, by rating key (Plex's history only gives the album artist), kept while Obsidian runs. */
+const KNOWN_ARTISTS = new Map<string, string>()
 
 /** Runs at most `n` of the tasks given to it at a time, the rest waiting their turn. */
 function limited(n: number): <T>(task: () => Promise<T>) => Promise<T> {
@@ -1181,6 +1183,14 @@ export class PlexSync {
     // What you said to skip or ignore in syncs and checks is left out here too.
     const events = watchEvents(await plex.history(since, 500, 100_000)).filter(e =>
       e.kind === 'movie' ? !ignoredMovie(e.key, e.title) : e.kind === 'episode' ? !ignoredShow(e.parent ?? '', e.title) && !this.bedtime(e.title, e.viewedAt) : !(e.key in this.settings.ignored))
+    // Songs are counted under the track's own artist, which the history leaves out (it has the album artist).
+    const missing = [...new Set(events.filter(e => e.kind === 'track' && e.key && !KNOWN_ARTISTS.has(e.key)).map(e => e.key))]
+    if (missing.length) {
+      const items = await plex.items(missing).catch(() => [])
+      for (const item of items) KNOWN_ARTISTS.set(item.ratingKey, trackArtist(item) ?? '')
+      for (const key of missing) if (!KNOWN_ARTISTS.has(key)) KNOWN_ARTISTS.set(key, '')
+    }
+    for (const e of events) if (e.kind === 'track' && KNOWN_ARTISTS.get(e.key)) e.parent = KNOWN_ARTISTS.get(e.key)
     return { events, notes }
   }
 

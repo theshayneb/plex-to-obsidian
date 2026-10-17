@@ -256,6 +256,12 @@ export async function lookUpBook(by: { work?: string | null, volume?: string | n
     const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
     return google({ ...book, Genre: genres }, openLibraryDescription(body) ?? found?.item.summary)
   }
+  if (by.volume && by.title) {
+    // Linked to Google Books, but Open Library may have the book (now, or all along): its record
+    // with the same title by the same author comes first, and its link is offered instead.
+    const onOpenLibrary = await openLibraryByName(by.title, by.author)
+    if (onOpenLibrary) return onOpenLibrary
+  }
   if (by.volume) {
     // Linked to Google Books: that volume.
     const res = await googleBooksGet(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(by.volume)}${googleKey.trim() ? `?key=${encodeURIComponent(googleKey.trim())}` : ''}`)
@@ -265,22 +271,47 @@ export async function lookUpBook(by: { work?: string | null, volume?: string | n
     return googleFound(res.json as GoogleVolume)?.item ?? null
   }
   if (!by.title) return null
-  const docs = await searchBooks(bookQuery(by.title, by.author), 20)
-  // The record with the most editions is the book itself; the earliest year among all its records counts.
-  const same = sameBooks(docs, by.title, by.author)
-  const found = [...same, ...docs].map(openLibraryFound).find((f): f is Found => f !== null)
-  if (!found) {
-    // Not on Open Library (say, a new book): Google Books, only the same title by the same author.
-    const volumes = await googleVolumes(`intitle:"${by.title}"${by.author ? ` inauthor:"${by.author}"` : ''}`, googleKey)
-    const volume = googleSameBooks(volumes, by.title, by.author)[0]
-    return volume ? googleFound(volume)?.item ?? null : null
+  const onOpenLibrary = await openLibraryByName(by.title, by.author)
+  if (onOpenLibrary) return onOpenLibrary
+  // Not on Open Library (say, a new book): Google Books, only the same title by the same author.
+  let volumes: GoogleVolume[]
+  try {
+    volumes = await googleVolumes(`intitle:"${by.title}"${by.author ? ` inauthor:"${by.author}"` : ''}`, googleKey)
+  } catch (err) {
+    // Say what Open Library was asked, so a name or author written differently there can be fixed.
+    throw new Error(`Open Library has nothing titled "${by.title}"${by.author ? ` by ${by.author}` : ''}, and ${err instanceof Error ? err.message : String(err)}`)
   }
-  if (same.length) found.item.year = earliestYear(same) ?? found.item.year
-  const work = found.item.ratingKey.slice(3)
-  const body = await workJson(work).catch(() => null)
-  const doc = docs.find(d => d.key === `/works/${work}`)
-  const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
-  return google({ ...found.item, Genre: genres }, openLibraryDescription(body) ?? found.item.summary)
+  const volume = googleSameBooks(volumes, by.title, by.author)[0]
+  return volume ? googleFound(volume)?.item ?? null : null
+
+  /**
+   * The book on Open Library by its title and author: the title-and-author search, and when that
+   * finds nothing, a plain search for both (Open Library's author search misses some spellings;
+   * its same title counts), then the title alone (the same title by the same author only).
+   */
+  async function openLibraryByName(title: string, author?: string): Promise<PlexItem | null> {
+    let docs = await searchBooks(bookQuery(title, author), 20)
+    let same = sameBooks(docs, title, author)
+    // The search's own best guess counts only for a note with no link; against a link, only the same book.
+    if (by.volume) docs = same
+    if (!docs.length) {
+      const plain = await searchBooks(`q=${encodeURIComponent([title, author].filter(Boolean).join(' '))}`, 20).catch(() => [] as OpenLibraryDoc[])
+      // That search had the author in it, so its same title counts even with the author written differently.
+      docs = sameBooks(plain, title, author)
+      if (!docs.length && author) docs = sameBooks(plain, title)
+      if (!docs.length) docs = sameBooks(await searchBooks(`title=${encodeURIComponent(title)}`, 20).catch(() => [] as OpenLibraryDoc[]), title, author)
+      same = docs
+    }
+    // The record with the most editions is the book itself; the earliest year among all its records counts.
+    const found = [...same, ...docs].map(openLibraryFound).find((f): f is Found => f !== null)
+    if (!found) return null
+    if (same.length) found.item.year = earliestYear(same) ?? found.item.year
+    const work = found.item.ratingKey.slice(3)
+    const body = await workJson(work).catch(() => null)
+    const doc = docs.find(d => d.key === `/works/${work}`)
+    const genres = bookGenres(body?.subjects ?? doc?.subject, Infinity).map(tag => ({ tag }))
+    return google({ ...found.item, Genre: genres }, openLibraryDescription(body) ?? found.item.summary)
+  }
 }
 
 /**

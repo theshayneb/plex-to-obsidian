@@ -2076,7 +2076,9 @@ export class PlexSync {
       // not the note has an author; failing that (say, "Stand by Me"), as the whole name.
       const byName = /^(.+?)\s+by\s+(.+)$/i.exec(file.basename)
       const title = byName ? byName[1] : file.basename
-      const book = await lookUpBook({ work, volume, title, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
+      // A note linked to Google Books is looked for on Open Library first, unless its Open Library match was turned down.
+      const lookByName = !volume || !(`book:${file.path}` in this.settings.keptLinks)
+      const book = await lookUpBook({ work, volume, title: lookByName ? title : undefined, author: authors[0] ?? byName?.[2], googleInfo }, googleKey)
       if (!book && byName && !work && !volume) return lookUpBook({ title: file.basename, author: authors[0], googleInfo }, googleKey)
       return book
     }
@@ -2139,7 +2141,8 @@ export class PlexSync {
         continue
       }
       result.checked.push(file.path)
-      const searched = !work && !volume
+      // Found by searching: no link, or a Google Books link whose book Open Library has.
+      const searched = (!work && !volume) || Boolean(volume && book.ratingKey.startsWith('ol-'))
       const checks = this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
       const lines: ApprovalLine[] = this.rescaleLines(rescale)
       for (const name of checks?.names ?? []) {

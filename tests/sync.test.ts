@@ -882,6 +882,52 @@ describe('PlexSync', () => {
     expect([...files.keys()].filter(p => p.endsWith('.md')).sort()).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md'])
   })
 
+  it('finds a book on Open Library before Google Books, even when the note links to Google Books', async () => {
+    steamResponses = {
+      'https://openlibrary.org/search.json?title=In%20the%20Valley%20of%20the%20Sun&author=Andy%20Davidson': { docs: [{ key: '/works/OL19712346W', title: 'In the Valley of the Sun', author_name: ['Andy Davidson'], first_publish_year: 2017 }] },
+      'https://openlibrary.org/works/OL19712346W.json': { subjects: ['Horror'] },
+    }
+    const { app } = makeApp({
+      'Media/Books/In the Valley of the Sun by Andy Davidson.md': { Author: ['Andy Davidson'], Genre: [], Link: 'https://books.google.com/books?id=abc123' },
+    })
+    const settings = settingsWith({ allowedGenres: ['Horror'] })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    requested.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
+    expect(requested.filter(u => u.includes('googleapis'))).toEqual([])
+    expect(requests[0].lines.map(l => [l.label, l.value])).toEqual([['Genre', 'Horror'], ['Link', 'https://openlibrary.org/works/OL19712346W']])
+  })
+
+  it('tries a plain Open Library search when the title-and-author search finds nothing', async () => {
+    steamResponses = {
+      'https://openlibrary.org/search.json?title=In%20the%20Valley%20of%20the%20Sun&author=': { docs: [] },
+      'https://openlibrary.org/search.json?q=In%20the%20Valley%20of%20the%20Sun%20A.%20Davidson': { docs: [
+        { key: '/works/OL1W', title: 'The Sun Also Rises', author_name: ['Ernest Hemingway'] },
+        { key: '/works/OL19712346W', title: 'In the Valley of the Sun', author_name: ['Andy Davidson'], first_publish_year: 2017 },
+      ] },
+      'https://openlibrary.org/works/OL19712346W.json': { subjects: ['Horror'] },
+    }
+    const { app } = makeApp({ 'Media/Books/In the Valley of the Sun.md': { Author: ['A. Davidson'], Genre: [] } })
+    const settings = settingsWith({ allowedGenres: ['Horror'] })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Genre'])
+    expect(requests[0].lines.map(l => [l.label, l.value])).toEqual([['Genre', 'Horror'], ['Link', 'https://openlibrary.org/works/OL19712346W']])
+  })
+
   it('checks only the open book, never every book, with "Check this note"', async () => {
     steamResponses = {
       'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction'] },

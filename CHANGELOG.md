@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.147] - 2026-10-17
+
+- Checking books: a book note linked to Google Books is now looked for on Open Library first (the same title by the same author). When Open Library has it, its details are used and its link is offered in place of the Google Books one, so Google Books' daily allowance isn't needed for it.
+- When Open Library's title-and-author search finds nothing, a plain search for the title and author is tried too (Open Library's author search misses some spellings, such as "A. Davidson" for "Andy Davidson"), then the title alone, before falling back to Google Books.
+- If it still has to fall back and Google Books refuses, the message says exactly what Open Library was asked for, so a title or author written differently can be fixed in the note.
+
 ## [0.0.146] - 2026-10-17
 
 - "Check this note" now reads only the library the note is in. For a book, that means no Plex or Steam listing at all, so it goes straight to the one book.

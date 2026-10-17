@@ -542,7 +542,6 @@ export class RecommendView extends ItemView {
       this.pmnListCard(parent, 'Back again', s.rewatches.filter(r => r.kind === kind && !notAgain.has(r.id)).map(r => ({
         title: r.title,
         path: r.path,
-        detail: r.why,
         action: {
           text: button,
           tip: 'Take it off this list',

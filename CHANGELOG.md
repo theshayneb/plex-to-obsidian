@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.144] - 2026-10-17
+
+- Media dashboard, "Back again": entries no longer say why they're there, just the title and the "Not a rewatch" (or reread, replay) button.
+
 ## [0.0.143] - 2026-10-16
 
 - Media dashboard, Insights: an empty "Back again" card now shows just its title, with no "nothing then" text.

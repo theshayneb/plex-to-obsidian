@@ -882,6 +882,32 @@ describe('PlexSync', () => {
     expect([...files.keys()].filter(p => p.endsWith('.md')).sort()).toEqual(['Media/Movies/Arrival (2016).md', 'Media/Movies/Heat (1995).md'])
   })
 
+  it('checks only the open book, never every book, with "Check this note"', async () => {
+    steamResponses = {
+      'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction'] },
+      'https://openlibrary.org/search.json?title=': { docs: [{ key: '/works/OL27448W', title: 'The Hobbit', author_name: ['J.R.R. Tolkien'], first_publish_year: 1937 }] },
+      'https://openlibrary.org/works/OL27448W.json': { subjects: ['Fantasy'] },
+    }
+    const { app } = makeApp({
+      'Media/Books/Dune by Frank Herbert.md': { Author: ['Frank Herbert'], Genre: [], Link: 'https://openlibrary.org/works/OL893415W' },
+      'Media/Books/The Hobbit by J.R.R. Tolkien.md': { Author: '[[J.R.R. Tolkien]]', Genre: [] },
+    })
+    const settings = settingsWith({ allowedGenres: ['Sci-Fi', 'Fantasy'] })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const approve = vi.fn((): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [] }))
+    const said: string[] = []
+    requested.length = 0
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve)
+      .run(m => said.push(m), 'check', ['Genre', 'Summary'], new Set(['Media/Books/Dune by Frank Herbert.md']), new Set(['books']))
+    expect(said.filter(m => m.includes('Hobbit'))).toEqual([])
+    expect(said).toContain('Checking books: 1 of 1 (Dune by Frank Herbert)…')
+    expect(requested.filter(u => u.includes('Hobbit'))).toEqual([])
+    // Only the book's own library is read: no Plex listing.
+    expect(requested.filter(u => u.includes('/library/sections'))).toEqual([])
+  })
+
   it('checks book genres against Open Library, finding books without a link by title and author', async () => {
     steamResponses = {
       'https://openlibrary.org/works/OL893415W.json': { subjects: ['Science fiction', 'genre:Fiction', 'Deserts'] },

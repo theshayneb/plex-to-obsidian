@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.146] - 2026-10-17
+
+- "Check this note" now reads only the library the note is in. For a book, that means no Plex or Steam listing at all, so it goes straight to the one book.
+- Google Books: when it says the day's allowance is used up, the message now also says how many times Media Manager has asked it since Obsidian started. Adding or changing your Google Books key in the settings takes effect straight away, instead of waiting out the hour that a refusal for the old key (or no key) holds requests back.
+
 ## [0.0.145] - 2026-10-17
 
 - Media dashboard, Insights: "Most played" now counts songs under the song's own artist rather than the album artist, and names songs that way too. Plex's watch history only gives the album artist, so the dashboard asks Plex for each played track's artist (the first time it opens, then remembered while Obsidian runs).

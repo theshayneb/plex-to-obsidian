@@ -345,8 +345,12 @@ function googleReason(res: { json: unknown }): string | undefined {
 
 /** Google Books' answers while Obsidian runs, so checking again doesn't use up the daily allowance. */
 const googleAnswers = new Map<string, { status: number, json: unknown }>()
-/** After Google says the day's allowance is used up, no more requests for an hour (they'd only be refused). */
-let googleOut: { until: number, reason: string } | null = null
+/** After Google says the day's allowance is used up, no more requests for an hour with that key (they'd only be refused). */
+let googleOut: { until: number, reason: string, key: string } | null = null
+/** How many requests went to Google Books since Obsidian started, said when Google refuses. */
+let googleAsked = 0
+/** The API key in a Google Books address ('' for none), so a new key isn't held back by the old one's refusal. */
+const keyIn = (url: string): string => /[?&]key=([^&]*)/.exec(url)?.[1] ?? ''
 
 /**
  * A Google Books request, tried again (after 2, 6 and 15 seconds) when Google says it's busy
@@ -356,15 +360,17 @@ let googleOut: { until: number, reason: string } | null = null
 async function googleBooksGet(url: string, fresh = false): Promise<{ status: number, json: unknown }> {
   const cached = googleAnswers.get(url)
   if (cached && !fresh) return cached
-  if (googleOut && !fresh && Date.now() < googleOut.until) return { status: 429, json: { error: { message: googleOut.reason } } }
+  if (googleOut && !fresh && googleOut.key === keyIn(url) && Date.now() < googleOut.until) return { status: 429, json: { error: { message: googleOut.reason } } }
+  googleAsked++
   let res = await requestUrl({ url, throw: false }) as { status: number, json: unknown }
   for (const wait of [2000, 6000, 15000]) {
     if (res.status !== 503 && res.status !== 429) break
     if (/per day/i.test(googleReason(res) ?? '')) break
     await new Promise(resolve => window.setTimeout(resolve, wait))
+    googleAsked++
     res = await requestUrl({ url, throw: false }) as { status: number, json: unknown }
   }
-  if (res.status === 429 && /per day/i.test(googleReason(res) ?? '')) googleOut = { until: Date.now() + 60 * 60 * 1000, reason: googleReason(res)! }
+  if (res.status === 429 && /per day/i.test(googleReason(res) ?? '')) googleOut = { until: Date.now() + 60 * 60 * 1000, reason: googleReason(res)!, key: keyIn(url) }
   if (res.status === 200) {
     googleOut = null
     googleAnswers.set(url, { status: res.status, json: res.json })
@@ -376,7 +382,7 @@ async function googleBooksGet(url: string, fresh = false): Promise<{ status: num
 function googleRefusal(res: { status: number, json: unknown }, key: string): string {
   const reason = googleReason(res)
   if (reason && /per day/i.test(reason)) {
-    return `Google Books' daily allowance${key.trim() ? ' for your key' : ''} is used up (it resets at midnight Pacific time)${key.trim() ? '' : '; a free Google Books API key (in the settings) gives you your own'}`
+    return `Google Books' daily allowance${key.trim() ? ' for your key' : ''} is used up (it resets at midnight Pacific time; Media Manager has asked Google Books ${googleAsked} time${googleAsked === 1 ? '' : 's'} since Obsidian started)${key.trim() ? '' : '. Without a key, every Google Books user shares one small allowance; a free Google Books API key (in the settings) gives you your own'}`
   }
   return `Google Books is busy or limiting requests (${res.status}${reason ? `: ${reason}` : ''})${key.trim() ? '' : '; a free Google Books API key (in the settings) raises the limit'}`
 }

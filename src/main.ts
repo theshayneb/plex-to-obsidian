@@ -1,4 +1,4 @@
-import { moment, Notice, Plugin, TFile } from 'obsidian'
+import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian'
 import { AddModal } from './add-modal'
 import { CheckModal, checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
@@ -491,8 +491,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new ProgressNotice(`Checking ${file.basename}…`)
     try {
       const properties = checkableProperties(this.settings).map(p => p.name)
+      // Only the libraries whose folder holds the note are listed (a book needs no Plex or Steam listing at all).
+      const inFolder = Object.entries(this.settings.libraries)
+        .filter(([, lib]) => lib.target !== 'skip' && lib.folder.trim() && file.path.startsWith(`${normalizePath(lib.folder)}/`))
+        .map(([key]) => key)
       const result = await this.newSync()
-        .run(message => notice.set(message), 'check', properties, new Set([file.path]))
+        .run(message => notice.set(message), 'check', properties, new Set([file.path]), inFolder.length ? new Set(inFolder) : undefined)
       notice.hide()
       if (result.failed.length) {
         console.error('Media Manager: failed items', result.failed)

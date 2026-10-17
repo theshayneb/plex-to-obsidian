@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.149] - 2026-10-17
+
+- New book notes are named "Title by Author (Year)", such as "In the Valley of the Sun by Andy Davidson (2017)". If your Books library's file name format was still the old "Title (Year)", it's changed to the new one; a format you set yourself is left alone.
+- Checking books can now rename them to that format too: tick "File name" for Books in "Check notes against sources…" ("Check this note" includes it). The new name keeps the title as your note has it (so its capitals stay), with the note's author and the book's year.
+- What the plugin remembers about a book note (links and values you kept, skips, rating reviews, the dashboard's set-asides) now follows the note when it's renamed.
+
 ## [0.0.148] - 2026-10-17
 
 - Checking books: a year in brackets at the end of a book note's name, as in "In the Valley of the Sun (2017)", is no longer searched for as part of the title, so Open Library finds the book.

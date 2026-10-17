@@ -2034,6 +2034,19 @@ export class PlexSync {
    * title and author; the pop-up says which book was found. Leaving its link unticked means it's
    * the wrong book: that note isn't looked up again. Books that can't be found count as unmatched.
    */
+  /**
+   * A book as its note's new name should show it: the title as the note's name has it (so its
+   * capitals are kept), the note's author (else the book's) and the book's year (else the name's).
+   */
+  private bookForName(file: TFile, book: PlexItem, authorProp?: string): PlexItem {
+    const yearInName = /[([](\d{4})[)\]]\s*$/.exec(file.basename)?.[1]
+    const name = file.basename.replace(/\s*[([]\d{4}[)\]]\s*$/, '').trim() || file.basename
+    const title = /^(.+?)\s+by\s+.+$/i.exec(name)?.[1] ?? name
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const own = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1')).filter(Boolean)
+    return { ...book, title, authors: own.length ? own : book.authors, year: book.year ?? (yearInName ? Number(yearInName) : undefined) }
+  }
+
   private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn, only?: Set<string>): Promise<void> {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
@@ -2044,7 +2057,9 @@ export class PlexSync {
     const ratingNames = [...new Set(Object.values(this.settings.libraries).flatMap(l => l.properties)
       .filter(m => m.source === 'userRatingEmoji' && m.name.trim()).map(m => m.name.trim()))]
       .filter(name => chosen.has(name))
-    if (!mappings.length && !ratingNames.length) return
+    // "File name": renamed to the library's format ("Title by Author (Year)"), the title as the note has it.
+    const renaming = chosen.has(FILE_NAME)
+    if (!mappings.length && !ratingNames.length && !renaming) return
     // Google Books (which has a daily allowance) is only asked for summaries and exact dates when they're checked.
     const googleInfo = mappings.some(m => m.source === 'summary' || m.source === 'releaseDate')
     const linkProp = lib.properties.find(m => m.source === 'plexLink' && m.name.trim())?.name.trim()
@@ -2122,7 +2137,7 @@ export class PlexSync {
         rescaleOnly()
         continue
       }
-      if (!mappings.length) {
+      if (!mappings.length && !renaming) {
         rescaleOnly()
         continue
       }
@@ -2157,6 +2172,15 @@ export class PlexSync {
       if (newLink && linkProp) {
         lines.push({ key: `fix:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !this.settings.tickDifferences && !isBlank(link) })
       }
+      let renameTo: string | null = null
+      if (renaming) {
+        try {
+          renameTo = this.renameTarget(file, this.bookForName(file, book, authorProp), lib)
+        } catch (err) {
+          result.failed.push({ title: file.basename, error: `rename failed: ${errorText(err)}` })
+        }
+        if (renameTo) lines.unshift({ key: 'rename', label: FILE_NAME, current: file.basename, value: renameTo.split('/').pop()!.replace(/\.md$/, ''), edit: 'text' })
+      }
       if (!lines.length) continue
 
       const found = book
@@ -2179,21 +2203,37 @@ export class PlexSync {
           }
           result.keptLinks++
         }
-        if (!apply.length) {
+        let moveTo = excluded.has('rename') ? null : renameTo
+        if (moveTo && typeof edits.rename === 'string') {
+          try {
+            moveTo = this.renameTargetFor(file, sanitizeFileName(edits.rename, this.settings.fileNameReplacements))
+          } catch (err) {
+            result.failed.push({ title: file.basename, error: `rename failed: ${errorText(err)}` })
+            moveTo = null
+          }
+        }
+        if (!apply.length && !moveTo) {
           if (rescaled) result.corrected.push(file.path)
           else result.declined++
           return
         }
+        const before = file.path
         try {
-          await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-            for (const name of apply) {
-              const edited = edits[`fix:${name}`]
-              const value = offered.get(name)
-              fm[name] = edited === undefined ? value : parseEdit(edited, editKind(value))
-            }
-          })
-          result.corrected.push(file.path)
-          if (linkProp && apply.includes(linkProp) && searched) result.links.push(file.path)
+          if (apply.length) {
+            await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+              for (const name of apply) {
+                const edited = edits[`fix:${name}`]
+                const value = offered.get(name)
+                fm[name] = edited === undefined ? value : parseEdit(edited, editKind(value))
+              }
+            })
+            result.corrected.push(before)
+            if (linkProp && apply.includes(linkProp) && searched) result.links.push(before)
+          }
+          if (moveTo) {
+            await this.app.fileManager.renameFile(file, moveTo)
+            result.renamed.push({ from: before, to: moveTo })
+          }
         } catch (err) {
           result.failed.push({ title: file.basename, error: errorText(err) })
         }

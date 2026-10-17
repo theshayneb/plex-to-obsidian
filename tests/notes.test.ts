@@ -86,6 +86,11 @@ describe('renderFileName', () => {
     const book = { ratingKey: 'ol-OL1W', title: 'Good Omens', type: 'book', authors: ['Terry Pratchett', 'Neil Gaiman'] } as PlexItem
     expect(renderFileName({ format: '{{title}} by {{author}}', replacements: {} }, book)).toBe('Good Omens by Terry Pratchett, Neil Gaiman')
     expect(renderFileName({ format: '{{title}} by {{author}}', replacements: {} }, { ...book, authors: [] })).toBe('Good Omens')
+
+    const full = { format: '{{title}} by {{author}} ({{year}})', replacements: {} }
+    expect(renderFileName(full, { ...book, authors: ['Andy Davidson'], title: 'In the Valley of the Sun', year: 2017 })).toBe('In the Valley of the Sun by Andy Davidson (2017)')
+    expect(renderFileName(full, { ...book, authors: [], year: 1990 })).toBe('Good Omens (1990)')
+    expect(renderFileName(full, { ...book, authors: [] })).toBe('Good Omens')
   })
 
   it('fills the format and strips characters files cannot use', () => {

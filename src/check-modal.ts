@@ -17,7 +17,7 @@ const KIND_NAMES: Record<string, string> = {
  */
 export function checkableProperties(settings: PlexNotesSettings): { name: string, source: FieldSource | null, libraries: string[] }[] {
   const byName = new Map<string, { name: string, source: FieldSource | null, libraries: string[] }>()
-  const libraries = Object.values(settings.libraries).filter(lib => lib.target !== 'skip' && lib.target !== 'book')
+  const libraries = Object.values(settings.libraries).filter(lib => lib.target !== 'skip')
   if (libraries.length) byName.set(FILE_NAME, { name: FILE_NAME, source: null, libraries: libraries.map(lib => lib.title) })
   for (const lib of Object.values(settings.libraries)) {
     if (lib.target === 'skip') continue
@@ -53,7 +53,7 @@ export function libraryCheckables(settings: PlexNotesSettings, key: string): { n
   const properties = [...byName.entries()]
     .map(([name, source]) => ({ name, source }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-  return lib.target === 'book' ? properties : [{ name: FILE_NAME, source: null }, ...properties]
+  return [{ name: FILE_NAME, source: null }, ...properties]
 }
 
 /** Libraries whose property list is open in the check pop-up, kept while Obsidian runs. */

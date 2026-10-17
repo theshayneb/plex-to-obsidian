@@ -905,6 +905,28 @@ describe('PlexSync', () => {
     expect(requests[0].lines.map(l => [l.label, l.value])).toEqual([['Genre', 'Horror'], ['Link', 'https://openlibrary.org/works/OL19712346W']])
   })
 
+  it('renames a book note to "Title by Author (Year)" when the file name is checked, keeping its own title', async () => {
+    steamResponses = {
+      'https://openlibrary.org/search.json?title=In%20the%20Valley%20of%20the%20Sun&author=Andy%20Davidson': { docs: [{ key: '/works/OL19712346W', title: 'In the valley of the sun', author_name: ['Andy Davidson'], first_publish_year: 2017 }] },
+      'https://openlibrary.org/works/OL19712346W.json': { subjects: [] },
+    }
+    const { app, files } = makeApp({ 'Media/Books/In the Valley of the Sun (2017).md': { Author: ['Andy Davidson'] } })
+    const settings = settingsWith({})
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    expect(settings.libraries.books.fileNameFormat).toBe('{{title}} by {{author}} ({{year}})')
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.key !== 'rename').map(l => l.key) })
+    })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['File name'])
+    expect(requests[0].lines[0]).toMatchObject({ key: 'rename', current: 'In the Valley of the Sun (2017)', value: 'In the Valley of the Sun by Andy Davidson (2017)' })
+    expect(result.renamed).toEqual([{ from: 'Media/Books/In the Valley of the Sun (2017).md', to: 'Media/Books/In the Valley of the Sun by Andy Davidson (2017).md' }])
+    expect(files.has('Media/Books/In the Valley of the Sun by Andy Davidson (2017).md')).toBe(true)
+  })
+
   it('tries a plain Open Library search when the title-and-author search finds nothing', async () => {
     steamResponses = {
       'https://openlibrary.org/search.json?title=In%20the%20Valley%20of%20the%20Sun&author=': { docs: [] },
@@ -1662,6 +1684,15 @@ describe('PlexSync', () => {
     expect(again.allowedGenres).toEqual(['Action', 'Comedy'])
   })
 
+  it('names new book notes "Title by Author (Year)" from now on, unless the format was changed', () => {
+    const books = (format: string) => ({ libraries: { books: { title: 'Books', type: 'books', target: 'book', folder: 'Media/Books', fileNameFormat: format, matchBy: 'loose',
+      properties: [{ name: 'Author', source: 'authors' }], values: { watched: '', started: '', unwatched: '', tag: 'book' } } } })
+    expect(loadSettings(books('{{title}} ({{year}})')).libraries.books.fileNameFormat).toBe('{{title}} by {{author}} ({{year}})')
+    expect(loadSettings(books('{{author}} - {{title}}')).libraries.books.fileNameFormat).toBe('{{author}} - {{title}}')
+    const once = loadSettings(books('{{title}} ({{year}})'))
+    expect(loadSettings({ ...books('{{title}} ({{year}})'), migrations: once.migrations }).libraries.books.fileNameFormat).toBe('{{title}} ({{year}})')
+  })
+
   it('drops Duration from saved music libraries and renames book Pages to Duration, once', () => {
     const saved = {
       libraries: {
@@ -1955,8 +1986,8 @@ describe('PlexSync', () => {
       const item = { ratingKey: 'ol-OL893415W', type: 'book', title: 'Dune', year: 1965, authors: ['Frank Herbert'], pages: 604,
         Genre: [{ tag: 'Science fiction' }], summary: 'A desert planet.', portrait: 'https://covers/x-L.jpg', webLink: 'https://openlibrary.org/works/OL893415W' }
       const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).addNew(item, 'books')
-      expect(result.created).toBe('Media/Books/Dune (1965).md')
-      expect(frontmatter.get('Media/Books/Dune (1965).md')).toEqual({
+      expect(result.created).toBe('Media/Books/Dune by Frank Herbert (1965).md')
+      expect(frontmatter.get('Media/Books/Dune by Frank Herbert (1965).md')).toEqual({
         Author: ['Frank Herbert'], Genre: ['Sci-Fi'], Year: 1965, Duration: 604, Summary: 'A desert planet.', Status: 'pending',
         Link: 'https://openlibrary.org/works/OL893415W', Image: 'https://covers/x-L.jpg', tags: ['book'],
       })

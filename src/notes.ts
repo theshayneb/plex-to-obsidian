@@ -301,6 +301,8 @@ export function renderFileName(naming: FileNaming, item: PlexItem): string {
   const raw = naming.format
     .replace(/\{\{\s*(\w+)\s*\}\}/g, (all: string, key: string) => values[key.toLowerCase()] ?? all)
     .replace(/\(\s*\)|\[\s*\]/g, '')
+    // A "by" with no author before the year: "Title by  (2017)" is "Title (2017)".
+    .replace(/\s+by\s+(?=[([])/gi, ' ')
     // Separators left dangling by an empty placeholder, e.g. " - " when there's no artist or " by " without an author.
     .replace(/^\s*[-–—]\s+|\s+[-–—]\s*$|\s+by\s*$/gi, '')
   return sanitizeFileName(raw, naming.replacements)

@@ -186,7 +186,7 @@ export const DEFAULT_FILE_NAMES: Record<MediaKind, string> = {
   documentary: '{{title}} ({{year}})',
   music: '{{artist}} - {{title}}',
   game: '{{title}} ({{year}})',
-  book: '{{title}} ({{year}})',
+  book: '{{title}} by {{author}} ({{year}})',
 }
 
 /** Track titles like "Intro" are too common to match on their own, so music only matches its full file name. */
@@ -512,6 +512,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     for (const key of Object.keys(settings.keptValues)) {
       if (key.startsWith('book:') && names.some(name => key.endsWith(`|${name}`))) delete settings.keptValues[key]
     }
+  })
+  migrateOnce(settings, saved, 'book-names-by-author', () => {
+    // New book notes are named "Title by Author (Year)", as the owner names them, unless the format was changed.
+    const books = settings.libraries[BOOKS_LIBRARY]
+    if (books && books.fileNameFormat.trim() === '{{title}} ({{year}})') books.fileNameFormat = DEFAULT_FILE_NAMES.book
   })
   migrateOnce(settings, saved, 'bracket-replacements', () => {
     // Square brackets have their own replacements now: round brackets.

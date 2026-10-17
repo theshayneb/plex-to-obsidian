@@ -62,7 +62,32 @@ export default class PlexMediaNotesPlugin extends Plugin {
         delete this.settings.lockedProperties[oldPath]
         this.settings.lockedProperties[file.path] = locked
       }
-      if (moved.length || ignored >= 0 || locked) void this.saveSettings()
+      // A book note is remembered by its path (book:<path>), and so are notes set aside on the dashboard.
+      let rekeyed = false
+      const rekey = <T>(record: Record<string, T>) => {
+        for (const key of Object.keys(record)) {
+          const rest = key === `book:${oldPath}` ? '' : key.startsWith(`book:${oldPath}|`) ? key.slice(`book:${oldPath}`.length) : null
+          if (rest === null) continue
+          record[`book:${file.path}${rest}`] = record[key]
+          delete record[key]
+          rekeyed = true
+        }
+      }
+      rekey(this.settings.keptLinks)
+      rekey(this.settings.keptValues)
+      rekey(this.settings.ignored)
+      rekey(this.settings.ratingsReviewed)
+      const skipped = this.settings.reviewSkipped.indexOf(oldPath)
+      if (skipped >= 0) {
+        this.settings.reviewSkipped[skipped] = file.path
+        rekeyed = true
+      }
+      const passed = this.settings.notInterested.indexOf(`note:${oldPath}`)
+      if (passed >= 0) {
+        this.settings.notInterested[passed] = `note:${file.path}`
+        rekeyed = true
+      }
+      if (moved.length || ignored >= 0 || locked || rekeyed) void this.saveSettings()
     }))
 
     this.addRibbonIcon('clapperboard', 'Sync with Plex and Steam', () => {

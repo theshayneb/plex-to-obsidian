@@ -148,6 +148,12 @@ function editable(value: unknown): Pick<ApprovalLine, 'value' | 'edit' | 'items'
 /** Sources holding an image. */
 const IMAGE_SOURCES: FieldSource[] = ['poster', 'wideImage']
 
+/** An image property you set yourself: a link to a file in the vault, "[[…]]" or "![[…]]" (also as a list's first entry). */
+export function isOwnImage(value: unknown): boolean {
+  const first: unknown = Array.isArray(value) ? value[0] : value
+  return typeof first === 'string' && /^!?\[\[/.test(first.trim())
+}
+
 /** A note's ratings in an older scale, and the same ratings in the star scale, to offer. */
 interface Rescale {
   names: string[]
@@ -161,7 +167,7 @@ interface Checks {
   from: Record<string, unknown>
   to: Record<string, unknown>
   sameLength: Set<string>
-  /** Those always offered unticked: images you picked yourself (a link to a file in the vault). */
+  /** Those always offered unticked: a status or rating of yours, a length the source doesn't know. */
   yours?: Set<string>
 }
 
@@ -1999,6 +2005,8 @@ export class PlexSync {
         const pointsAt = ratingKeyFromLink(current)
         if (pointsAt && keys.includes(pointsAt)) continue
       }
+      // An image you linked yourself ("[[…]]" or "![[…]]", a file in the vault) is never offered for replacing.
+      if (IMAGE_SOURCES.includes(m.source) && isOwnImage(current)) continue
       const kept = (offer: unknown) => this.isKept(`${noteKey}|${name}`, current, offer)
       if (m.source === 'poster' && fromPlex(item)) {
         // A Plex poster is downloaded, so it's only offered where the note has none.
@@ -2035,8 +2043,6 @@ export class PlexSync {
       // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).
       if (RATING_SOURCES.includes(m.source) && !isBlank(current)) yours.add(name)
       if (offer.ticked || (m.source === 'plexLink' && (isSearchLink(current) || oldSongLink))) ticked.add(name)
-      // An image linked to a file in the vault ("[[…]]") is one you set: it stays unless you tick it.
-      if (IMAGE_SOURCES.includes(m.source) && typeof current === 'string' && current.trim().startsWith('[[')) yours.add(name)
     }
     const names = Object.keys(to)
     return names.length ? { names, from, to, sameLength: ticked, yours } : null

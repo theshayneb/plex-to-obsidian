@@ -1851,7 +1851,7 @@ describe('PlexSync', () => {
     expect(frontmatter.get(path)!.Duration).toBe(330)
   })
 
-  it('offers a cover you set yourself (a [[link]] to a vault image) unticked in a check', async () => {
+  it('never offers to replace a cover you set yourself (a [[link]] or ![[embed]] of a vault image) in a check', async () => {
     steamResponses = {
       'https://openlibrary.org/search.json?q=key%3A%2Fworks%2FOL1W': { docs: [{ key: '/works/OL1W', title: 'Dune', cover_i: 11 }] },
       'https://openlibrary.org/search.json?q=key%3A%2Fworks%2FOL2W': { docs: [{ key: '/works/OL2W', title: 'Emma', cover_i: 22 }] },
@@ -1859,6 +1859,7 @@ describe('PlexSync', () => {
     const { app } = makeApp({
       'Media/Books/Dune.md': { Image: '[[Media/Books/Images/My Dune cover.jpg]]', Link: 'https://openlibrary.org/works/OL1W' },
       'Media/Books/Emma.md': { Image: 'https://example.com/old.jpg', Link: 'https://openlibrary.org/works/OL2W' },
+      'Media/Books/Emma 2.md': { Image: '![[Emma cover.png]]', Link: 'https://openlibrary.org/works/OL2W' },
     })
     const settings = settingsWith()
     settings.libraries = {}
@@ -1867,7 +1868,6 @@ describe('PlexSync', () => {
     const approve = vi.fn((_r: ApprovalRequest) => Promise.resolve({ choice: 'skip' as const, excluded: [] }))
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Image'])
     expect(approve.mock.calls.map(c => [c[0].path, c[0].lines.map(l => l.unticked)])).toEqual([
-      ['Media/Books/Dune.md', [true]],
       ['Media/Books/Emma.md', [false]],
     ])
   })

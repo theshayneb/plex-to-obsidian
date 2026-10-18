@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.158] - 2026-10-18
+
+- Checking notes against sources no longer offers to replace an Image or WideImage you set yourself: anything in [[double brackets]] (or ![[embedded]]), a file in your vault, is left alone and not shown in the pop-up at all. Before, it was offered unticked.
+
 ## [0.0.157] - 2026-10-18
 
 - Settings → Syncing → "Update in the background": the choices are now Every 2 hours, Every 6 hours, Every 12 hours and Once a day ("Every hour" is gone). If it was set to every hour, it's now every 2 hours.

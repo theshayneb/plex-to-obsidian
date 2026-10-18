@@ -1,7 +1,7 @@
 // Last.fm's similar tracks, turned into music suggestions. No Obsidian imports, so it
 // can be unit tested; the requests are in lastfm.ts.
 
-import { firstArtist, withoutFeatured } from './notes'
+import { compareTitles, firstArtist, withoutFeatured } from './notes'
 
 export interface SimilarTrack { artist: string, title: string, match: number, url: string }
 
@@ -86,7 +86,7 @@ export function lastfmSuggestions(
   }
   return [...found.values()]
     .map(({ from, ...s }) => ({ ...s, because: [...from.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name) }))
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .sort((a, b) => b.score - a.score || compareTitles(a.title, b.title))
     .slice(0, count)
 }
 

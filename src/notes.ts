@@ -310,6 +310,21 @@ export function renderFileName(naming: FileNaming, item: PlexItem): string {
     || item.ratingKey
 }
 
+/**
+ * A title as a library sorts it: without a leading "The", "A" or "An" (nor quotes or brackets
+ * before it), so "The Matrix" goes with the M's. A title that is only the article keeps it.
+ */
+export function sortTitle(title: string): string {
+  const text = title.trim().replace(/^["'“‘([¡¿]+/, '')
+  const rest = text.replace(/^(the|a|an)\s+/i, '')
+  return rest || text
+}
+
+/** Two titles in library order: articles left out, any case and accents, numbers by value ("Part 2" before "Part 10"). */
+export function compareTitles(a: string, b: string): number {
+  return sortTitle(a).localeCompare(sortTitle(b), undefined, { sensitivity: 'base', numeric: true }) || a.localeCompare(b)
+}
+
 /** Loose key for comparing titles with file names: case, accents, punctuation and spacing ignored. */
 export function normalizeTitle(text: string): string {
   return text

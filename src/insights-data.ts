@@ -2,6 +2,7 @@
 // a year or a week, from Plex's watch history and your reactions. No Obsidian imports, so it can be
 // unit tested; the view is recommend-view.ts.
 import type { HistoryEntry } from './daily-episodes'
+import { compareTitles } from './notes'
 
 /** One viewing or play in Plex's watch history (the server owner's only). */
 export interface WatchEvent {
@@ -88,7 +89,7 @@ export function daysSpent(links: DayLink[], period: Period, group: DayLink['grou
     byPath.set(l.path, entry)
   }
   return [...byPath].map(([path, e]) => ({ path, title: e.title, days: e.days.size, last: [...e.days].sort().pop() ?? '' }))
-    .sort((a, b) => b.days - a.days || a.title.localeCompare(b.title))
+    .sort((a, b) => b.days - a.days || compareTitles(a.title, b.title))
 }
 
 /** How many days in a period your daily notes link something of a kind. */
@@ -131,7 +132,7 @@ const dayIn = (day: string, p: Period) => {
 
 /** Most first, then alphabetically, at most `limit`. */
 function top(counts: Map<string, number>, limit: number): [string, number][] {
-  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit)
+  return [...counts].sort((a, b) => b[1] - a[1] || compareTitles(a[0], b[0])).slice(0, limit)
 }
 
 const tally = (values: string[]): Map<string, number> => {
@@ -250,8 +251,8 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     }),
   ]
   return {
-    movies: [...moviesSeen.values()].sort((a, b) => b.times - a.times || a.title.localeCompare(b.title)),
-    shows: [...shows.values()].sort((a, b) => b.episodes - a.episodes || a.title.localeCompare(b.title)),
+    movies: [...moviesSeen.values()].sort((a, b) => b.times - a.times || compareTitles(a.title, b.title)),
+    shows: [...shows.values()].sort((a, b) => b.episodes - a.episodes || compareTitles(a.title, b.title)),
     episodes: now.filter(e => e.kind === 'episode').length,
     songPlays: songs.length,
     topArtists: top(tally(songs.map(s => s.parent ?? '').filter(Boolean)), 5),
@@ -260,7 +261,7 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
     games: once(reacted.filter(r => r.group === 'game')),
     bookDays: daysSpent(days, period, 'book'),
     gameDays: daysSpent(days, period, 'game'),
-    favourites: once(reacted.filter(r => r.rating === '🩷')),
+    favourites: once(reacted.filter(r => r.rating === '🩷')).sort((a, b) => compareTitles(a.title, b.title)),
     feelings: top(tally(reacted.flatMap(r => r.feelings.map(f => f.toLowerCase()))), 8),
     rewatches: [
       ...rewatches,
@@ -269,7 +270,7 @@ export function summarize(events: WatchEvent[], reactions: ReactionEvent[], peri
           const first = days.filter(l => l.path === d.path && dayIn(l.day, period)).map(l => l.day).sort()[0]
           return cameBack(d.path, first) ? [{ title: d.title, path: d.path, kind: group, id: `${group}:${d.path}@${first}` }] : []
         })),
-    ],
+    ].sort((a, b) => compareTitles(a.title, b.title)),
     reactions: reacted.length,
   }
 }

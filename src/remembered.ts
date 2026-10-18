@@ -1,4 +1,5 @@
 import type { LibrarySetting } from './config'
+import { compareTitles } from './notes'
 
 /** The kinds of media, in the order "Remembered choices" lists them. */
 export const KIND_ORDER: [string, string][] = [
@@ -42,7 +43,7 @@ export function groupByKind<T>(entries: T[], kindOf: (entry: T) => string, nameO
   return [...groups.entries()]
     .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
     .map(([kind, list]) => [kind, [...list].sort((a, b) =>
-      nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base', numeric: true }) || then(a).localeCompare(then(b)))])
+      compareTitles(nameOf(a), nameOf(b)) || then(a).localeCompare(then(b)))])
 }
 
 /** One value or link kept in a pop-up: the note (or item) it's for, the property and what was kept. */

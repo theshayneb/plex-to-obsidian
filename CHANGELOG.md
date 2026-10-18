@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.152] - 2026-10-18
+
+- Titles are now sorted the way a library sorts them, leaving out a leading "The", "A" or "An" (so "The Matrix" goes with the M's), with numbers in order ("Part 2" before "Part 10"). This applies wherever the plugin sorts by title: the dashboard's lists (Favorites, Back again, books and games, ties in Movies, TV shows and Most played, the Randomizer), recommendations, Last.fm suggestions, Settings → Remembered choices, the list of notes that match nothing, and the order of the approval pop-ups within each group.
+
 ## [0.0.151] - 2026-10-18
 
 - Media dashboard: a new Randomizer tab. Pick Movies, TV shows, Documentaries, Books or Games, then narrow it down by Genre, Status, Length and Tag (say, a comedy under two hours, still pending, tagged holiday). It lists every note that fits, and "Pick one for me" chooses one at random ("Pick another" never repeats the last). The dropdowns offer what your notes actually have, most common first, so a new genre or tag shows up by itself. Length is minutes for movies and documentaries, episode length for shows, pages for books and hours for games; notes with no length are counted separately, not hidden. Your choices are remembered for each kind.

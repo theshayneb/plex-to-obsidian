@@ -106,8 +106,8 @@ describe('coming back to something', () => {
     const paths: Record<string, string> = { 50: 'TV/Over the Garden Wall.md', 88: 'TV/Lost.md' }
     const s = summarize(events, [], monthPeriod(2026, 9), undefined, days, key => paths[key])
     expect(s.rewatches).toEqual([
-      { title: 'Over the Garden Wall', path: 'TV/Over the Garden Wall.md', kind: 'show', id: 'show:50@2026-10-10' },
       { title: 'Dune', path: 'Books/Dune.md', kind: 'book', id: 'book:Books/Dune.md@2026-10-02' },
+      { title: 'Over the Garden Wall', path: 'TV/Over the Garden Wall.md', kind: 'show', id: 'show:50@2026-10-10' },
     ])
     // Logged twice the same evening: one viewing.
     expect(s.movies).toEqual([{ key: '9', title: 'Master of Dark Shadows', times: 1, days: ['2026-10-12'] }])

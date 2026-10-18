@@ -36,7 +36,7 @@ describe('groupByKind', () => {
     ]
     expect(groupByKind(entries, e => e.kind, e => e.name).map(([kind, list]) => [kind, list.map(e => e.name)])).toEqual([
       ['Movies', ['alien', 'Zodiac']],
-      ['Music', ['A song', 'b song']],
+      ['Music', ['b song', 'A song']],
       [OTHER_KIND, ['x']],
     ])
   })

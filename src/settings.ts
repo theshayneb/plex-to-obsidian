@@ -16,7 +16,7 @@ import {
   STEAM_LIBRARY,
   type LibrarySetting,
 } from './config'
-import { OTHER_CHARS, ratingKeyFromLink, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
+import { compareTitles, OTHER_CHARS, ratingKeyFromLink, renderFileName, REPLACEABLE_CHARS, type LibraryTarget, type MatchBy, type PlexItem } from './notes'
 import { PlexClient } from './plex'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
@@ -926,7 +926,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     if (lastfm.length) {
       this.kindHeading(containerEl, 'Last.fm', lastfm.length)
       const label = (id: string) => id.replace(/^lastfm:(track|artist):/, '')
-      for (const id of [...lastfm].sort((a, b) => label(a).localeCompare(label(b), undefined, { sensitivity: 'base' }))) {
+      for (const id of [...lastfm].sort((a, b) => compareTitles(label(a), label(b)))) {
         new Setting(containerEl)
           .setClass('pmn-ignored-item')
           .setName(label(id))

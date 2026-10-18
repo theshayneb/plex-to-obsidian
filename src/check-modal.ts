@@ -1,6 +1,7 @@
 import { App, type ExtraButtonComponent, Modal, Notice, Setting, TFile, type ToggleComponent } from 'obsidian'
 import { BOOKS_LIBRARY, type PlexNotesSettings } from './config'
 import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties'
+import { compareTitles } from './notes'
 
 
 /** Not a property: a check with it renames notes whose file name doesn't follow their library's format. */
@@ -252,7 +253,8 @@ export class UnmatchedModal extends Modal {
       : 'All done.')
     describe()
     const list = contentEl.createDiv('pmn-check-unmatched')
-    for (const path of this.pmnUnmatched) {
+    const nameOf = (path: string) => path.split('/').pop()!.replace(/\.md$/, '')
+    for (const path of [...this.pmnUnmatched].sort((a, b) => compareTitles(nameOf(a), nameOf(b)))) {
       const row = new Setting(list)
         .setName(path.split('/').pop()!.replace(/\.md$/, ''))
         .setDesc([path.split('/').slice(0, -1).join('/'), this.pmnWhy[path]].filter(Boolean).join(' · '))

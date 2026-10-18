@@ -17,6 +17,8 @@ import {
   songNameVariants,
   ratingKeyFromLink,
   renderFileName,
+  compareTitles,
+  sortTitle,
   type PlexItem,
 } from '../src/notes'
 
@@ -78,6 +80,14 @@ describe('links', () => {
     const link = plexWebLink('abc123', '100', '90')
     expect(link).toBe('https://app.plex.tv/desktop/#!/server/abc123/details?key=%2Flibrary%2Fmetadata%2F90&track=100')
     expect(ratingKeyFromLink(link)).toBe('100')
+  })
+})
+
+describe('title sorting', () => {
+  it('sorts titles as a library does, leaving out a leading The, A or An', () => {
+    const titles = ['The Matrix', 'An American Tail', 'Zodiac', 'A Bug\'s Life', 'Alien', 'Part 10', 'Part 2', 'The', 'the birds', 'Theodora', '"Weird Al" Yankovic']
+    expect([...titles].sort(compareTitles)).toEqual(['Alien', 'An American Tail', 'the birds', 'A Bug\'s Life', 'The Matrix', 'Part 2', 'Part 10', 'The', 'Theodora', '"Weird Al" Yankovic', 'Zodiac'])
+    expect(sortTitle('The Beatles – Help!')).toBe('Beatles – Help!')
   })
 })
 

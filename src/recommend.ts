@@ -1,5 +1,6 @@
 // Recommendations from your own library: what you loved, set against what you haven't rated or
 // watched yet. No Obsidian imports, so it can be unit tested.
+import { compareTitles } from './notes'
 
 /** Media are only recommended against their own kind: movies, shows and documentaries together. */
 export type RecGroup = 'video' | 'music' | 'game' | 'book'
@@ -80,7 +81,7 @@ export function recommend(entries: RecEntry[], notInterested: Set<string>, perGr
     })
   }
   for (const group of Object.keys(out) as RecGroup[]) {
-    out[group] = out[group].sort((a, b) => b.score - a.score || a.entry.title.localeCompare(b.entry.title)).slice(0, perGroup)
+    out[group] = out[group].sort((a, b) => b.score - a.score || compareTitles(a.entry.title, b.entry.title)).slice(0, perGroup)
   }
   return out
 }

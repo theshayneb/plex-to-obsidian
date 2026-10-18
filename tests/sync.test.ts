@@ -793,9 +793,10 @@ describe('PlexSync', () => {
 
     const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
 
-    expect(requests.map(r => r.path)).toEqual(['Media/Video Games/Wildermyth.md', 'Media/Video Games/Hades.md'])
-    expect(requests[0].lines).toEqual([{ key: 'link:Link', label: 'Link', current: search, value: 'https://store.steampowered.com/app/763890/', edit: 'text', unticked: false, source: 'Steam', writesTo: 'This note' }])
-    expect(requests[1].lines[0]).toMatchObject({ key: 'link:Link', current: hltb, unticked: true })
+    // Alphabetically within a group.
+    expect(requests.map(r => r.path)).toEqual(['Media/Video Games/Hades.md', 'Media/Video Games/Wildermyth.md'])
+    expect(requests[1].lines).toEqual([{ key: 'link:Link', label: 'Link', current: search, value: 'https://store.steampowered.com/app/763890/', edit: 'text', unticked: false, source: 'Steam', writesTo: 'This note' }])
+    expect(requests[0].lines[0]).toMatchObject({ key: 'link:Link', current: hltb, unticked: true })
     expect(frontmatter.get('Media/Video Games/Wildermyth.md')!.Link).toBe('https://store.steampowered.com/app/763890/')
     expect(frontmatter.get('Media/Video Games/Hades.md')!.Link).toBe(hltb)
     expect(result.links).toEqual(['Media/Video Games/Wildermyth.md'])

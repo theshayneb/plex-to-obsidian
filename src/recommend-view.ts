@@ -2,7 +2,7 @@ import { ItemView, moment, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
 import { compared, daysWith, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type DayLink, type DaysSpent, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
 import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
-import { artistsOf, type PlexItem } from './notes'
+import { artistsOf, compareTitles, type PlexItem } from './notes'
 import { similarTracks } from './lastfm'
 import { lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
@@ -705,7 +705,7 @@ export class RecommendView extends ItemView {
       })
     }
 
-    const fitting = entries.filter(e => fits(e, filter)).sort((a, b) => a.title.localeCompare(b.title))
+    const fitting = entries.filter(e => fits(e, filter)).sort((a, b) => compareTitles(a.title, b.title))
     const lengthText = (e: PickEntry) => e.length === undefined ? undefined
       : kind === 'book' ? `${e.length} pages`
       : e.length >= 60 ? `${Math.floor(e.length / 60)}h${e.length % 60 ? ` ${e.length % 60}m` : ''}` : `${e.length}m`

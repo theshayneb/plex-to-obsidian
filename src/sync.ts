@@ -35,6 +35,7 @@ import {
   type MediaKind,
   type PlexItem,
   trackArtist,
+  compareTitles,
 } from './notes'
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
@@ -700,7 +701,7 @@ export class PlexSync {
       progress('Checking existing notes…')
       // Every note's changes are worked out first, then asked about grouped by library and by which
       // properties change, so a run of the same kind of change can be approved one after another.
-      const pending: { lib: ActiveLibrary, labels: string[], decide: (position: number, total: number, group: string, groupKey: string, groupLeft: number) => Promise<void> }[] = []
+      const pending: { lib: ActiveLibrary, labels: string[], name: string, decide: (position: number, total: number, group: string, groupKey: string, groupLeft: number) => Promise<void> }[] = []
       for (const family of FAMILIES) {
         const index = indexes[family]
         const matches = entries
@@ -845,7 +846,7 @@ export class PlexSync {
           const lockedHere = this.settings.lockedProperties[path] ?? []
           const askedLines = lines.filter(line => !lockedHere.includes(line.label))
           if (!askedLines.length) continue
-          pending.push({ lib, labels: [...new Set(askedLines.map(line => line.label))].sort(), decide: async (position, total, group, groupKey, groupLeft) => {
+          pending.push({ lib, labels: [...new Set(askedLines.map(line => line.label))].sort(), name: file.basename, decide: async (position, total, group, groupKey, groupLeft) => {
             const approval = await this.ask({ action: 'change', path, lines, position, total, group, groupKey, groupLeft }, result, item, lib)
             if (!approval) return
             const { excluded, edits } = approval
@@ -993,7 +994,7 @@ export class PlexSync {
       const libraryOrder = active.map(([, l]) => l.title)
       const groupOf = (p: typeof pending[number]) => p.labels.join(', ')
       pending.sort((a, b) => libraryOrder.indexOf(a.lib.title) - libraryOrder.indexOf(b.lib.title)
-        || a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)))
+        || a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)) || compareTitles(a.name, b.name))
       let position = 0
       for (const p of pending) {
         position++
@@ -2082,11 +2083,11 @@ export class PlexSync {
     // Every book is looked up first, then asked about grouped by which properties change (as in
     // a sync), so a run of the same kind of change can be approved together.
     type Decide = (position: number, total: number, group: string, groupKey: string, groupLeft: number) => Promise<void>
-    const pending: { labels: string[], decide: Decide }[] = []
+    const pending: { labels: string[], name: string, decide: Decide }[] = []
     const queue = (path: string, lines: ApprovalLine[], decide: Decide): void => {
       const locked = this.settings.lockedProperties[path] ?? []
       const labels = [...new Set(lines.map(line => line.label).filter(label => !locked.includes(label)))].sort()
-      if (labels.length) pending.push({ labels, decide })
+      if (labels.length) pending.push({ labels, name: path.split('/').pop()!.replace(/\.md$/, ''), decide })
     }
     // A note's book, from its Open Library or Google Books link, else by its title and author.
     const linkOf = (file: TFile) => {
@@ -2254,7 +2255,7 @@ export class PlexSync {
     }
 
     const groupOf = (p: typeof pending[number]) => p.labels.join(', ')
-    pending.sort((a, b) => a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)))
+    pending.sort((a, b) => a.labels.length - b.labels.length || groupOf(a).localeCompare(groupOf(b)) || compareTitles(a.name, b.name))
     let position = 0
     for (const p of pending) {
       position++

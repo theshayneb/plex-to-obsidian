@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.151] - 2026-10-18
+
+- Media dashboard: a new Randomizer tab. Pick Movies, TV shows, Documentaries, Books or Games, then narrow it down by Genre, Status, Length and Tag (say, a comedy under two hours, still pending, tagged holiday). It lists every note that fits, and "Pick one for me" chooses one at random ("Pick another" never repeats the last). The dropdowns offer what your notes actually have, most common first, so a new genre or tag shows up by itself. Length is minutes for movies and documentaries, episode length for shows, pages for books and hours for games; notes with no length are counted separately, not hidden. Your choices are remembered for each kind.
+
 ## [0.0.150] - 2026-10-17
 
 - What you watch in a Plex library set to "Skip" in Settings → Libraries (such as Yoga & Exercise) is no longer counted anywhere: not on the dashboard (Insights, Habits, Just finished), not in daily notes' episode lines or Related links.

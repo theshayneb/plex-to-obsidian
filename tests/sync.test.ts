@@ -1687,6 +1687,22 @@ describe('PlexSync', () => {
     expect(again.allowedGenres).toEqual(['Action', 'Comedy'])
   })
 
+  it('reads movie and book notes for the Randomizer, without their type tags', async () => {
+    const { pickEntries } = await import('../src/recommend-data')
+    const { app } = makeApp({
+      'Media/Movies/Elf (2003).md': { Genre: ['Comedy'], Status: 'pending', Duration: 97, tags: ['movie', 'holiday'] },
+      'Media/Books/Dune by Frank Herbert (1965).md': { Genre: ['Sci-Fi'], Status: 'completed', Duration: 412, tags: 'book, comfort' },
+    })
+    const settings = settingsWith({})
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    expect(pickEntries(app as never, settings).map(e => [e.kind, e.title, e.genres, e.status, e.length, e.tags])).toEqual([
+      ['movie', 'Elf (2003)', ['Comedy'], 'pending', 97, ['holiday']],
+      ['book', 'Dune by Frank Herbert (1965)', ['Sci-Fi'], 'completed', 412, ['comfort']],
+    ])
+  })
+
   it('names new book notes "Title by Author (Year)" from now on, unless the format was changed', () => {
     const books = (format: string) => ({ libraries: { books: { title: 'Books', type: 'books', target: 'book', folder: 'Media/Books', fileNameFormat: format, matchBy: 'loose',
       properties: [{ name: 'Author', source: 'authors' }], values: { watched: '', started: '', unwatched: '', tag: 'book' } } } })

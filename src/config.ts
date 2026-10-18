@@ -1,5 +1,6 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
 import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES } from './reactions'
+import type { PickFilter } from './randomizer'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
 import {
   DEFAULT_TAGS,
@@ -104,6 +105,8 @@ export interface PlexNotesSettings {
   reviewSkipped: string[]
   /** "Back again" entries marked "Not a rewatch" (the summary's `id`: item and day), not shown again. */
   notRewatches: string[]
+  /** The dashboard's Randomizer: the kind last shown, and each kind's choices. */
+  randomizer: { kind: string, filters: Record<string, PickFilter> }
   /** The property "Add something new" puts your reason for wanting it in. */
   whyProperty: string
   /** Daily notes' folder and file name format (moment.js); empty uses Obsidian's Daily notes settings. */
@@ -227,6 +230,7 @@ export function defaultSettings(): PlexNotesSettings {
     reactionsDone: {},
     reviewSkipped: [],
     notRewatches: [],
+    randomizer: { kind: 'movie', filters: {} },
     whyProperty: 'Why',
     dailyFolder: '',
     dailyFormat: '',
@@ -388,6 +392,14 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
+  if (saved.randomizer && typeof saved.randomizer === 'object') {
+    const r = saved.randomizer as { kind?: unknown, filters?: unknown }
+    const filters: Record<string, PickFilter> = {}
+    for (const [kind, f] of Object.entries(r.filters && typeof r.filters === 'object' ? r.filters as Record<string, Partial<PickFilter>> : {})) {
+      filters[kind] = { genre: String(f.genre ?? ''), status: String(f.status ?? ''), length: String(f.length ?? ''), tag: String(f.tag ?? '') }
+    }
+    settings.randomizer = { kind: typeof r.kind === 'string' ? r.kind : 'movie', filters }
+  }
   if (Array.isArray(saved.bedtimeShows)) settings.bedtimeShows = saved.bedtimeShows.map(String)
   if (saved.reactionsDone && typeof saved.reactionsDone === 'object') settings.reactionsDone = { ...saved.reactionsDone }
   if (Array.isArray(saved.notInterested)) settings.notInterested = saved.notInterested.map(String)

@@ -6,14 +6,15 @@ import { artistsOf, type PlexItem } from './notes'
 import { similarTracks } from './lastfm'
 import { lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
-import { itemEntry, noteEntries, withItem } from './recommend-data'
+import { itemEntry, noteEntries, pickEntries, withItem } from './recommend-data'
+import { ANY_FILTER, fits, LENGTH_CHOICES, PICK_KINDS, pickChoices, pickOne, type PickEntry, type PickFilter } from './randomizer'
 import { errorMessage } from './settings'
 import { PlexSync } from './sync'
 
 export const RECOMMEND_VIEW = 'pmn-recommendations'
 
-type Tab = 'insights' | 'recommendations' | 'habits'
-const TABS: [Tab, string][] = [['insights', 'Insights'], ['recommendations', 'Recommendations'], ['habits', 'Habits']]
+type Tab = 'insights' | 'recommendations' | 'randomizer' | 'habits'
+const TABS: [Tab, string][] = [['insights', 'Insights'], ['recommendations', 'Recommendations'], ['randomizer', 'Randomizer'], ['habits', 'Habits']]
 
 const GROUP_TITLES: Record<RecGroup, string> = {
   video: 'Movies and TV',
@@ -50,6 +51,8 @@ export class RecommendView extends ItemView {
   /** Movies' and episodes' lengths, for the Habits tab's hours (null: not looked up yet). */
   private pmnLengths: Map<string, number> | null = null
   private pmnFinished: Finished[] | null = null
+  /** The Randomizer's last pick (a note's path), kept while its choices stay the same. */
+  private pmnPick: string | undefined
   /** Which of each kind's candidates "Worth a few words" shows ("Another one" moves on). */
   private readonly pmnReviewAt = new Map<string, number>()
 
@@ -233,6 +236,7 @@ export class RecommendView extends ItemView {
     const body = contentEl.createDiv('pmn-dash-body')
     if (this.pmnTab === 'insights') this.pmnInsights(body)
     else if (this.pmnTab === 'habits') this.pmnHabits(body)
+    else if (this.pmnTab === 'randomizer') this.pmnRandomizer(body)
     else this.pmnRecommendations(body)
   }
 
@@ -639,6 +643,98 @@ export class RecommendView extends ItemView {
       this.pmnPlugin.settings.reviewSkipped.push(pick.path)
       void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
     })
+  }
+
+  /**
+   * The Randomizer: one kind of your media, narrowed by genre, status, length and tag (each kind's
+   * choices remembered), every note that fits, and one picked at random from them.
+   */
+  private pmnRandomizer(el: HTMLElement): void {
+    const settings = this.pmnPlugin.settings
+    this.pmnHeader(el, 'Randomizer', 'Narrow it down, then let chance choose.')
+    const all = pickEntries(this.app, settings)
+    const kinds = PICK_KINDS.filter(([kind]) => all.some(e => e.kind === kind))
+    if (!kinds.length) {
+      el.createEl('p', { cls: 'pmn-dash-empty', text: 'No movie, show, documentary, book or game notes in your libraries\' folders yet.' })
+      return
+    }
+    const kind = kinds.some(([k]) => k === settings.randomizer.kind) ? settings.randomizer.kind : kinds[0][0]
+    const save = () => void this.pmnPlugin.saveSettings()
+
+    const kindRow = el.createDiv('pmn-pick-kinds')
+    for (const [k, label] of kinds) {
+      const button = kindRow.createEl('button', { cls: `pmn-dash-tab${k === kind ? ' is-active' : ''}`, text: label })
+      button.addEventListener('click', () => {
+        if (k === kind) return
+        settings.randomizer.kind = k
+        this.pmnPick = undefined
+        save()
+        this.pmnRender()
+      })
+    }
+
+    const entries = all.filter(e => e.kind === kind)
+    const filter: PickFilter = { ...ANY_FILTER, ...settings.randomizer.filters[kind] }
+    const choices = pickChoices(entries)
+    const filters = el.createDiv('pmn-pick-filters')
+    const choose = (label: string, key: keyof PickFilter, options: [string, string][]) => {
+      const box = filters.createDiv('pmn-pick-filter')
+      box.createDiv({ cls: 'pmn-dash-metric-label', text: label })
+      const select = box.createEl('select', { cls: 'dropdown' })
+      // A choice no note has any more (say, a tag you removed) is still shown while chosen.
+      const all: [string, string][] = [['', 'Any'], ...options, ...filter[key] && !options.some(([v]) => v === filter[key]) ? [[filter[key], filter[key]] as [string, string]] : []]
+      for (const [value, text] of all) select.createEl('option', { value, text })
+      select.value = filter[key]
+      select.addEventListener('change', () => {
+        settings.randomizer.filters[kind] = { ...filter, [key]: select.value }
+        this.pmnPick = undefined
+        save()
+        this.pmnRender()
+      })
+    }
+    choose('Genre', 'genre', choices.genres.map(g => [g, g]))
+    choose('Status', 'status', choices.statuses.map(s => [s, s]))
+    choose('Length', 'length', (LENGTH_CHOICES[kind] ?? []).map(c => [c.id, c.label]))
+    choose('Tag', 'tag', choices.tags.map(t => [t, t]))
+    if (filter.genre || filter.status || filter.length || filter.tag) {
+      filters.createEl('button', { cls: 'pmn-pick-clear', text: 'Clear' }).addEventListener('click', () => {
+        settings.randomizer.filters[kind] = { ...ANY_FILTER }
+        this.pmnPick = undefined
+        save()
+        this.pmnRender()
+      })
+    }
+
+    const fitting = entries.filter(e => fits(e, filter)).sort((a, b) => a.title.localeCompare(b.title))
+    const lengthText = (e: PickEntry) => e.length === undefined ? undefined
+      : kind === 'book' ? `${e.length} pages`
+      : e.length >= 60 ? `${Math.floor(e.length / 60)}h${e.length % 60 ? ` ${e.length % 60}m` : ''}` : `${e.length}m`
+    const detail = (e: PickEntry) => [e.status, lengthText(e)].filter(Boolean).join(' · ') || undefined
+
+    const grid = el.createDiv('pmn-dash-grid')
+    const pickCard = grid.createDiv('pmn-card pmn-pick-card')
+    pickCard.createDiv({ cls: 'pmn-card-title', text: 'Your pick' })
+    const picked = fitting.find(e => e.path === this.pmnPick)
+    if (!fitting.length) {
+      pickCard.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing fits all of that. Try "Any" for one of them.' })
+    } else {
+      if (picked) {
+        const line = pickCard.createDiv('pmn-pick-chosen')
+        this.pmnLink(line, picked.title, picked.path)
+        const about = detail(picked)
+        if (about) line.createDiv({ cls: 'pmn-rec-why', text: about })
+      }
+      const buttons = pickCard.createDiv('pmn-rec-buttons')
+      buttons.createEl('button', { text: picked ? 'Pick another' : 'Pick one for me' }).addEventListener('click', () => {
+        this.pmnPick = pickOne(fitting, this.pmnPick)?.path
+        this.pmnRender()
+      })
+    }
+    // Notes with no length can't be told apart by length, so they're said, not hidden silently.
+    const unknown = filter.length ? entries.filter(e => e.length === undefined && fits(e, { ...filter, length: '' })).length : 0
+    const title = `${fitting.length} ${fitting.length === 1 ? 'fits' : 'fit'}`
+    this.pmnListCard(grid, title, fitting.map(e => ({ title: e.title, path: e.path, detail: detail(e) })), 'Nothing fits all of that.')
+    if (unknown) grid.lastElementChild?.createEl('p', { cls: 'pmn-dash-empty', text: `${unknown} more would fit, but their notes have no length.` })
   }
 
   /** Habits: this week next to last week, and where things stand. Numbers only. */

@@ -820,3 +820,33 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
+
+/* The dashboard's Randomizer: a row of kinds, then the choices, then the pick and what fits. */
+.pmn-pick-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: var(--size-4-3);
+}
+
+.pmn-pick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--size-4-3);
+  margin-bottom: var(--size-4-4);
+}
+
+.pmn-pick-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  min-width: 10em;
+}
+
+.pmn-pick-clear {
+  font-size: var(--font-ui-smaller);
+}
+
+.pmn-pick-chosen {
+  margin-bottom: var(--size-4-3);
+}

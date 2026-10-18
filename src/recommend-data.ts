@@ -1,7 +1,8 @@
 import { normalizePath, type App } from 'obsidian'
 import type { PlexNotesSettings } from './config'
 import { displayName, isStarted, isWatched, ratingKeyFromLink, type MediaKind, type PlexItem } from './notes'
-import { linkPropertyNames, listOf, noteStars, type FieldSource } from './properties'
+import { DEFAULT_TAGS, linkPropertyNames, listOf, noteStars, type FieldSource } from './properties'
+import { parseLength, PICK_KINDS, type PickEntry } from './randomizer'
 import type { RecEntry, RecGroup } from './recommend'
 
 const GENRE_SOURCES: FieldSource[] = ['genres', 'styles', 'moods']
@@ -55,6 +56,51 @@ export function noteEntries(app: App, settings: PlexNotesSettings): (RecEntry & 
         people: byAuthor ? [byAuthor] : people,
         level,
         unseen,
+      })
+    }
+  }
+  return out
+}
+
+/** Where a length is kept, most precise first: minutes, a book's pages, then text and clock forms. */
+const LENGTH_PROPS: FieldSource[] = ['durationMinutes', 'hltbMain', 'pages', 'durationText', 'durationClock']
+
+/**
+ * Every note the Randomizer can pick from: movies, shows, documentaries, books and games in the
+ * libraries' folders (not ones you said to ignore), with their genres, status, length and your own
+ * tags (the notes' type tags, such as "movie", left out).
+ */
+export function pickEntries(app: App, settings: PlexNotesSettings): PickEntry[] {
+  const kinds = new Set(PICK_KINDS.map(([kind]) => kind))
+  const typeTags = new Set(['song', ...Object.values(DEFAULT_TAGS), ...Object.values(settings.libraries).map(l => l.values.tag)]
+    .map(t => t.trim().replace(/^#/, '').toLowerCase()).filter(Boolean))
+  const out: PickEntry[] = []
+  const seen = new Set<string>()
+  const files = app.vault.getMarkdownFiles()
+  for (const lib of Object.values(settings.libraries)) {
+    if (lib.target === 'skip' || !kinds.has(lib.target)) continue
+    const kind = lib.target
+    const folder = normalizePath(lib.folder)
+    const of = (sources: FieldSource[]) => lib.properties.filter(m => sources.includes(m.source) && m.name.trim()).map(m => m.name.trim())
+    const genreProps = of(GENRE_SOURCES)
+    const statusProps = of(['status'])
+    const lengthProps = LENGTH_PROPS.flatMap(source => of([source]))
+    const links = linkPropertyNames(lib.properties)
+    for (const file of files) {
+      if (!file.path.startsWith(`${folder}/`) || seen.has(file.path)) continue
+      seen.add(file.path)
+      const fm = app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      const noteKey = kind === 'book' ? `book:${file.path}` : links.map(name => ratingKeyFromLink(fm[name])).find(Boolean) ?? ''
+      if (settings.unmatchedIgnored.includes(file.path) || (noteKey && noteKey in settings.ignored)) continue
+      const status = statusProps.map((name): unknown => fm[name]).find((v): v is string => typeof v === 'string' && v.trim() !== '')?.trim() ?? ''
+      out.push({
+        path: file.path,
+        title: file.basename,
+        kind,
+        genres: genreProps.flatMap(name => names(fm[name])),
+        status,
+        length: lengthProps.map(name => parseLength(fm[name])).find(l => l !== undefined),
+        tags: listOf(fm.tags).map(t => t.trim().replace(/^#/, '')).filter(t => t && !typeTags.has(t.toLowerCase())),
       })
     }
   }

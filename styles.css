@@ -850,3 +850,41 @@
 .pmn-pick-chosen {
   margin-bottom: var(--size-4-3);
 }
+
+/* Habits' bar charts: one series, the theme's accent; thin bars on a quiet baseline. */
+.pmn-bars {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: var(--size-4-2);
+}
+
+.pmn-bars-axis {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+.pmn-bars-hit {
+  fill: transparent;
+}
+
+.pmn-bars-fill {
+  fill: var(--interactive-accent);
+}
+
+.pmn-bars-bar:hover .pmn-bars-fill {
+  fill: var(--interactive-accent-hover);
+}
+
+.pmn-bars-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.pmn-bars-value {
+  fill: var(--text-normal);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  text-anchor: middle;
+}

@@ -112,10 +112,23 @@ export function yearPeriod(year: number): Period {
 }
 
 /** This week (from Monday) up to now, and the whole week before it. */
-export function weeks(now: Date): { thisWeek: Period, lastWeek: Period } {
+export function weeks(now: Date): { thisWeek: Period, lastWeek: Period, weekBefore: Period } {
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
   const before = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7)
-  return { thisWeek: { from: seconds(monday), to: seconds(now) }, lastWeek: { from: seconds(before), to: seconds(monday) } }
+  const earlier = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 14)
+  return {
+    thisWeek: { from: seconds(monday), to: seconds(now) },
+    lastWeek: { from: seconds(before), to: seconds(monday) },
+    weekBefore: { from: seconds(earlier), to: seconds(before) },
+  }
+}
+
+/** This year's months so far, January first, the current one up to now. */
+export function monthsSoFar(now: Date): Period[] {
+  return Array.from({ length: now.getMonth() + 1 }, (_, m) => {
+    const p = monthPeriod(now.getFullYear(), m)
+    return m === now.getMonth() ? { from: p.from, to: seconds(now) } : p
+  })
 }
 
 const inPeriod = (at: number, p: Period) => at >= p.from && at < p.to
@@ -291,6 +304,36 @@ export function weekNumbers(events: WatchEvent[], period: Period, minutes: Map<s
     hours: Math.round(video.reduce((sum, e) => sum + (minutes.get(e.key) ?? 0), 0) / 6) / 10,
     movies: now.filter(e => e.kind === 'movie').length,
     episodes: now.filter(e => e.kind === 'episode').length,
+    songs: now.filter(e => e.kind === 'track').length,
+  }
+}
+
+/** What a stretch of time held, for the Habits charts: in the Insights order. */
+export interface HabitCounts {
+  /** Movie viewings (Plex entries less than 12 hours apart are one). */
+  movies: number
+  episodes: number
+  /** Days your daily notes link a book, and a game. */
+  bookDays: number
+  gameDays: number
+  songs: number
+}
+
+export function habitCounts(events: WatchEvent[], days: DayLink[], period: Period): HabitCounts {
+  const now = events.filter(e => inPeriod(e.viewedAt, period))
+  // One viewing per sitting, as in Insights.
+  let movies = 0
+  const last = new Map<string, number>()
+  for (const e of now.filter(e => e.kind === 'movie').sort((a, b) => a.viewedAt - b.viewedAt)) {
+    const before = last.get(e.key)
+    if (before === undefined || e.viewedAt - before >= VIEWING_GAP) movies++
+    last.set(e.key, e.viewedAt)
+  }
+  return {
+    movies,
+    episodes: now.filter(e => e.kind === 'episode').length,
+    bookDays: daysWith(days, period, 'book'),
+    gameDays: daysWith(days, period, 'game'),
     songs: now.filter(e => e.kind === 'track').length,
   }
 }

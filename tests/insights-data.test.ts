@@ -129,3 +129,27 @@ describe('coming back to something', () => {
     expect(s.rewatches).toEqual([])
   })
 })
+
+describe('habits', () => {
+  it('counts each kind in a stretch of time, in the Insights order', async () => {
+    const { habitCounts, monthsSoFar, weeks } = await import('../src/insights-data')
+    const events = watchEvents([
+      { type: 'movie', title: 'Elf', ratingKey: '1', viewedAt: at(2026, 10, 12, 20), accountID: 1 },
+      { type: 'movie', title: 'Elf', ratingKey: '1', viewedAt: at(2026, 10, 12, 22), accountID: 1 },
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', ratingKey: '881', viewedAt: at(2026, 10, 13), accountID: 1 },
+      { type: 'track', title: 'Airbag', grandparentTitle: 'Radiohead', ratingKey: '7', viewedAt: at(2026, 10, 14), accountID: 1 },
+    ])
+    const days = [
+      { day: '2026-10-13', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2026-10-14', path: 'Books/Dune.md', title: 'Dune', group: 'book' as const },
+      { day: '2026-10-14', path: 'Games/Hades.md', title: 'Hades', group: 'game' as const },
+    ]
+    const { thisWeek, lastWeek, weekBefore } = weeks(new Date(2026, 9, 16, 12))
+    expect(habitCounts(events, days, thisWeek)).toEqual({ movies: 1, episodes: 1, bookDays: 2, gameDays: 1, songs: 1 })
+    expect(habitCounts(events, days, lastWeek)).toEqual({ movies: 0, episodes: 0, bookDays: 0, gameDays: 0, songs: 0 })
+    expect(weekBefore.to).toBe(lastWeek.from)
+    const months = monthsSoFar(new Date(2026, 9, 16, 12))
+    expect(months).toHaveLength(10)
+    expect(habitCounts(events, days, months[9]).movies).toBe(1)
+  })
+})

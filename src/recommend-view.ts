@@ -1,5 +1,5 @@
 import { ItemView, moment, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
-import { compared, daysWith, monthPeriod, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type DayLink, type DaysSpent, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
+import { compared, daysWith, habitCounts, monthPeriod, monthsSoFar, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type HabitCounts, type DayLink, type DaysSpent, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
 import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
 import { artistsOf, compareTitles, type PlexItem } from './notes'
@@ -14,7 +14,7 @@ import { PlexSync } from './sync'
 export const RECOMMEND_VIEW = 'pmn-recommendations'
 
 type Tab = 'insights' | 'recommendations' | 'randomizer' | 'habits'
-const TABS: [Tab, string][] = [['insights', 'Insights'], ['recommendations', 'Recommendations'], ['randomizer', 'Randomizer'], ['habits', 'Habits']]
+const TABS: [Tab, string][] = [['insights', 'Insights'], ['habits', 'Habits'], ['recommendations', 'Recommendations'], ['randomizer', 'Randomizers']]
 
 const GROUP_TITLES: Record<RecGroup, string> = {
   video: 'Movies and TV',
@@ -85,7 +85,8 @@ export class RecommendView extends ItemView {
     if (this.pmnTab === 'recommendations' && !this.pmnItems) await this.pmnLookUp()
     if (this.pmnTab === 'insights') await this.pmnReadHistory(this.pmnPeriod().from - 365 * 86400)
     if (this.pmnTab === 'habits') {
-      await this.pmnReadHistory(weeks(new Date()).lastWeek.from)
+      // The year so far, and the two weeks before this one (which can reach back into last year).
+      await this.pmnReadHistory(Math.min(monthsSoFar(new Date())[0].from, weeks(new Date()).weekBefore.from))
       await this.pmnReadLengths()
     }
     if (this.pmnTab === 'insights' && !this.pmnFinished) {
@@ -737,27 +738,78 @@ export class RecommendView extends ItemView {
     if (unknown) grid.lastElementChild?.createEl('p', { cls: 'pmn-dash-empty', text: `${unknown} more would fit, but their notes have no length.` })
   }
 
-  /** Habits: this week next to last week, and where things stand. Numbers only. */
+  /**
+   * A small bar chart: one bar per period, the last one (now) labelled with its number; every bar
+   * says its number on hover, and the chart says them all to screen readers.
+   */
+  private pmnBars(parent: HTMLElement, bars: { label: string, value: number }[], unit: string): void {
+    const width = 240
+    const height = 96
+    const top = 14
+    const bottom = 18
+    const gap = 4
+    const max = Math.max(1, ...bars.map(b => b.value))
+    const slot = width / bars.length
+    const barWidth = Math.max(4, Math.min(28, slot - gap))
+    const svg = parent.createSvg('svg', { cls: 'pmn-bars', attr: { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': bars.map(b => `${b.label}: ${b.value} ${unit}`).join(', ') } })
+    const base = height - bottom
+    svg.createSvg('line', { cls: 'pmn-bars-axis', attr: { x1: 0, x2: width, y1: base, y2: base } })
+    bars.forEach((bar, i) => {
+      const x = i * slot + (slot - barWidth) / 2
+      const h = bar.value ? Math.max(2, (bar.value / max) * (base - top)) : 0
+      const group = svg.createSvg('g', { cls: `pmn-bars-bar${i === bars.length - 1 ? ' is-current' : ''}` })
+      group.createSvg('title').textContent = `${bar.label}: ${bar.value} ${unit}`
+      // A wider, invisible target than the bar, so hovering is easy.
+      group.createSvg('rect', { cls: 'pmn-bars-hit', attr: { x: i * slot, y: 0, width: slot, height: base } })
+      if (h) {
+        // Rounded at the top only, square on the baseline.
+        const r = Math.min(4, barWidth / 2, h)
+        group.createSvg('path', { cls: 'pmn-bars-fill', attr: { d: `M${x},${base} V${base - h + r} Q${x},${base - h} ${x + r},${base - h} H${x + barWidth - r} Q${x + barWidth},${base - h} ${x + barWidth},${base - h + r} V${base} Z` } })
+      }
+      if (i === bars.length - 1) group.createSvg('text', { cls: 'pmn-bars-value', attr: { x: x + barWidth / 2, y: base - h - 3 } }).textContent = String(bar.value)
+      // With many bars (months), their first letter, so they don't run together.
+      group.createSvg('text', { cls: 'pmn-bars-label', attr: { x: i * slot + slot / 2, y: height - 4 } }).textContent = bars.length > 6 ? bar.label.slice(0, 1) : bar.label
+    })
+  }
+
+  /** Habits: this week next to the weeks before, the year by month, and where things stand. Numbers only. */
   private pmnHabits(el: HTMLElement): void {
-    this.pmnHeader(el, 'Habits', 'This week so far, next to last week. Just the numbers.')
+    this.pmnHeader(el, 'Habits', 'This week next to the two before it, and this year month by month. Just the numbers.')
     if (this.pmnHistoryState) el.createDiv({ cls: 'pmn-dash-note', text: this.pmnHistoryState })
-    const { thisWeek, lastWeek } = weeks(new Date())
+    const now = new Date()
+    const { thisWeek, lastWeek, weekBefore } = weeks(now)
     const events = this.pmnHistory?.events ?? []
-    const lengths = this.pmnLengths ?? new Map<string, number>()
-    const now = weekNumbers(events, thisWeek, lengths)
-    const before = weekNumbers(events, lastWeek, lengths)
-    const metrics = el.createDiv('pmn-dash-metrics')
-    this.pmnMetric(metrics, 'Movies and TV', `${now.hours} h`, this.pmnLengths ? compared(now.hours, before.hours, ' h') : 'Working out the hours…')
-    this.pmnMetric(metrics, 'Movies', String(now.movies), compared(now.movies, before.movies))
-    this.pmnMetric(metrics, 'Episodes', String(now.episodes), compared(now.episodes, before.episodes))
-    this.pmnMetric(metrics, 'Songs played', String(now.songs), compared(now.songs, before.songs))
-    // Books and games, from the days your daily notes link them.
     const days = this.pmnDays()
-    for (const [group, label] of [['book', 'Days reading'], ['game', 'Days playing']] as const) {
-      const a = daysWith(days, thisWeek, group)
-      const b = daysWith(days, lastWeek, group)
-      this.pmnMetric(metrics, label, String(a), compared(a, b))
+    const lengths = this.pmnLengths ?? new Map<string, number>()
+    const weekPeriods = [weekBefore, lastWeek, thisWeek]
+    const weekLabels = ['Week before', 'Last week', 'This week']
+    const months = monthsSoFar(now)
+    const monthLabels = months.map(p => new Date(p.from * 1000).toLocaleDateString('en', { month: 'short' }))
+    const byWeek = weekPeriods.map(p => habitCounts(events, days, p))
+    const byMonth = months.map(p => habitCounts(events, days, p))
+
+    // A column per kind, in the Insights order: this week's number, then the weeks, then the months.
+    const kinds: [keyof HabitCounts, string, string][] = [
+      ['movies', 'Movies', 'watched'], ['episodes', 'TV shows', 'episodes'], ['bookDays', 'Books', 'days reading'],
+      ['gameDays', 'Games', 'days playing'], ['songs', 'Songs', 'plays'],
+    ]
+    const columns = el.createDiv('pmn-dash-columns')
+    for (const [key, label, unit] of kinds) {
+      const col = columns.createDiv('pmn-dash-column')
+      const [, before, current] = byWeek.map(c => c[key])
+      this.pmnMetric(col, label, String(current), `${unit}, ${compared(current, before)}`)
+      const weeksCard = col.createDiv('pmn-card')
+      weeksCard.createDiv({ cls: 'pmn-card-title', text: 'Week by week' })
+      this.pmnBars(weeksCard, byWeek.map((c, i) => ({ label: weekLabels[i], value: c[key] })), unit)
+      const monthsCard = col.createDiv('pmn-card')
+      monthsCard.createDiv({ cls: 'pmn-card-title', text: `${now.getFullYear()} by month` })
+      this.pmnBars(monthsCard, byMonth.map((c, i) => ({ label: monthLabels[i], value: c[key] })), unit)
     }
+
+    // Hours of movies and TV, where Plex knows how long they are.
+    const hours = weekPeriods.map(p => weekNumbers(events, p, lengths).hours)
+    const metrics = el.createDiv('pmn-dash-metrics')
+    this.pmnMetric(metrics, 'Hours of movies and TV this week', `${hours[2]} h`, this.pmnLengths ? compared(hours[2], hours[1], ' h') : 'Working out the hours…')
 
     // Where things stand, from your notes' statuses.
     const counts = new Map<string, { all: number, month: number }>()

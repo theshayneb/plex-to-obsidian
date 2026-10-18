@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.153] - 2026-10-18
+
+- Media dashboard: the tabs are now Insights, Habits, Recommendations, Randomizers.
+- Habits has a column for each kind, in the same order as Insights (Movies, TV shows, Books, Games, Songs): this week's number next to last week's, a bar chart of the week before, last week and this week, and a bar chart of this year month by month. Movies count viewings, TV shows episodes, Books and Games the days your daily notes link them, Songs plays. Hover over a bar for its number. The hours of movies and TV this week and "Where things stand" are still below.
+
 ## [0.0.152] - 2026-10-18
 
 - Titles are now sorted the way a library sorts them, leaving out a leading "The", "A" or "An" (so "The Matrix" goes with the M's), with numbers in order ("Part 2" before "Part 10"). This applies wherever the plugin sorts by title: the dashboard's lists (Favorites, Back again, books and games, ties in Movies, TV shows and Most played, the Randomizer), recommendations, Last.fm suggestions, Settings → Remembered choices, the list of notes that match nothing, and the order of the approval pop-ups within each group.

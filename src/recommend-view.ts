@@ -1,15 +1,15 @@
-import { ItemView, moment, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
-import { compared, daysWith, habitCounts, monthPeriod, monthsSoFar, parseReaction, summarize, weekNumbers, weeks, yearPeriod, type HabitCounts, type DayLink, type DaysSpent, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
+import { ItemView, Notice, TFile, type WorkspaceLeaf } from 'obsidian'
+import { compared, habitCounts, monthPeriod, monthsSoFar, summarize, weekNumbers, weeks, yearPeriod, type Period, type PeriodSummary, type WatchEvent } from './insights-data'
 import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
-import { artistsOf, compareTitles, type PlexItem } from './notes'
+import { artistsOf, type PlexItem } from './notes'
 import { similarTracks } from './lastfm'
 import { lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
-import { itemEntry, noteEntries, pickEntries, withItem } from './recommend-data'
-import { ANY_FILTER, fits, LENGTH_CHOICES, PICK_KINDS, pickChoices, pickOne, type PickEntry, type PickFilter } from './randomizer'
+import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
 import { PlexSync } from './sync'
+import { DashCards, HABIT_KINDS, type InsightsKind } from './dashboard-cards'
 
 export const RECOMMEND_VIEW = 'pmn-recommendations'
 
@@ -51,13 +51,13 @@ export class RecommendView extends ItemView {
   /** Movies' and episodes' lengths, for the Habits tab's hours (null: not looked up yet). */
   private pmnLengths: Map<string, number> | null = null
   private pmnFinished: Finished[] | null = null
-  /** The Randomizer's last pick (a note's path), kept while its choices stay the same. */
-  private pmnPick: string | undefined
-  /** Which of each kind's candidates "Worth a few words" shows ("Another one" moves on). */
-  private readonly pmnReviewAt = new Map<string, number>()
+
+  /** The cards, shared with the ones embedded in notes. */
+  private readonly cards: DashCards
 
   constructor(leaf: WorkspaceLeaf, private readonly pmnPlugin: PlexMediaNotesPlugin) {
     super(leaf)
+    this.cards = new DashCards(this.app, pmnPlugin, () => this.pmnRender())
   }
 
   getViewType(): string { return RECOMMEND_VIEW }
@@ -237,7 +237,7 @@ export class RecommendView extends ItemView {
     const body = contentEl.createDiv('pmn-dash-body')
     if (this.pmnTab === 'insights') this.pmnInsights(body)
     else if (this.pmnTab === 'habits') this.pmnHabits(body)
-    else if (this.pmnTab === 'randomizer') this.pmnRandomizer(body)
+    else if (this.pmnTab === 'randomizer') this.cards.randomizer(body)
     else this.pmnRecommendations(body)
   }
 
@@ -368,92 +368,12 @@ export class RecommendView extends ItemView {
     no.addEventListener('click', () => void this.pmnNotInterested(entry))
   }
 
-  /** A link to a note (or just the name, when there's no note). */
-  private pmnLink(parent: HTMLElement, title: string, path?: string): void {
-    const file = path ? this.app.vault.getAbstractFileByPath(path) : null
-    if (!(file instanceof TFile)) {
-      parent.createSpan({ cls: 'pmn-rec-title', text: title })
-      return
-    }
-    const link = parent.createEl('a', { cls: 'pmn-rec-title internal-link', text: title })
-    link.addEventListener('click', event => {
-      event.preventDefault()
-      void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey ? 'tab' : false).openFile(file)
-    })
-  }
-
-  /** A card with a title and a list of rows, or a line saying there's nothing. */
-  private pmnListCard(grid: HTMLElement, title: string, rows: { title: string, path?: string, detail?: string, divider?: boolean, action?: { text: string, tip: string, run: () => void } }[], empty: string): void {
-    const card = grid.createDiv('pmn-card')
-    card.createDiv({ cls: 'pmn-card-title', text: title })
-    if (!rows.length) {
-      if (empty) card.createEl('p', { cls: 'pmn-dash-empty', text: empty })
-      return
-    }
-    for (const row of rows) {
-      const rowEl = card.createDiv('pmn-rec-row')
-      // A heavier line where a list's next part starts (Most played: artists, then songs).
-      if (row.divider) rowEl.addClass('pmn-rec-divider')
-      const line = rowEl.createDiv('pmn-rec-text')
-      this.pmnLink(line, row.title, row.path)
-      if (row.detail) line.createSpan({ cls: 'pmn-rec-why', text: ` ${row.detail}` })
-      if (row.action) {
-        const { run } = row.action
-        rowEl.createEl('button', { cls: 'pmn-rec-action', text: row.action.text, attr: { 'aria-label': row.action.tip } }).addEventListener('click', run)
-      }
-    }
-  }
-
-  private pmnHeader(parent: HTMLElement, title: string, subtitle: string): HTMLElement {
-    const header = parent.createDiv('pmn-dash-header')
-    const titles = header.createDiv('pmn-dash-titles')
-    titles.createDiv({ cls: 'pmn-dash-title', text: title })
-    titles.createDiv({ cls: 'pmn-dash-subtitle', text: subtitle })
-    return header.createDiv('pmn-dash-controls')
-  }
-
-  private pmnMetric(parent: HTMLElement, label: string, value: string, sub?: string): void {
-    const metric = parent.createDiv('pmn-dash-metric')
-    metric.createDiv({ cls: 'pmn-dash-metric-label', text: label })
-    metric.createDiv({ cls: 'pmn-dash-metric-value', text: value })
-    // Always a line under the number, so the cards in a row are the same height.
-    metric.createDiv({ cls: 'pmn-dash-metric-sub', text: sub ?? '\u00a0' })
-  }
-
-  /** Every day your daily notes link a media note in Related (a day you watched, read or played it). */
-  private pmnDays(): DayLink[] {
-    const notes = new Map(noteEntries(this.app, this.pmnPlugin.settings).map(n => [n.path, n]))
-    const sync = new PlexSync(this.app, this.pmnPlugin.settings, () => this.pmnPlugin.saveSettings())
-    return sync.relatedDays().flatMap(({ day, path }) => {
-      const note = notes.get(path)
-      return note ? [{ day, path, title: note.title, group: note.group }] : []
-    })
-  }
-
-  /** Every reaction in your notes. */
-  private pmnReactions(): ReactionEvent[] {
-    const settings = this.pmnPlugin.settings
-    const out: ReactionEvent[] = []
-    const list = (value: unknown): string[] => (Array.isArray(value) ? value : value ? [value] : []).map(String)
-    for (const note of noteEntries(this.app, settings)) {
-      const file = this.app.vault.getAbstractFileByPath(note.path)
-      if (!(file instanceof TFile)) continue
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-      const feelings = [...settings.feelings, ...list(fm[settings.feelingsProperty || 'Feelings'])]
-      for (const line of list(fm[settings.reactionsProperty || 'Reactions'])) {
-        const r = parseReaction(line, feelings)
-        if (r) out.push({ ...r, path: note.path, title: note.title, group: note.group })
-      }
-    }
-    return out
-  }
-
   /** Insights: a month or a year of watching, listening, reading and playing. */
   private pmnInsights(el: HTMLElement): void {
     const period = this.pmnPeriod()
     const year = this.pmnWhen.getFullYear()
     const label = this.pmnSpan === 'year' ? String(year) : `${this.pmnWhen.toLocaleString('en', { month: 'long' })} ${year}`
-    const controls = this.pmnHeader(el, `Insights: ${label}`, 'What you watched, listened to, read and played, from Plex\'s history and your reactions.')
+    const controls = this.cards.header(el, `Insights: ${label}`, 'What you watched, listened to, read and played, from Plex\'s history and your reactions.')
     for (const span of ['month', 'year'] as const) {
       const b = controls.createEl('button', { cls: `pmn-dash-tab${span === this.pmnSpan ? ' is-active' : ''}`, text: span === 'month' ? 'Month' : 'Year' })
       b.addEventListener('click', () => {
@@ -477,74 +397,41 @@ export class RecommendView extends ItemView {
     if (this.pmnHistoryState) el.createDiv({ cls: 'pmn-dash-note', text: this.pmnHistoryState })
 
     const notes = this.pmnHistory?.notes ?? new Map<string, TFile>()
-    const days = this.pmnDays()
-    const s = summarize(this.pmnHistory?.events ?? [], this.pmnReactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days, key => notes.get(key)?.path)
-    // Books and games: only the days your daily notes link them. A reaction is when you wrote it,
-    // often looking back, not a day you read or played; its rating is shown beside a linked one.
-    const withReacted = (spent: DaysSpent[], reacted: ReactionEvent[]) => spent.map(d => {
-      const rating = reacted.find(r => r.path === d.path)?.rating
-      return { title: d.title, path: d.path, detail: `${d.days} day${d.days === 1 ? '' : 's'}${rating ? ` · ${rating}` : ''}` }
-    })
-    const books = withReacted(s.bookDays, s.books)
-    const games = withReacted(s.gameDays, s.games)
-    const readingDays = daysWith(days, period, 'book')
-    const playingDays = daysWith(days, period, 'game')
+    const days = this.cards.days()
+    const s = summarize(this.pmnHistory?.events ?? [], this.cards.reactions(), period, (_kind, key, fallback) => notes.get(key)?.basename ?? fallback, days, key => notes.get(key)?.path)
     // A column per kind: its count on top, its lists below it.
     const columns = el.createDiv('pmn-dash-columns')
     const column = () => columns.createDiv('pmn-dash-column')
     const pathOf = (key: string) => notes.get(key)?.path
-    const dayName = (day: string) => {
-      const [y, mo, d] = day.split('-').map(Number)
-      return new Date(y, mo - 1, d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
-    }
 
     // In this order: Reactions, Movies, TV shows, Books, Games, Songs.
-    const worth = this.pmnReviewCandidates()
+    const worth = this.cards.reviewCandidates()
 
     const reactionCol = column()
-    this.pmnMetric(reactionCol, 'Reactions', String(s.reactions))
-    this.pmnListCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
-    this.pmnListCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
+    this.cards.metric(reactionCol, 'Reactions', String(s.reactions))
+    this.cards.listCard(reactionCol, 'Favorites 🩷', s.favourites.map(r => ({ title: r.title, path: r.path })), 'Nothing given 🩷 in a reaction then.')
+    this.cards.listCard(reactionCol, 'How it felt', s.feelings.map(([word, n]) => ({ title: word, detail: `×${n}` })), 'No feelings in reactions then.')
     this.pmnFinishedCard(reactionCol)
 
-    const movieCol = column()
-    const viewings = s.movies.reduce((n, m) => n + m.times, 0)
-    this.pmnMetric(movieCol, 'Movies', String(s.movies.length), viewings > s.movies.length ? `${viewings} viewings` : undefined)
-    // Newest first, by the last day each was watched.
-    const latest = (days: string[]) => [...days].sort().pop() ?? ''
-    const movies = [...s.movies].sort((a, b) => latest(b.days).localeCompare(latest(a.days)))
-    this.pmnListCard(movieCol, 'Movies', movies.map(m => ({ title: m.title, path: pathOf(m.key), detail: m.days.map(dayName).join(', ') })), 'No movies then.')
-    this.pmnWorthCard(movieCol, [['movie', 'A movie'], ['documentary', 'A documentary']], worth)
-
-    const tvCol = column()
-    this.pmnMetric(tvCol, 'TV shows', `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`, `${s.shows.length} show${s.shows.length === 1 ? '' : 's'}`)
-    this.pmnListCard(tvCol, 'TV shows', s.shows.map(sh => ({ title: sh.title, path: pathOf(sh.key), detail: `${sh.episodes} episode${sh.episodes === 1 ? '' : 's'}` })), 'No TV then.')
-    this.pmnWorthCard(tvCol, [['tv', 'A TV show']], worth)
-
-    const bookCol = column()
-    this.pmnMetric(bookCol, 'Books', String(books.length), `${readingDays} day${readingDays === 1 ? '' : 's'} of reading`)
-    this.pmnListCard(bookCol, 'Books', books, 'No books in your daily notes or reactions then.')
-    this.pmnWorthCard(bookCol, [['book', 'A book']], worth)
-
-    const gameCol = column()
-    this.pmnMetric(gameCol, 'Games', String(games.length), `${playingDays} day${playingDays === 1 ? '' : 's'} of playing`)
-    this.pmnListCard(gameCol, 'Games', games, 'No games in your daily notes or reactions then.')
-    this.pmnWorthCard(gameCol, [['game', 'A game']], worth)
-
-    const songCol = column()
-    this.pmnMetric(songCol, 'Songs', `${s.songPlays} play${s.songPlays === 1 ? '' : 's'}`)
-    this.pmnListCard(songCol, 'Most played', [
-      ...s.topArtists.map(([name, n]) => ({ title: name, detail: `${n} plays` })),
-      ...s.topSongs.map(([name, n], i) => ({ title: name, detail: `×${n}`, divider: i === 0 && s.topArtists.length > 0 })),
-    ], 'No songs then.')
-    this.pmnWorthCard(songCol, [['music', 'A song']], worth)
+    // Each kind's count and list, as the cards you can embed in a note ("This month").
+    const kindColumn = (kind: InsightsKind, worthKinds: [string, string][]) => {
+      const col = column()
+      this.cards.monthCard(col, kind, s, period, days, pathOf)
+      this.cards.worthCard(col, worthKinds, worth, { card: 'worth-a-few-words', kind })
+      return col
+    }
+    const movieCol = kindColumn('movie', [['movie', 'A movie'], ['documentary', 'A documentary']])
+    const tvCol = kindColumn('tv', [['tv', 'A TV show']])
+    const bookCol = kindColumn('book', [['book', 'A book']])
+    const gameCol = kindColumn('game', [['game', 'A game']])
+    kindColumn('song', [['music', 'A song']])
 
     // What you came back to: a card of its own at the bottom of each kind's column.
     const settings = this.pmnPlugin.settings
     const notAgain = new Set(settings.notRewatches)
     // Empty, a card shows just its title.
     const backAgain = (parent: HTMLElement, kind: PeriodSummary['rewatches'][number]['kind'], button: string) => {
-      this.pmnListCard(parent, 'Back again', s.rewatches.filter(r => r.kind === kind && !notAgain.has(r.id)).map(r => ({
+      this.cards.listCard(parent, 'Back again', s.rewatches.filter(r => r.kind === kind && !notAgain.has(r.id)).map(r => ({
         title: r.title,
         path: r.path,
         action: {
@@ -563,28 +450,6 @@ export class RecommendView extends ItemView {
     backAgain(gameCol, 'game', 'Not a replay')
   }
 
-  /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */
-  private pmnReviewCandidates(): { path: string, title: string, level: number, kind: string }[] {
-    const settings = this.pmnPlugin.settings
-    const skipped = new Set(settings.reviewSkipped)
-    const written = new Set(this.pmnReactions().filter(r => r.text).map(r => r.path))
-    const out: { path: string, title: string, level: number, kind: string }[] = []
-    const libs = Object.values(settings.libraries).map(lib => ({ folder: `${lib.folder.replace(/\/+$/, '')}/`, target: lib.target }))
-    for (const note of noteEntries(this.app, settings)) {
-      if ((note.level !== 5 && note.level !== 1) || skipped.has(note.path) || written.has(note.path)) continue
-      const file = this.app.vault.getAbstractFileByPath(note.path)
-      const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
-      const notesValue: unknown = fm.Notes ?? fm.notes
-      if (typeof notesValue === 'string' ? notesValue.trim() : Array.isArray(notesValue) && notesValue.length) continue
-      out.push({ path: note.path, title: note.title, level: note.level, kind: libs.find(l => note.path.startsWith(l.folder))?.target ?? note.group })
-    }
-    // A different order each time the dashboard opens, the same while it's open.
-    const order = (path: string) => [...`${path}${this.pmnSeed}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1_000_003, 7)
-    return out.sort((a, b) => order(a.path) - order(b.path))
-  }
-
-  private readonly pmnSeed = Math.random()
-
   /** What you finished lately (movies, and shows once every episode is watched), each to react to. */
   private pmnFinishedCard(parent: HTMLElement): void {
     const finished = parent.createDiv('pmn-card')
@@ -594,7 +459,7 @@ export class RecommendView extends ItemView {
     for (const item of this.pmnFinished ?? []) {
       const row = finished.createDiv('pmn-rec-row')
       const text = row.createDiv('pmn-rec-text')
-      this.pmnLink(text, item.title, item.path)
+      this.cards.link(text, item.title, item.path)
       text.createDiv({ cls: 'pmn-rec-why', text: `${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${new Date(item.viewedAt * 1000).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}` })
       row.createDiv('pmn-rec-buttons').createEl('button', { text: 'How was it?' }).addEventListener('click', () => {
         void this.pmnPlugin.reactToFinished(item).then(answer => {
@@ -605,212 +470,35 @@ export class RecommendView extends ItemView {
     }
   }
 
-  /**
-   * "Worth a few words" for some kinds of media (under their count in Insights): one thing of each
-   * you rated 🩷 or 💣 but haven't written about. Nothing shown when there's none.
-   */
-  private pmnWorthCard(parent: HTMLElement, kinds: [string, string][], candidates: { path: string, title: string, level: number, kind: string }[]): void {
-    const found = kinds.map(([kind, label]) => ({ kind, label, list: candidates.filter(c => c.kind === kind) })).filter(k => k.list.length)
-    if (!found.length) return
-    const card = parent.createDiv('pmn-card')
-    card.createDiv({ cls: 'pmn-card-title', text: 'Worth a few words' })
-    for (const { kind, label, list } of found) this.pmnReviewCard(card, found.length > 1 ? label : '', kind, list)
-  }
-
-  /** One thing you rated 🩷 or 💣 but haven't written about, of one kind. */
-  private pmnReviewCard(parent: HTMLElement, label: string, kind: string, candidates: { path: string, title: string, level: number }[]): void {
-    const card = parent.createDiv('pmn-review-kind')
-    if (label) card.createDiv({ cls: 'pmn-review-kind-label', text: label })
-    const pick = candidates[(this.pmnReviewAt.get(kind) ?? 0) % candidates.length]
-    const text = card.createDiv('pmn-review')
-    this.pmnLink(text.createDiv('pmn-review-title'), pick.title, pick.path)
-    const file = this.app.vault.getAbstractFileByPath(pick.path)
-    const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
-    text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and haven't written about it yet.${candidates.length > 1 ? ` ${candidates.length - 1} more like it.` : ''}` })
-    const why: unknown = fm[this.pmnPlugin.settings.whyProperty || 'Why']
-    if (typeof why === 'string' && why.trim()) text.createDiv({ cls: 'pmn-review-wanted', text: `You wanted it because: ${why.trim()}` })
-    const buttons = card.createDiv('pmn-rec-buttons pmn-review-buttons')
-    buttons.createEl('button', { text: 'Write about it' }).addEventListener('click', () => {
-      if (!(file instanceof TFile)) return
-      void this.pmnPlugin.reactTo(file, moment.unix(Math.floor(Date.now() / 1000)).format('YYYY-MM-DD')).then(() => this.pmnRender())
-    })
-    if (candidates.length > 1) {
-      buttons.createEl('button', { text: 'Next', attr: { 'aria-label': 'Another one' } }).addEventListener('click', () => {
-        this.pmnReviewAt.set(kind, (this.pmnReviewAt.get(kind) ?? 0) + 1)
-        this.pmnRender()
-      })
-    }
-    buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Ignore', attr: { 'aria-label': 'Don\'t show this one again' } }).addEventListener('click', () => {
-      this.pmnPlugin.settings.reviewSkipped.push(pick.path)
-      void this.pmnPlugin.saveSettings().then(() => this.pmnRender())
-    })
-  }
-
-  /**
-   * The Randomizer: one kind of your media, narrowed by genre, status, length and tag (each kind's
-   * choices remembered), every note that fits, and one picked at random from them.
-   */
-  private pmnRandomizer(el: HTMLElement): void {
-    const settings = this.pmnPlugin.settings
-    this.pmnHeader(el, 'Randomizer', 'Narrow it down, then let chance choose.')
-    const all = pickEntries(this.app, settings)
-    const kinds = PICK_KINDS.filter(([kind]) => all.some(e => e.kind === kind))
-    if (!kinds.length) {
-      el.createEl('p', { cls: 'pmn-dash-empty', text: 'No movie, show, documentary, book or game notes in your libraries\' folders yet.' })
-      return
-    }
-    const kind = kinds.some(([k]) => k === settings.randomizer.kind) ? settings.randomizer.kind : kinds[0][0]
-    const save = () => void this.pmnPlugin.saveSettings()
-
-    const kindRow = el.createDiv('pmn-pick-kinds')
-    for (const [k, label] of kinds) {
-      const button = kindRow.createEl('button', { cls: `pmn-dash-tab${k === kind ? ' is-active' : ''}`, text: label })
-      button.addEventListener('click', () => {
-        if (k === kind) return
-        settings.randomizer.kind = k
-        this.pmnPick = undefined
-        save()
-        this.pmnRender()
-      })
-    }
-
-    const entries = all.filter(e => e.kind === kind)
-    const filter: PickFilter = { ...ANY_FILTER, ...settings.randomizer.filters[kind] }
-    const choices = pickChoices(entries)
-    const filters = el.createDiv('pmn-pick-filters')
-    const choose = (label: string, key: keyof PickFilter, options: [string, string][]) => {
-      const box = filters.createDiv('pmn-pick-filter')
-      box.createDiv({ cls: 'pmn-dash-metric-label', text: label })
-      const select = box.createEl('select', { cls: 'dropdown' })
-      // A choice no note has any more (say, a tag you removed) is still shown while chosen.
-      const all: [string, string][] = [['', 'Any'], ...options, ...filter[key] && !options.some(([v]) => v === filter[key]) ? [[filter[key], filter[key]] as [string, string]] : []]
-      for (const [value, text] of all) select.createEl('option', { value, text })
-      select.value = filter[key]
-      select.addEventListener('change', () => {
-        settings.randomizer.filters[kind] = { ...filter, [key]: select.value }
-        this.pmnPick = undefined
-        save()
-        this.pmnRender()
-      })
-    }
-    choose('Genre', 'genre', choices.genres.map(g => [g, g]))
-    choose('Status', 'status', choices.statuses.map(s => [s, s]))
-    choose('Length', 'length', (LENGTH_CHOICES[kind] ?? []).map(c => [c.id, c.label]))
-    choose('Tag', 'tag', choices.tags.map(t => [t, t]))
-    if (filter.genre || filter.status || filter.length || filter.tag) {
-      filters.createEl('button', { cls: 'pmn-pick-clear', text: 'Clear' }).addEventListener('click', () => {
-        settings.randomizer.filters[kind] = { ...ANY_FILTER }
-        this.pmnPick = undefined
-        save()
-        this.pmnRender()
-      })
-    }
-
-    const fitting = entries.filter(e => fits(e, filter)).sort((a, b) => compareTitles(a.title, b.title))
-    const lengthText = (e: PickEntry) => e.length === undefined ? undefined
-      : kind === 'book' ? `${e.length} pages`
-      : e.length >= 60 ? `${Math.floor(e.length / 60)}h${e.length % 60 ? ` ${e.length % 60}m` : ''}` : `${e.length}m`
-    const detail = (e: PickEntry) => [e.status, lengthText(e)].filter(Boolean).join(' · ') || undefined
-
-    const grid = el.createDiv('pmn-dash-grid')
-    const pickCard = grid.createDiv('pmn-card pmn-pick-card')
-    pickCard.createDiv({ cls: 'pmn-card-title', text: 'Your pick' })
-    const picked = fitting.find(e => e.path === this.pmnPick)
-    if (!fitting.length) {
-      pickCard.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing fits all of that. Try "Any" for one of them.' })
-    } else {
-      if (picked) {
-        const line = pickCard.createDiv('pmn-pick-chosen')
-        this.pmnLink(line, picked.title, picked.path)
-        const about = detail(picked)
-        if (about) line.createDiv({ cls: 'pmn-rec-why', text: about })
-      }
-      const buttons = pickCard.createDiv('pmn-rec-buttons')
-      buttons.createEl('button', { text: picked ? 'Pick another' : 'Pick one for me' }).addEventListener('click', () => {
-        this.pmnPick = pickOne(fitting, this.pmnPick)?.path
-        this.pmnRender()
-      })
-    }
-    // Notes with no length can't be told apart by length, so they're said, not hidden silently.
-    const unknown = filter.length ? entries.filter(e => e.length === undefined && fits(e, { ...filter, length: '' })).length : 0
-    const title = `${fitting.length} ${fitting.length === 1 ? 'fits' : 'fit'}`
-    this.pmnListCard(grid, title, fitting.map(e => ({ title: e.title, path: e.path, detail: detail(e) })), 'Nothing fits all of that.')
-    if (unknown) grid.lastElementChild?.createEl('p', { cls: 'pmn-dash-empty', text: `${unknown} more would fit, but their notes have no length.` })
-  }
-
-  /**
-   * A small bar chart: one bar per period, the last one (now) labelled with its number; every bar
-   * says its number on hover, and the chart says them all to screen readers.
-   */
-  private pmnBars(parent: HTMLElement, bars: { label: string, value: number }[], unit: string): void {
-    const width = 240
-    const height = 96
-    const top = 14
-    const bottom = 18
-    const gap = 4
-    const max = Math.max(1, ...bars.map(b => b.value))
-    const slot = width / bars.length
-    const barWidth = Math.max(4, Math.min(28, slot - gap))
-    const svg = parent.createSvg('svg', { cls: 'pmn-bars', attr: { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', 'aria-label': bars.map(b => `${b.label}: ${b.value} ${unit}`).join(', ') } })
-    const base = height - bottom
-    svg.createSvg('line', { cls: 'pmn-bars-axis', attr: { x1: 0, x2: width, y1: base, y2: base } })
-    bars.forEach((bar, i) => {
-      const x = i * slot + (slot - barWidth) / 2
-      const h = bar.value ? Math.max(2, (bar.value / max) * (base - top)) : 0
-      // An SVG element's classes go one by one (a space in one throws, and the rest isn't drawn).
-      const group = svg.createSvg('g', { cls: i === bars.length - 1 ? ['pmn-bars-bar', 'is-current'] : 'pmn-bars-bar' })
-      group.createSvg('title').textContent = `${bar.label}: ${bar.value} ${unit}`
-      // A wider, invisible target than the bar, so hovering is easy.
-      group.createSvg('rect', { cls: 'pmn-bars-hit', attr: { x: i * slot, y: 0, width: slot, height: base } })
-      if (h) {
-        // Rounded at the top only, square on the baseline.
-        const r = Math.min(4, barWidth / 2, h)
-        group.createSvg('path', { cls: 'pmn-bars-fill', attr: { d: `M${x},${base} V${base - h + r} Q${x},${base - h} ${x + r},${base - h} H${x + barWidth - r} Q${x + barWidth},${base - h} ${x + barWidth},${base - h + r} V${base} Z` } })
-      }
-      if (i === bars.length - 1) group.createSvg('text', { cls: 'pmn-bars-value', attr: { x: x + barWidth / 2, y: base - h - 3 } }).textContent = String(bar.value)
-      // With many bars (months), their first letter, so they don't run together.
-      group.createSvg('text', { cls: 'pmn-bars-label', attr: { x: i * slot + slot / 2, y: height - 4 } }).textContent = bars.length > 6 ? bar.label.slice(0, 1) : bar.label
-    })
-  }
-
   /** Habits: this week next to the weeks before, the year by month, and where things stand. Numbers only. */
   private pmnHabits(el: HTMLElement): void {
-    this.pmnHeader(el, 'Habits', 'This week next to the two before it, and this year month by month. Just the numbers.')
+    this.cards.header(el, 'Habits', 'This week next to the two before it, and this year month by month. Just the numbers.')
     if (this.pmnHistoryState) el.createDiv({ cls: 'pmn-dash-note', text: this.pmnHistoryState })
     const now = new Date()
     const { thisWeek, lastWeek, weekBefore } = weeks(now)
     const events = this.pmnHistory?.events ?? []
-    const days = this.pmnDays()
+    const days = this.cards.days()
     const lengths = this.pmnLengths ?? new Map<string, number>()
     const weekPeriods = [weekBefore, lastWeek, thisWeek]
-    const weekLabels = ['Week before', 'Last week', 'This week']
     const months = monthsSoFar(now)
     const monthLabels = months.map(p => new Date(p.from * 1000).toLocaleDateString('en', { month: 'short' }))
-    const byWeek = weekPeriods.map(p => habitCounts(events, days, p))
     const byMonth = months.map(p => habitCounts(events, days, p))
 
     // A column per kind, in the Insights order: this week's number, then the weeks, then the months.
-    const kinds: [keyof HabitCounts, string, string][] = [
-      ['movies', 'Movies', 'watched'], ['episodes', 'TV shows', 'episodes'], ['bookDays', 'Books', 'days reading'],
-      ['gameDays', 'Games', 'days playing'], ['songs', 'Songs', 'plays'],
-    ]
     const columns = el.createDiv('pmn-dash-columns')
-    for (const [key, label, unit] of kinds) {
+    for (const kind of ['movie', 'tv', 'book', 'game', 'song'] as InsightsKind[]) {
       const col = columns.createDiv('pmn-dash-column')
-      const [, before, current] = byWeek.map(c => c[key])
-      this.pmnMetric(col, label, String(current), `${unit}, ${compared(current, before)}`)
-      const weeksCard = col.createDiv('pmn-card')
-      weeksCard.createDiv({ cls: 'pmn-card-title', text: 'Week by week' })
-      this.pmnBars(weeksCard, byWeek.map((c, i) => ({ label: weekLabels[i], value: c[key] })), unit)
+      this.cards.habitsCard(col, kind, events, days, now)
+      const [key, , unit] = HABIT_KINDS[kind]
       const monthsCard = col.createDiv('pmn-card')
       monthsCard.createDiv({ cls: 'pmn-card-title', text: `${now.getFullYear()} by month` })
-      this.pmnBars(monthsCard, byMonth.map((c, i) => ({ label: monthLabels[i], value: c[key] })), unit)
+      this.cards.bars(monthsCard, byMonth.map((c, i) => ({ label: monthLabels[i], value: c[key] })), unit)
     }
 
     // Hours of movies and TV, where Plex knows how long they are.
     const hours = weekPeriods.map(p => weekNumbers(events, p, lengths).hours)
     const metrics = el.createDiv('pmn-dash-metrics')
-    this.pmnMetric(metrics, 'Hours of movies and TV this week', `${hours[2]} h`, this.pmnLengths ? compared(hours[2], hours[1], ' h') : 'Working out the hours…')
+    this.cards.metric(metrics, 'Hours of movies and TV this week', `${hours[2]} h`, this.pmnLengths ? compared(hours[2], hours[1], ' h') : 'Working out the hours…')
 
     // Where things stand, from your notes' statuses.
     const counts = new Map<string, { all: number, month: number }>()
@@ -834,7 +522,7 @@ export class RecommendView extends ItemView {
       }
     }
     const grid = el.createDiv('pmn-dash-grid')
-    this.pmnListCard(grid, 'Where things stand', [...counts].sort((a, b) => b[1].all - a[1].all).map(([status, c]) => ({
+    this.cards.listCard(grid, 'Where things stand', [...counts].sort((a, b) => b[1].all - a[1].all).map(([status, c]) => ({
       title: status,
       detail: `${c.all}${c.month ? ` (${c.month} with notes changed this month)` : ''}`,
     })), 'No statuses in your notes yet.')

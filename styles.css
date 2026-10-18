@@ -544,6 +544,11 @@
   font-weight: var(--font-bold);
   color: var(--text-muted);
   margin-bottom: var(--size-4-2);
+  /* The title, and on the dashboard the </> button that copies the card. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
 }
 
 .pmn-dash-empty {
@@ -890,4 +895,19 @@
   font-size: 11px;
   font-weight: var(--font-semibold);
   text-anchor: middle;
+}
+
+.pmn-embed-copy {
+  flex-shrink: 0;
+}
+
+/* A dashboard card embedded in a note. */
+.pmn-embed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+}
+
+.pmn-embed .pmn-dash-header {
+  margin-bottom: 0;
 }

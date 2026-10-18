@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.156] - 2026-10-18
+
+- Dashboard cards can now go in any note, such as your Books or Movies dashboards. On the media dashboard, cards you can embed have a small </> button at the top right; click it and paste into a note. It copies a short code block like:
+
+  ```
+  ```media-manager
+  card: randomizer
+  kind: book
+  ```
+  ```
+
+  The cards: **randomizer** (for one kind: movie, tv, documentary, book or game; its choices are shared with the dashboard's), **worth-a-few-words**, **this-month** (that kind's Insights count and list for the current month) and **habits** (that kind's week-by-week chart). `kind` can be movie, tv, documentary, book, game or song (plurals and "TV shows" work too). The cards update when your notes change.
+
 ## [0.0.155] - 2026-10-18
 
 - Media dashboard, Habits: fixed the tab stopping partway through drawing. The first chart broke at its "This week" bar, so everything after it (TV shows, Books, Games and Songs, the month-by-month charts, the hours and "Where things stand") was never shown.

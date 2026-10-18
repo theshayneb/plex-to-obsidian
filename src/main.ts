@@ -1,4 +1,6 @@
 import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian'
+import { EmbeddedCard } from './embed-cards'
+import { EMBED_LANGUAGE } from './embed-spec'
 import { AddModal } from './add-modal'
 import { CheckModal, checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
@@ -224,6 +226,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
 
     this.registerView(RECOMMEND_VIEW, leaf => new RecommendView(leaf, this))
+    // The dashboard's cards in any note (copied with the </> button on a card).
+    this.registerMarkdownCodeBlockProcessor(EMBED_LANGUAGE, (source, el, ctx) => {
+      ctx.addChild(new EmbeddedCard(el, this, source))
+    })
     this.addRibbonIcon('sparkles', 'Open media dashboard', () => void this.openRecommendations())
     this.addCommand({
       id: 'open-recommendations',

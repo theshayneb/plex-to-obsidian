@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.155] - 2026-10-18
+
+- Media dashboard, Habits: fixed the tab stopping partway through drawing. The first chart broke at its "This week" bar, so everything after it (TV shows, Books, Games and Songs, the month-by-month charts, the hours and "Where things stand") was never shown.
+
 ## [0.0.154] - 2026-10-18
 
 - Media dashboard, Habits: the bar charts keep their size in a wide pane instead of growing to fill it (with huge bars and labels running off the edge).

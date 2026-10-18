@@ -757,7 +757,8 @@ export class RecommendView extends ItemView {
     bars.forEach((bar, i) => {
       const x = i * slot + (slot - barWidth) / 2
       const h = bar.value ? Math.max(2, (bar.value / max) * (base - top)) : 0
-      const group = svg.createSvg('g', { cls: `pmn-bars-bar${i === bars.length - 1 ? ' is-current' : ''}` })
+      // An SVG element's classes go one by one (a space in one throws, and the rest isn't drawn).
+      const group = svg.createSvg('g', { cls: i === bars.length - 1 ? ['pmn-bars-bar', 'is-current'] : 'pmn-bars-bar' })
       group.createSvg('title').textContent = `${bar.label}: ${bar.value} ${unit}`
       // A wider, invisible target than the bar, so hovering is easy.
       group.createSvg('rect', { cls: 'pmn-bars-hit', attr: { x: i * slot, y: 0, width: slot, height: base } })

@@ -854,9 +854,12 @@
 /* Habits' bar charts: one series, the theme's accent; thin bars on a quiet baseline. */
 .pmn-bars {
   display: block;
+  /* Never wider than it was drawn for (its text would grow with it), but free to shrink. */
   width: 100%;
+  max-width: 260px;
   height: auto;
   margin-top: var(--size-4-2);
+  overflow: hidden;
 }
 
 .pmn-bars-axis {

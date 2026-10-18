@@ -751,7 +751,7 @@ export class RecommendView extends ItemView {
     const max = Math.max(1, ...bars.map(b => b.value))
     const slot = width / bars.length
     const barWidth = Math.max(4, Math.min(28, slot - gap))
-    const svg = parent.createSvg('svg', { cls: 'pmn-bars', attr: { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': bars.map(b => `${b.label}: ${b.value} ${unit}`).join(', ') } })
+    const svg = parent.createSvg('svg', { cls: 'pmn-bars', attr: { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', 'aria-label': bars.map(b => `${b.label}: ${b.value} ${unit}`).join(', ') } })
     const base = height - bottom
     svg.createSvg('line', { cls: 'pmn-bars-axis', attr: { x1: 0, x2: width, y1: base, y2: base } })
     bars.forEach((bar, i) => {

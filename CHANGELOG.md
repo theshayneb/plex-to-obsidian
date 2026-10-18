@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.154] - 2026-10-18
+
+- Media dashboard, Habits: the bar charts keep their size in a wide pane instead of growing to fill it (with huge bars and labels running off the edge).
+
 ## [0.0.153] - 2026-10-18
 
 - Media dashboard: the tabs are now Insights, Habits, Recommendations, Randomizers.

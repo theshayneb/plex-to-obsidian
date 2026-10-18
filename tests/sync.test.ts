@@ -1704,6 +1704,12 @@ describe('PlexSync', () => {
     ])
   })
 
+  it('moves an hourly background update to every 2 hours, once', () => {
+    expect(loadSettings({ playCountHours: 1 }).playCountHours).toBe(2)
+    expect(loadSettings({ playCountHours: 6 }).playCountHours).toBe(6)
+    expect(loadSettings({ playCountHours: 0 }).playCountHours).toBe(0)
+  })
+
   it('names new book notes "Title by Author (Year)" from now on, unless the format was changed', () => {
     const books = (format: string) => ({ libraries: { books: { title: 'Books', type: 'books', target: 'book', folder: 'Media/Books', fileNameFormat: format, matchBy: 'loose',
       properties: [{ name: 'Author', source: 'authors' }], values: { watched: '', started: '', unwatched: '', tag: 'book' } } } })

@@ -41,7 +41,7 @@ const MATCH_LABELS: Record<MatchBy, string> = {
 
 const PLAY_COUNT_SCHEDULE: Record<string, string> = {
   0: 'Off',
-  1: 'Every hour',
+  2: 'Every 2 hours',
   6: 'Every 6 hours',
   12: 'Every 12 hours',
   24: 'Once a day',

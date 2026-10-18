@@ -525,6 +525,10 @@ export function loadSettings(data: unknown): PlexNotesSettings {
       if (key.startsWith('book:') && names.some(name => key.endsWith(`|${name}`))) delete settings.keptValues[key]
     }
   })
+  migrateOnce(settings, saved, 'no-hourly-updates', () => {
+    // "Every hour" was taken out at the owner's request: it's every 2 hours now.
+    if (settings.playCountHours > 0 && settings.playCountHours < 2) settings.playCountHours = 2
+  })
   migrateOnce(settings, saved, 'book-names-by-author', () => {
     // New book notes are named "Title by Author (Year)", as the owner names them, unless the format was changed.
     const books = settings.libraries[BOOKS_LIBRARY]

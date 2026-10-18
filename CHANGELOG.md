@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.157] - 2026-10-18
+
+- Settings → Syncing → "Update in the background": the choices are now Every 2 hours, Every 6 hours, Every 12 hours and Once a day ("Every hour" is gone). If it was set to every hour, it's now every 2 hours.
+
 ## [0.0.156] - 2026-10-18
 
 - Dashboard cards can now go in any note, such as your Books or Movies dashboards. On the media dashboard, cards you can embed have a small </> button at the top right; click it and paste into a note. It copies a short code block like:

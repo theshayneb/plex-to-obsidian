@@ -18,6 +18,7 @@ import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
 import { vaultPropertyValues } from './property-suggest'
 import type { Finished } from './reactions'
+import { RelatedModal } from './related-modal'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -113,6 +114,15 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
+      id: 'related-links',
+      name: 'Add what you watched to daily notes…',
+      callback: () => {
+        if (!new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers().length) new Notice('Nothing you watched is waiting to go in your daily notes')
+        else this.askRelated()
+      },
+    })
+
+    this.addCommand({
       id: 'daily-episodes',
       name: 'Add watched episodes to daily notes',
       callback: async () => {
@@ -132,6 +142,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
           this.plexSyncRunning = false
           this.syncs.clear()
         }
+        this.askRelated()
       },
     })
 
@@ -267,6 +278,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.settings.lastPlayCountUpdate = now
       await this.saveSettings()
       void this.pointOutFinished()
+      this.pointOutRelated()
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
@@ -275,6 +287,33 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.plexSyncRunning = false
       this.syncs.clear()
     }
+  }
+
+  /** Related links already pointed out since Obsidian started (not pointed out again until it restarts). */
+  private readonly relatedPointedOut = new Set<string>()
+
+  /** A notice, when shows or movies you watched are waiting to go in daily notes' Related; clicking it asks. */
+  private pointOutRelated(): void {
+    const offers = new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers()
+    const keys = offers.map(o => `${o.path}|${o.link}`)
+    if (!keys.some(key => !this.relatedPointedOut.has(key))) return
+    keys.forEach(key => this.relatedPointedOut.add(key))
+    const notice = new Notice(`${offers.length === 1 ? `${offers[0].title} could` : `${offers.length} things you watched could`} go in your daily notes' ${this.settings.dailyRelated}: click to check`, 15000)
+    notice.messageEl.addEventListener('click', () => this.askRelated())
+  }
+
+  /** "Add to Related?" for what's waiting, if anything; what you tick is added. */
+  askRelated(): void {
+    const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
+    const offers = sync.relatedOffers()
+    if (!offers.length) return
+    new RelatedModal(this.app, offers, this.settings.dailyRelated, answer => {
+      if (answer === 'later') return
+      void sync.addRelated(answer.yes, answer.no).then(
+        days => { if (days.length) new Notice(`Added to ${this.settings.dailyRelated} in ${days.length} daily note${days.length === 1 ? '' : 's'}`) },
+        err => new Notice(`Couldn't add to ${this.settings.dailyRelated}: ${errorMessage(err)}`),
+      )
+    }).open()
   }
 
   /** Finishings already pointed out since Obsidian started (not pointed out again until it restarts). */
@@ -461,6 +500,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.error('Media Manager: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
+      if (!result.stopped) this.askRelated()
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)

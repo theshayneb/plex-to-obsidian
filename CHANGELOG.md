@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.159] - 2026-10-23
+
+### Changed
+- Shows and movies Plex says you watched are no longer added to your daily notes' Related property on their own. They wait for you in an "Add to your daily notes?" pop-up, all ticked: what you leave ticked is added, what you untick isn't offered again, and "Not now" keeps them for later.
+- After a sync or "Add watched episodes to daily notes" the pop-up opens straight away; after a background update a notice says something is waiting (click it to check). The new command "Add what you watched to daily notes…" opens it any time.
+- Episode lines under your journaling line are still added as before.
+
 ## [0.0.158] - 2026-10-18
 
 - Checking notes against sources no longer offers to replace an Image or WideImage you set yourself: anything in [[double brackets]] (or ![[embedded]]), a file in your vault, is left alone and not shown in the pop-up at all. Before, it was offered unticked.

@@ -911,3 +911,16 @@
 .pmn-embed .pmn-dash-header {
   margin-bottom: 0;
 }
+
+/* "Add to Related?": watched shows and movies, by daily note. */
+.pmn-related-day {
+  margin-top: var(--size-4-3);
+  font-weight: var(--font-semibold);
+}
+
+.pmn-related-item {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) 0;
+}

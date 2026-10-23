@@ -11,6 +11,7 @@ import {
   steamReady,
   type LibrarySetting,
   type PlexNotesSettings,
+  type RelatedOffer,
 } from './config'
 import {
   addToIndex,
@@ -40,7 +41,7 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, moviesByDay, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -1328,28 +1329,77 @@ export class PlexSync {
         })
       }
       if (!found) retryFrom = Math.min(retryFrom, firstSeen)
-      // Every show and movie watched that day, linked in the Related property (added to what's there).
+      // Every show and movie watched that day, offered for the Related property: nothing goes in
+      // until you say yes (`relatedOffers`, `addRelated`); one you said no to isn't offered again.
       const related = this.settings.dailyRelated
-      const links = [...new Set([...showLinks, ...watchedMovies.map((m: WatchedMovie) => linkTo(m.key, m.title))])]
-      if (related && links.length) {
-        const target = (link: string): string => link.replace(/^\s*\[\[|\]\]\s*$/g, '').split(/[|#]/)[0].trim()
-        const fileOf = (link: string) => this.app.metadataCache.getFirstLinkpathDest(target(link), path)
-        const same = (entry: string, link: string): boolean => {
-          const a = fileOf(entry)
-          const b = fileOf(link)
-          return a && b ? a.path === b.path : target(entry).toLowerCase() === target(link).toLowerCase()
+      if (related) {
+        const has: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.[related]
+        const same = this.relatedSame(path)
+        const offered = [
+          ...showLinks.map((link, i) => ({ link, title: list[i][0].show, kind: 'show' as const, viewedAt: Math.min(...list[i].map(e => e.viewedAt)) })),
+          ...watchedMovies.map((m: WatchedMovie) => ({ link: linkTo(m.key, m.title), title: m.title, kind: 'movie' as const, viewedAt: m.viewedAt })),
+        ]
+        for (const offer of offered) {
+          const key = relatedKey(path, offer.link)
+          if (this.settings.relatedDeclined.includes(key) || this.settings.relatedPending.some(p => relatedKey(p.path, p.link) === key)) continue
+          if (!withRelated(has, [offer.link], same)) continue
+          this.settings.relatedPending.push({ path, ...offer })
         }
-        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-          const next = withRelated(fm[related], links, same)
-          if (next) {
-            fm[related] = next
-            added++
-          }
-        })
       }
       if (added) changed.push(path)
     }
     this.settings.dailyEpisodesSince = retryFrom
+    await this.saveSettings()
+    return changed
+  }
+
+  /** Whether a Related entry already is that link (the same note, else the same name). */
+  private relatedSame(path: string): (entry: string, link: string) => boolean {
+    const fileOf = (link: string) => this.app.metadataCache.getFirstLinkpathDest(linkTarget(link), path)
+    return (entry, link) => {
+      const a = fileOf(entry)
+      const b = fileOf(link)
+      return a && b ? a.path === b.path : linkTarget(entry).toLowerCase() === linkTarget(link).toLowerCase()
+    }
+  }
+
+  /**
+   * The Related links waiting for your yes, oldest day first, leaving out (and forgetting) those
+   * whose daily note is gone or already has them.
+   */
+  relatedOffers(): RelatedOffer[] {
+    const related = this.settings.dailyRelated
+    const keep = this.settings.relatedPending.filter(offer => {
+      const file = this.app.vault.getAbstractFileByPath(offer.path)
+      if (!related || !(file instanceof TFile)) return false
+      const has: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.[related]
+      return withRelated(has, [offer.link], this.relatedSame(offer.path)) !== null
+    })
+    this.settings.relatedPending = keep
+    return [...keep].sort((a, b) => a.viewedAt - b.viewedAt || compareTitles(a.title, b.title))
+  }
+
+  /** Adds the links you said yes to to their daily notes' Related property; the rest aren't offered again. The notes changed. */
+  async addRelated(yes: RelatedOffer[], no: RelatedOffer[]): Promise<string[]> {
+    const related = this.settings.dailyRelated
+    const changed: string[] = []
+    const byPath = new Map<string, string[]>()
+    for (const offer of yes) byPath.set(offer.path, [...byPath.get(offer.path) ?? [], offer.link])
+    for (const [path, links] of byPath) {
+      const file = this.app.vault.getAbstractFileByPath(path)
+      if (!related || !(file instanceof TFile)) continue
+      const same = this.relatedSame(path)
+      await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+        const next = withRelated(fm[related], links, same)
+        if (next) {
+          fm[related] = next
+          changed.push(path)
+        }
+      })
+    }
+    const answered = new Set([...yes, ...no].map(o => relatedKey(o.path, o.link)))
+    this.settings.relatedPending = this.settings.relatedPending.filter(o => !answered.has(relatedKey(o.path, o.link)))
+    this.settings.relatedDeclined = [...this.settings.relatedDeclined, ...no.map(o => relatedKey(o.path, o.link)).filter(k => !this.settings.relatedDeclined.includes(k))].slice(-1000)
     await this.saveSettings()
     return changed
   }

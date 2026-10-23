@@ -66,6 +66,16 @@ export function moviesByDay(movies: WatchedMovie[], dayOf: (seconds: number) => 
   return byDay
 }
 
+/** A link's target: "[[Lost (2004)|Lost]]" → "Lost (2004)". */
+export function linkTarget(link: string): string {
+  return link.replace(/^\s*\[\[|\]\]\s*$/g, '').split(/[|#]/)[0].trim()
+}
+
+/** How a Related link offered for a daily note is remembered: the note's path and the link's target, any case. */
+export function relatedKey(path: string, link: string): string {
+  return `${path}|${linkTarget(link).toLowerCase()}`
+}
+
 /**
  * A list property (such as Related) with `links` added that it doesn't have yet (`same` says
  * whether an entry already is that link), keeping what's there; null when there's nothing to add.

@@ -13,6 +13,18 @@ import {
 } from './properties'
 
 /** One Plex library and how its notes are made. */
+/** A show or movie watched, offered for its day's daily note's Related property. */
+export interface RelatedOffer {
+  /** The daily note. */
+  path: string
+  /** The link to add, "[[Lost (2004)]]". */
+  link: string
+  title: string
+  kind: 'show' | 'movie'
+  /** When it was (first) watched that day, seconds since 1970. */
+  viewedAt: number
+}
+
 export interface LibrarySetting {
   title: string
   /** Plex's library type: movie, show or artist (music). */
@@ -114,6 +126,10 @@ export interface PlexNotesSettings {
   dailyFormat: string
   /** Watch history is read from here (seconds since 1970); 0 means from today. */
   dailyEpisodesSince: number
+  /** Shows and movies watched, waiting for your yes before going in their daily note's Related property. */
+  relatedPending: RelatedOffer[]
+  /** Related links you said no to (`relatedKey`: daily note path and link target), not offered again. */
+  relatedDeclined: string[]
   /** Last.fm API key, for music suggestions from outside your library on the recommendations page. */
   lastfmKey: string
   /** Your Last.fm username: songs' play counts there are offered beside Plex's. */
@@ -235,6 +251,8 @@ export function defaultSettings(): PlexNotesSettings {
     dailyFolder: '',
     dailyFormat: '',
     dailyEpisodesSince: 0,
+    relatedPending: [],
+    relatedDeclined: [],
     imagesSubfolder: 'Images',
     fileNameReplacements: { '[': '(', ']': ')' },
     renameExistingNotes: true,
@@ -392,6 +410,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
+  if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)
+  if (Array.isArray(saved.relatedPending)) {
+    settings.relatedPending = (saved.relatedPending as Partial<RelatedOffer>[]).filter(o => o && typeof o.path === 'string' && typeof o.link === 'string')
+      .map(o => ({ path: String(o.path), link: String(o.link), title: String(o.title ?? o.link), kind: o.kind === 'movie' ? 'movie' : 'show', viewedAt: Number(o.viewedAt) || 0 }))
+  }
   if (saved.randomizer && typeof saved.randomizer === 'object') {
     const r = saved.randomizer as { kind?: unknown, filters?: unknown }
     const filters: Record<string, PickFilter> = {}

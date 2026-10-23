@@ -1491,15 +1491,33 @@ describe('PlexSync', () => {
       { type: 'movie', title: 'Cats', ratingKey: '5', viewedAt: at + 120, accountID: 1 },
       { type: 'movie', title: 'Heat', ratingKey: '2', viewedAt: at + 180, accountID: 7 },
     ] } })
-    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([daily])
-    expect(frontmatter.get(daily)!.Related).toEqual(['[[Mom]]', '[[Lost (2004)]]', '[[Arrival (2016)]]'])
-    // Nothing new the second time; the note's text is left alone without its journaling line.
-    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([])
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    // Nothing goes in by itself (and the note's text is left alone without its journaling line): it's offered.
+    expect(await sync.writeDailyEpisodes(true)).toEqual([])
+    expect(frontmatter.get(daily)!.Related).toEqual(['[[Mom]]', '[[Lost (2004)]]'])
     expect(texts.get(daily)).toBe('# No journaling line here')
+    const offers = sync.relatedOffers()
+    expect(offers.map(o => [o.path, o.link, o.kind])).toEqual([[daily, '[[Arrival (2016)]]', 'movie']])
+    // Offered once, not again on the next run.
+    await sync.writeDailyEpisodes(true)
+    expect(sync.relatedOffers()).toHaveLength(1)
+    expect(await sync.addRelated(offers, [])).toEqual([daily])
+    expect(frontmatter.get(daily)!.Related).toEqual(['[[Mom]]', '[[Lost (2004)]]', '[[Arrival (2016)]]'])
+    expect(sync.relatedOffers()).toEqual([])
+    // Said no to: not offered again.
+    frontmatter.get(daily)!.Related = ['[[Mom]]']
+    await sync.writeDailyEpisodes(true)
+    const again = sync.relatedOffers()
+    expect(again.map(o => o.link)).toEqual(['[[Lost (2004)]]', '[[Arrival (2016)]]'])
+    await sync.addRelated([], again)
+    expect(frontmatter.get(daily)!.Related).toEqual(['[[Mom]]'])
+    await sync.writeDailyEpisodes(true)
+    expect(sync.relatedOffers()).toEqual([])
     // Off when the property name is empty.
+    settings.relatedDeclined = []
     settings.dailyRelated = ''
-    frontmatter.get(daily)!.Related = []
-    expect(await new PlexSync(app as never, settings, () => Promise.resolve()).writeDailyEpisodes(true)).toEqual([])
+    await sync.writeDailyEpisodes(true)
+    expect(sync.relatedOffers()).toEqual([])
   })
 
   it('lists movies and fully watched shows you finished, to react to, and adds a reaction to the note', async () => {

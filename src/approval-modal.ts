@@ -49,6 +49,11 @@ export interface ApprovalLine {
   source?: string
   /** Where it's written ("This note", "Plex", "Music file"), shown under the property's name. */
   writesTo?: string
+  /**
+   * Other sources' values for the same property that aren't offered (the same as the note's, or
+   * lower), shown in their own column beside the offered ones for comparison.
+   */
+  also?: { source: string, value: string | null, note: string }[]
 }
 
 /** A property (or the file name) a change leaves alone; editing it in the pop-up changes it too. */
@@ -139,61 +144,88 @@ export class ApprovalModal extends Modal {
       })
     }
 
-    const table = contentEl.createDiv('pmn-approval-scroll').createEl('table', { cls: 'pmn-approval-table' })
+    // A property more than one source has a value for is one row, with a column per source.
+    const intoNote = (line: ApprovalLine) => !create && (line.writesTo ?? 'This note') === 'This note' && Boolean(line.source)
+    const rows: ApprovalLine[][] = []
+    for (const line of lines) {
+      const same = intoNote(line) ? rows.find(r => intoNote(r[0]) && r[0].label === line.label) : undefined
+      if (same) same.push(line)
+      else rows.push([line])
+    }
+    const width = (row: ApprovalLine[]) => row.length + (row[0].also?.length ?? 0)
+    const columns = Math.max(1, ...rows.map(width))
+    const several = rows.filter(row => width(row) > 1).map(row => row[0].label)
+
+    const table = contentEl.createDiv('pmn-approval-scroll').createEl('table', { cls: columns > 1 ? ['pmn-approval-table', `pmn-approval-cols-${Math.min(columns, 3)}`] : 'pmn-approval-table' })
     const head = table.createEl('thead').createEl('tr')
     head.createEl('th')
     head.createEl('th', { text: 'Property' })
-    if (!create) head.createEl('th', { text: 'Existing' })
-    head.createEl('th', { text: create ? 'Value' : 'New' })
+    if (!create) head.createEl('th', { text: 'Current' })
+    head.createEl('th', { text: create ? 'Value' : 'New', attr: { colspan: String(columns) } })
     const body = table.createEl('tbody')
-    // A property more than one source has a value for: its lines are offered side by side to choose from.
-    const intoNote = lines.filter(line => (line.writesTo ?? 'This note') === 'This note').map(line => line.label)
-    const several = [...new Set(intoNote.filter((label, i) => intoNote.indexOf(label) !== i))]
     if (several.length) {
       contentEl.insertBefore(createEl('p', {
         cls: 'setting-item-description',
-        text: `${several.join(', ')}: more than one source has a value. Tick the one to write to the note; each line says where its value comes from.`,
+        text: `${several.join(', ')}: more than one source has a value, each in its own column. Tick the one to write to the note.`,
       }), table.parentElement)
     }
-    for (const { key, label, current, value, edit, items, required, choices, unticked, warn, source, writesTo } of lines) {
-      const row = body.createEl('tr')
-      const tickCell = row.createEl('td', { cls: 'pmn-approval-tick' })
-      const box = tickCell.createEl('input', { type: 'checkbox' })
-      box.checked = !unticked
-      box.disabled = Boolean(required)
-      if (unticked) {
-        this.pmnExcluded.add(key)
-        row.addClass('pmn-approval-off')
-      }
-      const nameCell = row.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
+    for (const row of rows) {
+      const tr = body.createEl('tr')
+      const tickCell = tr.createEl('td', { cls: 'pmn-approval-tick' })
+      const { label, current, warn, writesTo } = row[0]
+      const nameCell = tr.createEl('td', { cls: create ? 'pmn-approval-name' : 'pmn-approval-name pmn-approval-changed', text: label })
       if (writesTo && !create) nameCell.createDiv({ cls: 'pmn-approval-where', text: `Writes to: ${writesTo}` })
-      if (!create) cell(row, current ?? null, 'pmn-approval-now', 'Existing', warn)
+      if (!create) cell(tr, current ?? null, 'pmn-approval-now', 'Current', warn)
       const newLabel = create ? 'Value' : 'New'
-      const newCell = () => row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': newLabel } })
-      let input: HTMLTextAreaElement | HTMLInputElement | null = null
-      if (edit === 'list') {
-        input = this.pmnListEditor(newCell(), key, items ?? [], undefined, label)
-      } else if (edit) {
-        const original = value ?? ''
-        if (key === 'why') {
-          // Your reason for wanting it: a line of text, where "[[" looks for a note to link.
-          const field = newCell().createEl('input', { type: 'text', cls: 'pmn-approval-input' })
-          field.value = original
-          field.placeholder = 'Optional'
-          new LinkSuggest(this.app, field)
-          input = field
-        } else input = this.pmnTextField(newCell(), label, original, edit, Boolean(choices?.length) || key === 'file')
-        const field = input
-        field.addEventListener('input', () => {
-          if (field.value === original) delete this.pmnEdits[key]
-          else this.pmnEdits[key] = field.value
-        })
-        if (choices?.length) this.pmnCoverPicker(field, choices)
-        if (unticked) field.disabled = true
-      } else {
-        cell(row, value, 'pmn-approval-new', newLabel)
+      const options: { box: HTMLInputElement, line: ApprovalLine, input: HTMLTextAreaElement | HTMLInputElement | null, td: HTMLElement }[] = []
+      const refresh = () => {
+        tr.toggleClass('pmn-approval-off', options.every(o => !o.box.checked))
+        for (const o of options) {
+          if (o.input) o.input.disabled = !o.box.checked
+          o.td.toggleClass('pmn-approval-off-option', !o.box.checked)
+          if (o.box.checked) this.pmnExcluded.delete(o.line.key)
+          else this.pmnExcluded.add(o.line.key)
+        }
       }
-      if (source) (row.lastElementChild as HTMLElement).createDiv({ cls: 'pmn-approval-where', text: `From: ${source}` })
+      const split = width(row) > 1
+      // Plex first, then the other sources by name.
+      const order = (source?: string) => `${source === 'Plex' ? 0 : 1}${source ?? ''}`
+      const cells: ({ line: ApprovalLine } | { other: NonNullable<ApprovalLine['also']>[number] })[] = [...row.map(line => ({ line })), ...(row[0].also ?? []).map(other => ({ other }))]
+      if (split) cells.sort((a, b) => order('line' in a ? a.line.source : a.other.source).localeCompare(order('line' in b ? b.line.source : b.other.source)))
+      for (const c of cells) {
+        if (!('line' in c)) {
+          const { other } = c
+          const td = tr.createEl('td', { cls: 'pmn-approval-new pmn-approval-also', attr: { 'data-label': other.source } })
+          td.createDiv({ cls: 'pmn-approval-source', text: other.source })
+          if (other.value === null) td.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
+          else td.createDiv({ text: other.value })
+          td.createDiv({ cls: 'pmn-approval-where', text: other.note })
+          continue
+        }
+        const { line } = c
+        const td = tr.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': split ? line.source ?? newLabel : newLabel } })
+        if (!split && columns > 1) td.setAttr('colspan', String(columns))
+        let box: HTMLInputElement
+        if (split) {
+          // Each source's value in its own column, headed by its name with its own tick box.
+          const top = td.createEl('label', { cls: 'pmn-approval-source' })
+          box = top.createEl('input', { type: 'checkbox' })
+          top.createSpan({ text: line.source ?? '' })
+        } else {
+          box = tickCell.createEl('input', { type: 'checkbox' })
+        }
+        box.checked = !line.unticked
+        box.disabled = Boolean(line.required)
+        const option = { box, line, input: this.pmnValue(td, line), td }
+        options.push(option)
+        if (!split && line.source) td.createDiv({ cls: 'pmn-approval-where', text: `From: ${line.source}` })
+        box.addEventListener('change', () => {
+          // One source's value at a time: ticking one unticks the others.
+          if (box.checked && split) for (const o of options) if (o !== option) o.box.checked = false
+          refresh()
+        })
+      }
+      refresh()
       // "Never for this note": unticked now, and never offered for this note again.
       if (!create) {
         const lock = tickCell.createEl('button', { cls: 'pmn-approval-lock clickable-icon', attr: { 'aria-label': `Never change ${label} in this note` } })
@@ -206,17 +238,13 @@ export class ApprovalModal extends Modal {
           setIcon(lock, locking ? 'lock' : 'lock-open')
           lock.toggleClass('is-active', locking)
           lock.setAttr('aria-label', locking ? `Never change ${label} in this note (undo)` : `Never change ${label} in this note`)
-          box.checked = !locking
-          box.disabled = locking || Boolean(required)
-          box.dispatchEvent(new Event('change'))
+          for (const o of options) {
+            o.box.checked = !locking && !o.line.unticked
+            o.box.disabled = locking || Boolean(o.line.required)
+          }
+          refresh()
         })
       }
-      box.addEventListener('change', () => {
-        row.toggleClass('pmn-approval-off', !box.checked)
-        if (input) input.disabled = !box.checked
-        if (box.checked) this.pmnExcluded.delete(key)
-        else this.pmnExcluded.add(key)
-      })
     }
 
     // The rest of the note: nothing changes unless you edit it here.
@@ -224,8 +252,8 @@ export class ApprovalModal extends Modal {
       const row = body.createEl('tr', { cls: 'pmn-approval-same' })
       row.createEl('td')
       const name = row.createEl('td', { cls: 'pmn-approval-name', text: label })
-      cell(row, value, 'pmn-approval-now', 'Existing', warn)
-      const newCell = row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': 'New' } })
+      cell(row, value, 'pmn-approval-now', 'Current', warn)
+      const newCell = row.createEl('td', { cls: 'pmn-approval-new', attr: { 'data-label': 'New', colspan: String(columns) } })
       if (!key || !edit) {
         newCell.addClass('pmn-approval-empty')
         newCell.setText('No change')
@@ -270,6 +298,33 @@ export class ApprovalModal extends Modal {
         .setTooltip('With the same lines unticked')
         .onClick(() => this.pmnDecide('all')))
       .addButton(b => b.setButtonText('Stop').setWarning().onClick(() => this.pmnDecide('stop')))
+  }
+
+  /** A line's new value: shown, or in a box to edit it (its edit kept in `pmnEdits`). */
+  private pmnValue(td: HTMLElement, line: ApprovalLine): HTMLTextAreaElement | HTMLInputElement | null {
+    const { key, value, edit, items, choices } = line
+    if (edit === 'list') return this.pmnListEditor(td, key, items ?? [], undefined, line.label)
+    if (!edit) {
+      if (value === null) td.createEl('em', { cls: 'pmn-approval-empty', text: 'Empty' })
+      else td.createDiv({ text: value })
+      return null
+    }
+    const original = value ?? ''
+    let field: HTMLTextAreaElement | HTMLInputElement
+    if (key === 'why') {
+      // Your reason for wanting it: a line of text, where "[[" looks for a note to link.
+      const input = td.createEl('input', { type: 'text', cls: 'pmn-approval-input' })
+      input.value = original
+      input.placeholder = 'Optional'
+      new LinkSuggest(this.app, input)
+      field = input
+    } else field = this.pmnTextField(td, line.label, original, edit, Boolean(choices?.length) || key === 'file')
+    field.addEventListener('input', () => {
+      if (field.value === original) delete this.pmnEdits[key]
+      else this.pmnEdits[key] = field.value
+    })
+    if (choices?.length) this.pmnCoverPicker(field, choices)
+    return field
   }
 
   onClose(): void {

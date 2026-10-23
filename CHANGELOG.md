@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.160] - 2026-10-23
+
+### Changed
+- Change pop-ups: when more than one source has a value for a property (a song's play count from Plex and from Last.fm), it's one row with a column for each source, Plex first, each with its own tick box (ticking one unticks the other), instead of separate lines with a small "From: Last.fm" under them. A source whose value isn't offered (the same as the note's, or lower) is still shown in its column, for comparison.
+- "Existing" is now "Current".
+- The table's text is a little smaller, so more fits on the screen; property names are always bold; unticked values are muted but no longer shrunk.
+
 ## [0.0.159] - 2026-10-23
 
 ### Changed

@@ -25,6 +25,12 @@
 .pmn-approval-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: var(--font-ui-small);
+}
+
+.pmn-approval-table input,
+.pmn-approval-table textarea {
+  font-size: inherit;
 }
 
 .pmn-approval-table th {
@@ -41,10 +47,11 @@
   vertical-align: top;
 }
 
-/* Property names never break mid-word; the value columns share what's left. */
+/* Property names, what's being looked at: bold, never broken mid-word; the value columns share what's left. */
 .pmn-approval-table .pmn-approval-name {
   white-space: nowrap;
   width: 1%;
+  font-weight: var(--font-bold);
 }
 
 .pmn-approval-table .pmn-approval-now,
@@ -56,18 +63,46 @@
 
 .pmn-approval-table .pmn-approval-now {
   color: var(--text-muted);
-  width: 45%;
+  width: 40%;
 }
 
 .pmn-approval-table .pmn-approval-new {
-  width: 55%;
+  width: 60%;
+}
+
+/* Unticked: muted, at the same size, so it can still be read and compared. */
+.pmn-approval-off .pmn-approval-new {
+  color: var(--text-muted);
+}
+
+/* Several sources' columns share the new value's width evenly. */
+.pmn-approval-cols-2 .pmn-approval-new {
+  width: 30%;
+}
+
+.pmn-approval-cols-3 .pmn-approval-new {
+  width: 20%;
+}
+
+/* A source's own column (several sources for one property): its name and tick box on top. */
+.pmn-approval-source {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  margin-bottom: var(--size-4-1);
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+}
+
+.pmn-approval-also,
+.pmn-approval-off-option > :not(.pmn-approval-source) {
+  color: var(--text-muted);
 }
 
 .pmn-approval-empty {
   color: var(--text-faint);
 }
 
-.pmn-approval-off .pmn-approval-new,
 .pmn-approval-where {
   font-size: var(--font-ui-smaller);
   font-weight: normal;
@@ -181,6 +216,11 @@
     color: var(--text-faint);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  /* A source's own column already says its name. */
+  .pmn-approval-table td:has(> .pmn-approval-source)::before {
+    content: none;
   }
 }
 

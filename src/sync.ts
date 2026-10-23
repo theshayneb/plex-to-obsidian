@@ -841,10 +841,17 @@ export class PlexSync {
             lines.push({ key: 'plexRating', label: 'Your rating in Plex', current: rating!.plex ? ratingLabel(rating!.plex, 'stars', (item.userRating ?? 0) / 2) : null, value: ratingLabel(toPlex), edit: 'text', unticked: genreCheck || !this.settings.tickDifferences })
           }
           for (const c of countChoices) {
-            for (const from of ['plex', 'lastfm'] as const) {
-              if (!c.offer[from]) continue
-              lines.push({ key: `count:${from}:${c.name}`, label: c.name, current: describeValue(c.current), value: String(c[from]), edit: 'number', unticked: c.ticked !== from, source: from === 'plex' ? 'Plex' : 'Last.fm' })
-            }
+            const sourceName = (from: 'plex' | 'lastfm') => from === 'plex' ? 'Plex' : 'Last.fm'
+            const offered = (['plex', 'lastfm'] as const).filter(from => c.offer[from])
+            // The source not offered is still shown beside the other, for comparison.
+            const also = (['plex', 'lastfm'] as const).filter(from => !c.offer[from]).map(from => ({
+              source: sourceName(from),
+              value: String(c[from]),
+              note: String(c[from]) === describeValue(c.current) ? 'Same as now' : 'Lower than now: not offered',
+            }))
+            offered.forEach((from, i) => {
+              lines.push({ key: `count:${from}:${c.name}`, label: c.name, current: describeValue(c.current), value: String(c[from]), edit: 'number', unticked: c.ticked !== from, source: sourceName(from), ...i === 0 && also.length ? { also } : {} })
+            })
           }
           for (const write of fileWrites) {
             lines.push({ key: `file:${write.name}`, label: write.tag ? `${write.name} in the music file` : `${write.name} in the lyrics file`, current: write.from, value: write.to, edit: 'text', unticked: true })

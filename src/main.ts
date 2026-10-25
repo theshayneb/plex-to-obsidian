@@ -18,7 +18,7 @@ import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
 import { vaultPropertyValues } from './property-suggest'
 import type { Finished } from './reactions'
-import { RelatedModal } from './related-modal'
+import { RelatedModal, type RelatedAnswer } from './related-modal'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -292,23 +292,30 @@ export default class PlexMediaNotesPlugin extends Plugin {
   /** Related links already pointed out since Obsidian started (not pointed out again until it restarts). */
   private readonly relatedPointedOut = new Set<string>()
 
-  /** A notice, when shows or movies you watched are waiting to go in daily notes' Related; clicking it asks. */
+  /**
+   * After a background update: the "Add to your daily notes?" pop-up itself, straight away, when
+   * shows or movies you watched are waiting to go in Related. "Not now" leaves them until Obsidian
+   * restarts; closed any other way (Escape), it opens again after the next update.
+   */
   private pointOutRelated(): void {
     const offers = new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers()
     const keys = offers.map(o => `${o.path}|${o.link}`)
     if (!keys.some(key => !this.relatedPointedOut.has(key))) return
-    keys.forEach(key => this.relatedPointedOut.add(key))
-    const notice = new Notice(`${offers.length === 1 ? `${offers[0].title} could` : `${offers.length} things you watched could`} go in your daily notes' ${this.settings.dailyRelated}: click to check`, 15000)
-    notice.messageEl.addEventListener('click', () => this.askRelated())
+    // Not over another pop-up (a reaction, a check): the next update asks instead.
+    if (document.querySelector('.modal-container')) return
+    this.askRelated(answer => {
+      if (answer === 'later') keys.forEach(key => this.relatedPointedOut.add(key))
+    })
   }
 
-  /** "Add to Related?" for what's waiting, if anything; what you tick is added. */
-  askRelated(): void {
+  /** "Add to your daily notes?" for what's waiting, if anything; what you tick is added. */
+  askRelated(answered?: (answer: RelatedAnswer) => void): void {
     const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
     const offers = sync.relatedOffers()
     if (!offers.length) return
     new RelatedModal(this.app, offers, this.settings.dailyRelated, answer => {
-      if (answer === 'later') return
+      answered?.(answer)
+      if (answer === 'later' || answer === 'closed') return
       void sync.addRelated(answer.yes, answer.no).then(
         days => { if (days.length) new Notice(`Added to ${this.settings.dailyRelated} in ${days.length} daily note${days.length === 1 ? '' : 's'}`) },
         err => new Notice(`Couldn't add to ${this.settings.dailyRelated}: ${errorMessage(err)}`),

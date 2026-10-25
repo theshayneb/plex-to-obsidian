@@ -952,7 +952,15 @@
   margin-bottom: 0;
 }
 
-/* "Add to Related?": watched shows and movies, by daily note. */
+/* "Add to your daily notes?": watched shows and movies, by daily note; big, and only closed by its buttons. */
+.modal.pmn-related {
+  width: min(720px, 95vw);
+}
+
+.pmn-related-container .modal-bg {
+  pointer-events: none;
+}
+
 .pmn-related-day {
   margin-top: var(--size-4-3);
   font-weight: var(--font-semibold);

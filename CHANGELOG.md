@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.161] - 2026-10-25
+
+### Changed
+- When a background update finds shows or movies you watched that could go in your daily notes' Related, the "Add to your daily notes?" pop-up now opens by itself in the middle of the screen, instead of a small notice in the corner. It's wider, and a click beside it no longer closes it: only its buttons do (or Escape, after which it asks again at the next update). "Not now" leaves it until you restart Obsidian. If another pop-up is open at the time, it waits for the next update.
+
 ## [0.0.160] - 2026-10-23
 
 ### Changed

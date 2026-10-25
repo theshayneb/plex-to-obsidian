@@ -3,7 +3,8 @@
 import { App, Modal, moment } from 'obsidian'
 import type { RelatedOffer } from './config'
 
-export type RelatedAnswer = { yes: RelatedOffer[], no: RelatedOffer[] } | 'later'
+/** 'later' is "Not now"; 'closed' is closed without an answer (Escape). */
+export type RelatedAnswer = { yes: RelatedOffer[], no: RelatedOffer[] } | 'later' | 'closed'
 
 export class RelatedModal extends Modal {
   private pmnAnswered = false
@@ -15,6 +16,8 @@ export class RelatedModal extends Modal {
   onOpen(): void {
     this.titleEl.setText('Add to your daily notes?')
     this.modalEl.addClass('pmn-related')
+    // A click beside it doesn't close it: only its buttons (or Escape) do.
+    this.containerEl.addClass('pmn-related-container')
     const { contentEl } = this
     contentEl.createEl('p', { cls: 'setting-item-description', text: `Plex says you watched these. Ticked ones are added to ${this.pmnProperty} in that day's daily note; unticked ones aren't offered again. "Not now" keeps them all for later.` })
     const ticked = new Set(this.pmnOffers)
@@ -50,6 +53,6 @@ export class RelatedModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty()
-    if (!this.pmnAnswered) this.pmnDone('later')
+    if (!this.pmnAnswered) this.pmnDone('closed')
   }
 }

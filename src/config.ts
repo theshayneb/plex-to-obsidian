@@ -557,6 +557,14 @@ export function loadSettings(data: unknown): PlexNotesSettings {
     const books = settings.libraries[BOOKS_LIBRARY]
     if (books && books.fileNameFormat.trim() === '{{title}} ({{year}})') books.fileNameFormat = DEFAULT_FILE_NAMES.book
   })
+  migrateOnce(settings, saved, 'book-names-by-author-always', () => {
+    // The owner wants every book named "Title by Author (Year)": a Books format without the author
+    // (which the first move missed) is moved too, and checks offer renaming books from the start.
+    const books = settings.libraries[BOOKS_LIBRARY]
+    if (books && !books.fileNameFormat.includes('{{author}}')) books.fileNameFormat = DEFAULT_FILE_NAMES.book
+    const checked = settings.checkByLibrary[BOOKS_LIBRARY] ?? settings.checkProperties
+    if (checked && !checked.includes('File name')) settings.checkByLibrary[BOOKS_LIBRARY] = ['File name', ...checked]
+  })
   migrateOnce(settings, saved, 'bracket-replacements', () => {
     // Square brackets have their own replacements now: round brackets.
     settings.fileNameReplacements['['] ??= '('

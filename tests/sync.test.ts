@@ -928,6 +928,19 @@ describe('PlexSync', () => {
     expect(files.has('Media/Books/In the Valley of the Sun by Andy Davidson (2017).md')).toBe(true)
   })
 
+  it('still renames a book Open Library and Google Books don\'t have, from what the note says', async () => {
+    steamResponses = { 'https://openlibrary.org/search.json': { docs: [] }, 'https://www.googleapis.com/books': { items: [] } }
+    const { app } = makeApp({ 'Media/Books/Some Zine (2019).md': { Author: ['A. Friend'] } })
+    const settings = settingsWith({})
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.key !== 'rename').map(l => l.key) }))
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['File name'])
+    expect(result.renamed).toEqual([{ from: 'Media/Books/Some Zine (2019).md', to: 'Media/Books/Some Zine by A. Friend (2019).md' }])
+    expect(result.unmatched).toEqual(['Media/Books/Some Zine (2019).md'])
+  })
+
   it('tries a plain Open Library search when the title-and-author search finds nothing', async () => {
     steamResponses = {
       'https://openlibrary.org/search.json?title=In%20the%20Valley%20of%20the%20Sun&author=': { docs: [] },
@@ -976,6 +989,34 @@ describe('PlexSync', () => {
     expect(requested.filter(u => u.includes('Hobbit'))).toEqual([])
     // Only the book's own library is read: no Plex listing.
     expect(requested.filter(u => u.includes('/library/sections'))).toEqual([])
+  })
+
+  it('renames book notes in a sync from what each note says, looking nothing up', async () => {
+    steamResponses = {}
+    const { app } = makeApp({
+      'Media/Books/In the Valley of the Sun (2017).md': { Author: ['Andy Davidson'] },
+      'Media/Books/Dune by Frank Herbert.md': { Author: ['Frank Herbert'], Date: '1965-08-01' },
+      'Media/Books/Stand by Me.md': { Author: ['Stephen King'], Date: '1982-01-01' },
+      'Media/Books/Mystery book.md': {},
+      'Media/Books/Emma by Jane Austen (1815).md': { Author: ['Jane Austen'] },
+    })
+    const settings = settingsWith({ renameExistingNotes: true })
+    settings.libraries = {}
+    const { addLibrary } = await import('../src/config')
+    addLibrary(settings, 'book')
+    settings.libraries.books.properties.push({ name: 'Date', source: 'releaseDate' } as never)
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'full', [], undefined, new Set(['1']))
+    expect(result.renamed.map(r => r.to).sort()).toEqual([
+      'Media/Books/Dune by Frank Herbert (1965).md',
+      'Media/Books/In the Valley of the Sun by Andy Davidson (2017).md',
+      'Media/Books/Stand by Me by Stephen King (1982).md',
+    ])
+    expect(requested.filter(u => u.includes('openlibrary') || u.includes('googleapis'))).toEqual([])
   })
 
   it('checks book genres against Open Library, finding books without a link by title and author', async () => {
@@ -1728,13 +1769,17 @@ describe('PlexSync', () => {
     expect(loadSettings({ playCountHours: 0 }).playCountHours).toBe(0)
   })
 
-  it('names new book notes "Title by Author (Year)" from now on, unless the format was changed', () => {
+  it('names book notes "Title by Author (Year)", whatever format without the author was saved', () => {
     const books = (format: string) => ({ libraries: { books: { title: 'Books', type: 'books', target: 'book', folder: 'Media/Books', fileNameFormat: format, matchBy: 'loose',
       properties: [{ name: 'Author', source: 'authors' }], values: { watched: '', started: '', unwatched: '', tag: 'book' } } } })
     expect(loadSettings(books('{{title}} ({{year}})')).libraries.books.fileNameFormat).toBe('{{title}} by {{author}} ({{year}})')
     expect(loadSettings(books('{{author}} - {{title}}')).libraries.books.fileNameFormat).toBe('{{author}} - {{title}}')
+    expect(loadSettings(books('{{title}}')).libraries.books.fileNameFormat).toBe('{{title}} by {{author}} ({{year}})')
     const once = loadSettings(books('{{title}} ({{year}})'))
     expect(loadSettings({ ...books('{{title}} ({{year}})'), migrations: once.migrations }).libraries.books.fileNameFormat).toBe('{{title}} ({{year}})')
+    // Checks offer renaming books from the start.
+    expect(loadSettings({ ...books('{{title}}'), checkByLibrary: { books: ['Genre'] } }).checkByLibrary.books).toEqual(['File name', 'Genre'])
+    expect(loadSettings({ ...books('{{title}}'), checkProperties: ['Genre'], migrations: ['check-everything'] }).checkByLibrary.books).toEqual(['File name', 'Genre'])
   })
 
   it('drops Duration from saved music libraries and renames book Pages to Duration, once', () => {

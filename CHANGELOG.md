@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.162] - 2026-10-26
+
+### Fixed
+- Book notes are renamed to "Title by Author (Year)" in more cases:
+  - Syncs now rename book notes too (before, no sync looked at the Books library at all), from what each note says: its name, its author and its date. Nothing is looked up online for this. It's offered in the pop-up like any other rename, when "Rename existing notes" is on.
+  - "Check notes against sources" with File name ticked now also renames books it can't find on Open Library or Google Books, from what the note says.
+  - A Books library whose file name format didn't include the author is moved to "{{title}} by {{author}} ({{year}})", once, and File name is ticked for Books in the check.
+  - A name like "Stand by Me" whose "by" part isn't the author is kept whole as the title.
+
 ## [0.0.161] - 2026-10-25
 
 ### Changed

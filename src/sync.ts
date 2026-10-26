@@ -1022,6 +1022,9 @@ export class PlexSync {
     }
     const books = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (genreCheck && !result.stopped && books) await this.checkBooks(chosenOf(books), result, progress, only)
+    // A sync renames book notes too (no sync reads the Books library otherwise), from what each note
+    // says (its name, author and date), with nothing looked up.
+    if (renaming && !result.stopped && books) await this.checkBooks(new Set([FILE_NAME]), result, progress, undefined, false)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>
@@ -2118,16 +2121,34 @@ export class PlexSync {
   private bookForName(file: TFile, book: PlexItem, authorProp?: string): PlexItem {
     const yearInName = /[([](\d{4})[)\]]\s*$/.exec(file.basename)?.[1]
     const name = file.basename.replace(/\s*[([]\d{4}[)\]]\s*$/, '').trim() || file.basename
-    const title = /^(.+?)\s+by\s+.+$/i.exec(name)?.[1] ?? name
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const own = listOf(authorProp ? from[authorProp] : undefined).map(a => a.replace(/^\[\[(?:[^\]|]*\|)?([^\]]*)\]\]$/, '$1')).filter(Boolean)
-    return { ...book, title, authors: own.length ? own : book.authors, year: book.year ?? (yearInName ? Number(yearInName) : undefined) }
+    const authors = own.length ? own : book.authors
+    // "Dune by Frank Herbert" is Dune; "Stand by Me", by someone else, is the whole name.
+    const byName = /^(.+?)\s+by\s+(.+)$/i.exec(name)
+    const plain = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+    const title = byName && (!authors?.length || authors.some(a => plain(a).includes(plain(byName[2])) || plain(byName[2]).includes(plain(a)))) ? byName[1] : name
+    return { ...book, title, authors, year: book.year ?? (yearInName ? Number(yearInName) : undefined) }
   }
 
-  private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn, only?: Set<string>): Promise<void> {
+  /**
+   * A book as its note says it is, for naming it without looking it up: the name's title (and
+   * author, in "Title by Author"), the note's author, and the year in its name or its date.
+   */
+  private ownBook(file: TFile, lib: LibrarySetting): PlexItem {
+    const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const name = file.basename.replace(/\s*[([]\d{4}[)\]]\s*$/, '').trim() || file.basename
+    const byName = /^(.+?)\s+by\s+(.+)$/i.exec(name)
+    const dateProp = lib.properties.find(m => (m.source === 'releaseDate' || m.source === 'year') && m.name.trim() && from[m.name.trim()] !== undefined)?.name.trim()
+    const dateYear = dateProp ? /\b(\d{4})\b/.exec(String(from[dateProp] as string | number))?.[1] : undefined
+    return { ratingKey: `book:${file.path}`, type: 'book', title: byName ? byName[1] : name, authors: byName ? [byName[2].trim()] : undefined, year: dateYear ? Number(dateYear) : undefined }
+  }
+
+  /** `lookUp` false: only renames, from what each note says (`ownBook`), in every sync. */
+  private async checkBooks(chosen: Set<string>, result: SyncResult, progress: ProgressFn, only?: Set<string>, lookUp = true): Promise<void> {
     const lib = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
     if (!lib || lib.target !== 'book') return
-    if (this.onlyLibraries && !this.onlyLibraries.has(BOOKS_LIBRARY)) return
+    if (lookUp && this.onlyLibraries && !this.onlyLibraries.has(BOOKS_LIBRARY)) return
     const mappings = lib.properties.filter(m => chosen.has(m.name.trim()) && !UNCHECKED_SOURCES.includes(m.source))
     // Book ratings are converted to the star scale too: the Books library's rating property, or the
     // name the other libraries give theirs (book notes may have one the plugin doesn't fill in).
@@ -2209,7 +2230,7 @@ export class PlexSync {
         })
       }
       const { link, work, volume } = linkOf(file)
-      if (!work && !volume && noteKey in this.settings.keptLinks) {
+      if (lookUp && !work && !volume && noteKey in this.settings.keptLinks) {
         if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
         rescaleOnly()
         continue
@@ -2218,26 +2239,35 @@ export class PlexSync {
         rescaleOnly()
         continue
       }
-      let book: PlexItem | null
-      try {
-        progress(`Checking books: ${looked} of ${files.length} (${file.basename})…`)
-        const got = await (ahead.get(file.path) ?? lookFor(file).then(found => ({ book: found })))
-        if ('error' in got) throw got.error
-        book = got.book
-      } catch (err) {
-        result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
-        rescaleOnly()
-        continue
+      let book: PlexItem | null = null
+      // Nothing found (or nothing looked up): the note can still be renamed from what it says.
+      let own = !lookUp
+      if (lookUp) {
+        try {
+          progress(`Checking books: ${looked} of ${files.length} (${file.basename})…`)
+          const got = await (ahead.get(file.path) ?? lookFor(file).then(found => ({ book: found })))
+          if ('error' in got) throw got.error
+          book = got.book
+        } catch (err) {
+          result.failed.push({ title: file.basename, error: `checking failed: ${errorText(err)}` })
+          rescaleOnly()
+          continue
+        }
+        if (!book) {
+          if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
+          if (!renaming) {
+            rescaleOnly()
+            continue
+          }
+          own = true
+        }
       }
-      if (!book) {
-        if (!this.settings.unmatchedIgnored.includes(file.path)) result.unmatched.push(file.path)
-        rescaleOnly()
-        continue
-      }
-      result.checked.push(file.path)
+      if (own) book = this.ownBook(file, lib)
+      if (!book) continue
+      if (!own) result.checked.push(file.path)
       // Found by searching: no link, or a Google Books link whose book Open Library has.
-      const searched = (!work && !volume) || Boolean(volume && book.ratingKey.startsWith('ol-'))
-      const checks = this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
+      const searched = !own && ((!work && !volume) || Boolean(volume && book.ratingKey.startsWith('ol-')))
+      const checks = own ? null : this.compareNote(file, book, lib, 'book', mappings.filter(m => !rescale?.names.includes(m.name.trim())), noteKey)
       const lines: ApprovalLine[] = this.rescaleLines(rescale)
       for (const name of checks?.names ?? []) {
         const offer = checks!.to[name]
@@ -2250,9 +2280,11 @@ export class PlexSync {
         lines.push({ key: `fix:${linkProp}`, label: linkProp, current: describeValue(link), value: newLink, edit: 'text', unticked: !this.settings.tickDifferences && !isBlank(link) })
       }
       let renameTo: string | null = null
-      if (renaming) {
+      // Named from what the note says only when it says who wrote it or when (else it would lose them).
+      const named = this.bookForName(file, book, authorProp)
+      if (renaming && (!own || named.authors?.length || named.year)) {
         try {
-          renameTo = this.renameTarget(file, this.bookForName(file, book, authorProp), lib)
+          renameTo = this.renameTarget(file, named, lib)
         } catch (err) {
           result.failed.push({ title: file.basename, error: `rename failed: ${errorText(err)}` })
         }

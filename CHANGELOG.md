@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.167] - 2026-10-28
+
+### Changed
+- Song names in the Songs card are in your accent colour, like the titles in the other recommendation cards.
+
 ## [0.0.166] - 2026-10-28
 
 ### Changed

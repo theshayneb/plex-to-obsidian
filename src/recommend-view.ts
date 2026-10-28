@@ -382,7 +382,7 @@ export class RecommendView extends ItemView {
   private pmnSongRow(parent: HTMLElement, song: SongSuggestion): void {
     const row = parent.createDiv('pmn-rec-row')
     const text = row.createDiv('pmn-rec-text')
-    text.createSpan({ cls: 'pmn-rec-title', text: song.title })
+    text.createSpan({ cls: ['pmn-rec-title', 'pmn-rec-song'], text: song.title })
     const buttons = row.createDiv('pmn-rec-buttons')
     // Listening to it (or keeping it in a Spotify playlist to decide later) takes it off the list.
     const listen = buttons.createEl('a', { cls: 'pmn-rec-listen', text: 'Listen on Spotify', href: spotifySearch(song.artist, song.track), attr: { target: '_blank', rel: 'noopener' } })

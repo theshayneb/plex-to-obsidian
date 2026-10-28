@@ -1008,3 +1008,8 @@
   padding-left: var(--size-4-6);
   font-size: var(--font-ui-small);
 }
+
+/* A suggested song's name: in the accent colour, like the note links beside it. */
+.pmn-rec-song {
+  color: var(--text-accent);
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.170] - 2026-10-28
+
+### Changed
+- The Recommendations counts ("461 loved") say how many of them are 🩷 and how many ⭐⭐⭐⭐, since "loved" counts both.
+
 ## [0.0.169] - 2026-10-28
 
 ### Changed

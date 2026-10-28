@@ -307,7 +307,9 @@ export class RecommendView extends ItemView {
       metric.createDiv({ cls: 'pmn-dash-metric-label', text: GROUP_TITLES[group] })
       const inGroup = entries.filter(e => e.group === group)
       metric.createDiv({ cls: 'pmn-dash-metric-value', text: `${inGroup.filter(isLoved).length} loved` })
-      metric.createDiv({ cls: 'pmn-dash-metric-sub', text: `${inGroup.filter(isOpen).length} waiting for you` })
+      // "Loved" is ⭐⭐⭐⭐ and 🩷 together: each said apart, so the number can be checked.
+      const hearts = inGroup.filter(e => e.level === 5).length
+      metric.createDiv({ cls: 'pmn-dash-metric-sub', text: `🩷 ${hearts} · ⭐⭐⭐⭐ ${inGroup.filter(isLoved).length - hearts} · ${inGroup.filter(isOpen).length} waiting for you` })
     }
 
     const grid = contentEl.createDiv('pmn-dash-grid')

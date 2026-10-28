@@ -9,7 +9,7 @@ import { recommendedSongs } from './listenbrainz'
 import { listenbrainzSuggestions, spotifySearch, type ListenBrainzSuggestion } from './listenbrainz-data'
 
 /** A song to try, from Last.fm or ListenBrainz. */
-type SongSuggestion = Pick<LastfmSuggestion, 'id' | 'title' | 'artist' | 'track'>
+type SongSuggestion = Pick<LastfmSuggestion, 'id' | 'title' | 'artist' | 'track'> & { because?: string[] }
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
 import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
@@ -399,6 +399,8 @@ export class RecommendView extends ItemView {
     })
     const no = row.createDiv('pmn-rec-buttons').createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
     no.addEventListener('click', () => void this.pmnNotInterested({ id: song.id, title: song.title }))
+    // Why: the songs of yours Last.fm found it like, or ListenBrainz's listeners like you.
+    text.createDiv({ cls: 'pmn-rec-why', text: song.because?.length ? `Like ${song.because.join(' and ')}` : 'Played by listeners with taste like yours' })
   }
 
   /**

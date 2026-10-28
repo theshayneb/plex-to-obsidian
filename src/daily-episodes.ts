@@ -192,7 +192,7 @@ export function insertEntries(text: string, anchor: string, entries: DailyEntry[
 }
 
 /** Minutes after midnight of "22:00" or "7:30" (null when it isn't a time). */
-function minutesOf(time: string): number | null {
+export function minutesOf(time: string): number | null {
   const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*$/.exec(time)
   if (!m || Number(m[1]) > 23 || Number(m[2] ?? 0) > 59) return null
   return Number(m[1]) * 60 + Number(m[2] ?? 0)

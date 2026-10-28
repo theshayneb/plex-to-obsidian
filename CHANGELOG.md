@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.163] - 2026-10-28
+
+### Added
+- A daily check-in (Settings → Syncing → "Daily check-in", 19:00 to start with). Background updates keep running on your schedule but no longer ask you anything; everything waiting for your yes is asked once a day, from that time on, one pop-up after another:
+  1. changes to approve (play counts, Steam playtimes, ratings, statuses);
+  2. shows and movies to add to your daily notes' Related;
+  3. what you finished, to say how it was (a pop-up now, instead of a small notice).
+- The command "Check in now (everything waiting for your yes)" asks it all straight away.
+- Leave the time empty to be asked at every background update, as before. Syncs and checks you start yourself still ask straight away.
+
 ## [0.0.162] - 2026-10-26
 
 ### Fixed

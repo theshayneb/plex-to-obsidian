@@ -657,6 +657,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
             })
         })
     }
+    new Setting(containerEl)
+      .setName('Daily check-in')
+      .setDesc('A 24-hour time, such as 19:00. Background updates then ask you nothing; everything waiting for your yes (play counts and playtimes to approve, links for your daily notes\' Related, what you finished) is asked once a day, from this time on, one pop-up after another. The command "Check in now" asks straight away. Leave it empty to be asked at every background update.')
+      .addText(text => text
+        .setPlaceholder('19:00')
+        .setValue(settings.checkInAt)
+        .onChange(async value => {
+          settings.checkInAt = value.trim()
+          await this.save()
+        }))
   }
 
   private displaySteam(containerEl: HTMLElement): void {

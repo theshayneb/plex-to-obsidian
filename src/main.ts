@@ -19,6 +19,8 @@ import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-mo
 import { vaultPropertyValues } from './property-suggest'
 import type { Finished } from './reactions'
 import { RelatedModal, type RelatedAnswer } from './related-modal'
+import { checkInDue, dayOf } from './schedule'
+import { minutesOf } from './daily-episodes'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -114,11 +116,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
+      id: 'check-in',
+      name: 'Check in now (everything waiting for your yes)',
+      callback: () => void this.checkInNow(),
+    })
+
+    this.addCommand({
       id: 'related-links',
       name: 'Add what you watched to daily notes…',
       callback: () => {
         if (!new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers().length) new Notice('Nothing you watched is waiting to go in your daily notes')
-        else this.askRelated()
+        else void this.askRelated()
       },
     })
 
@@ -142,7 +150,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
           this.plexSyncRunning = false
           this.syncs.clear()
         }
-        this.askRelated()
+        void this.askRelated()
       },
     })
 
@@ -256,19 +264,58 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.registerInterval(window.setInterval(() => void this.updatePlayCountsIfDue(), 10 * 60 * 1000))
   }
 
+  /**
+   * The background update, every `playCountHours`, and the daily check-in (`checkInAt`). With a
+   * check-in time and asking on, updates in between ask nothing: what would need your yes (play
+   * counts, playtimes, ratings, statuses) is left for the check-in, which runs the update with its
+   * pop-ups, then asks about Related links and what you finished, one pop-up after another.
+   * Without a check-in time, every update asks, as before.
+   */
   async updatePlayCountsIfDue(): Promise<void> {
-    if (this.plexSyncRunning) return
+    if (this.plexSyncRunning || this.checkingIn) return
     // Another device may have changed the settings (say, a lock): start from what's saved, so this
     // run's save doesn't put back an older copy.
     await this.reloadSettings()
-    const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate, dailyEpisodes } = this.settings
+    const { updatePlayCounts, updateRatings, updateStatus, playCountHours, lastPlayCountUpdate, dailyEpisodes, reactionInbox } = this.settings
     const updating = updatePlayCounts || updateRatings || updateStatus
-    if (!(updating || dailyEpisodes) || !playCountHours || this.plexSyncRunning) return
+    if (!(updating || dailyEpisodes || reactionInbox) || !playCountHours || this.plexSyncRunning) return
     const now = Date.now()
-    if (now - lastPlayCountUpdate < playCountHours * 3600 * 1000 || now < this.playCountRetryAt) return
+    if (now < this.playCountRetryAt) return
+    const dailyCheckIn = minutesOf(this.settings.checkInAt) !== null
+    // Not over another pop-up (a reaction, a sync of your own): the next look, 10 minutes on, tries again.
+    const checkIn = dailyCheckIn && checkInDue(new Date(now), this.settings.checkInAt, this.settings.lastCheckIn) && !document.querySelector('.modal-container')
+    const due = now - lastPlayCountUpdate >= playCountHours * 3600 * 1000
+    if (!due && !checkIn) return
+    await this.backgroundUpdate(dailyCheckIn ? (checkIn ? 'check-in' : 'quiet') : 'ask')
+  }
+
+  /** Set while the check-in's questions are being asked, so no update starts in the middle. */
+  private checkingIn = false
+
+  /** "Check in now": the daily check-in's questions, straight away. */
+  async checkInNow(): Promise<void> {
+    if (this.plexSyncRunning || this.checkingIn) {
+      new Notice('A sync or check is already running')
+      return
+    }
+    await this.reloadSettings()
+    await this.backgroundUpdate('check-in', true)
+  }
+
+  /**
+   * 'quiet': nothing is asked (with asking on, only daily notes' episode lines are written and
+   * Related links saved up); 'check-in': everything is asked, one pop-up after another; 'ask': as
+   * before there was a check-in (pop-ups during the update, then Related and a notice).
+   */
+  private async backgroundUpdate(how: 'quiet' | 'check-in' | 'ask', byHand = false): Promise<void> {
+    const now = Date.now()
+    const { updatePlayCounts, updateRatings, updateStatus, askBeforeChanges } = this.settings
+    const updating = updatePlayCounts || updateRatings || updateStatus
     this.plexSyncRunning = true
+    let ran = false
     try {
-      if (updating) {
+      // With asking off nothing is asked, so it's done at every update.
+      if (updating && (how !== 'quiet' || !askBeforeChanges) && plexReady(this.settings)) {
         const result = await this.newSync().run(() => {}, 'playCounts')
         if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
         if (result.failed.length) console.error('Media Manager: failed items', result.failed)
@@ -276,16 +323,32 @@ export default class PlexMediaNotesPlugin extends Plugin {
       const days = await this.dailyEpisodes(() => {})
       if (days.length) console.log('Media Manager: episodes added to daily notes', days)
       this.settings.lastPlayCountUpdate = now
+      if (how === 'check-in' && !byHand) this.settings.lastCheckIn = dayOf(new Date(now))
       await this.saveSettings()
-      void this.pointOutFinished()
-      this.pointOutRelated()
+      ran = true
     } catch (err) {
       // Plex or Steam may be out of reach (say, a phone away from home); quietly try again in an hour.
       this.playCountRetryAt = now + 3600 * 1000
       console.warn('Media Manager: background play count update failed', err)
+      if (byHand) new Notice(`Checking in failed: ${errorMessage(err)}`, 10000)
     } finally {
       this.plexSyncRunning = false
       this.syncs.clear()
+    }
+    if (!ran) return
+    if (how === 'ask') {
+      void this.pointOutFinished()
+      this.pointOutRelated()
+      return
+    }
+    if (how === 'quiet') return
+    this.checkingIn = true
+    try {
+      const related = await this.askRelated()
+      const finished = await this.askFinished()
+      if (byHand && !related && !finished) new Notice('Nothing is waiting for you')
+    } finally {
+      this.checkingIn = false
     }
   }
 
@@ -293,9 +356,9 @@ export default class PlexMediaNotesPlugin extends Plugin {
   private readonly relatedPointedOut = new Set<string>()
 
   /**
-   * After a background update: the "Add to your daily notes?" pop-up itself, straight away, when
-   * shows or movies you watched are waiting to go in Related. "Not now" leaves them until Obsidian
-   * restarts; closed any other way (Escape), it opens again after the next update.
+   * After a background update without a check-in time: the "Add to your daily notes?" pop-up,
+   * straight away, when shows or movies you watched are waiting to go in Related. "Not now" leaves
+   * them until Obsidian restarts; closed any other way (Escape), it opens again after the next update.
    */
   private pointOutRelated(): void {
     const offers = new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers()
@@ -303,24 +366,47 @@ export default class PlexMediaNotesPlugin extends Plugin {
     if (!keys.some(key => !this.relatedPointedOut.has(key))) return
     // Not over another pop-up (a reaction, a check): the next update asks instead.
     if (document.querySelector('.modal-container')) return
-    this.askRelated(answer => {
+    void this.askRelated(answer => {
       if (answer === 'later') keys.forEach(key => this.relatedPointedOut.add(key))
     })
   }
 
-  /** "Add to your daily notes?" for what's waiting, if anything; what you tick is added. */
-  askRelated(answered?: (answer: RelatedAnswer) => void): void {
+  /**
+   * "Add to your daily notes?" for what's waiting, if anything; what you tick is added. Resolves
+   * once it's answered or closed (false when nothing was waiting).
+   */
+  askRelated(answered?: (answer: RelatedAnswer) => void): Promise<boolean> {
     const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
     const offers = sync.relatedOffers()
-    if (!offers.length) return
-    new RelatedModal(this.app, offers, this.settings.dailyRelated, answer => {
+    if (!offers.length) return Promise.resolve(false)
+    return new Promise(resolve => new RelatedModal(this.app, offers, this.settings.dailyRelated, answer => {
       answered?.(answer)
-      if (answer === 'later' || answer === 'closed') return
+      if (answer === 'later' || answer === 'closed') {
+        resolve(true)
+        return
+      }
       void sync.addRelated(answer.yes, answer.no).then(
         days => { if (days.length) new Notice(`Added to ${this.settings.dailyRelated} in ${days.length} daily note${days.length === 1 ? '' : 's'}`) },
         err => new Notice(`Couldn't add to ${this.settings.dailyRelated}: ${errorMessage(err)}`),
-      )
-    }).open()
+      ).then(() => resolve(true))
+    }).open())
+  }
+
+  /** At the check-in: "Just finished", when something you finished is waiting; resolves once it's closed (false when nothing was). */
+  private async askFinished(): Promise<boolean> {
+    if (!this.settings.reactionInbox || !plexReady(this.settings)) return false
+    let items: Finished[]
+    try {
+      items = await this.newSync().finishedItems()
+    } catch (err) {
+      console.warn('Media Manager: looking for what you finished failed', err)
+      return false
+    } finally {
+      this.syncs.clear()
+    }
+    if (!items.length) return false
+    await new Promise<void>(resolve => new FinishedModal(this.app, items, item => this.reactToFinished(item), resolve).open())
+    return true
   }
 
   /** Finishings already pointed out since Obsidian started (not pointed out again until it restarts). */
@@ -507,7 +593,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.error('Media Manager: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
-      if (!result.stopped) this.askRelated()
+      if (!result.stopped) void this.askRelated()
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)

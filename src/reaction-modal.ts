@@ -160,7 +160,7 @@ export class ReactionModal extends Modal {
 
 /** "Just finished": what you finished lately, each to react to (or set aside), one at a time. */
 export class FinishedModal extends Modal {
-  constructor(app: App, private readonly pmnItems: Finished[], private readonly pmnReact: (item: Finished) => Promise<ReactionAnswer>) {
+  constructor(app: App, private readonly pmnItems: Finished[], private readonly pmnReact: (item: Finished) => Promise<ReactionAnswer>, private readonly pmnClosed?: () => void) {
     super(app)
   }
 
@@ -172,6 +172,7 @@ export class FinishedModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty()
+    this.pmnClosed?.()
   }
 
   private pmnRender(): void {

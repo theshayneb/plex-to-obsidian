@@ -186,6 +186,13 @@ export interface PlexNotesSettings {
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
   lastPlayCountUpdate: number
+  /**
+   * The daily check-in (24-hour, "19:00"): background updates ask nothing, and every question
+   * (changes to approve, Related links, what you finished) waits for it. Empty: each update asks.
+   */
+  checkInAt: string
+  /** The day (YYYY-MM-DD) the check-in was last held. */
+  lastCheckIn: string
   /** Keyed by Plex library section key, plus "steam" for Steam games. */
   libraries: Record<string, LibrarySetting>
 }
@@ -279,6 +286,8 @@ export function defaultSettings(): PlexNotesSettings {
     ratingsReviewed: {},
     playCountHours: 0,
     lastPlayCountUpdate: 0,
+    checkInAt: '19:00',
+    lastCheckIn: '',
     libraries: {},
   }
 }
@@ -389,7 +398,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
   for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
-    'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate'] as const) {
+    'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...settings.fileNameReplacements, ...saved.fileNameReplacements }

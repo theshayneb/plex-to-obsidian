@@ -124,14 +124,46 @@ export function parseTopTracks(body: unknown): { tracks: { artist: string, title
   return { tracks, pages: Number(text(top?.['@attr']?.totalPages)) || 1 }
 }
 
+/** Words in a version part ("(Remastered 2011)", "- Album Version") that don't make it another recording. */
+const SAME_RECORDING = new Set(['remaster', 'remastered', 'remasters', 'digital', 'digitally', 'mono', 'stereo', 'explicit', 'clean', 'deluxe', 'edition', 'expanded', 'anniversary', 'bonus', 'track', 'album', 'single', 'version', 'original', 'lp', 'from', 'the', 'and', 'of'])
+
 /**
- * Last.fm play counts by song (`songKey`), the versions Last.fm lists apart ("- Remastered",
- * "(Live)") added together, as Plex's songs are compared without them.
+ * A song for play counts: like `songKey`, but a remix, an acoustic or live version and so on stays
+ * apart ("Fantasy (Remix)" isn't "Fantasy"); only parts that leave the recording the same
+ * ("- Remastered 2011", "(Album Version)", "[Explicit]") are left out. Brackets and dashes count
+ * alike, so Plex's "Speak Easy [Acoustic]" is Last.fm's "Speak Easy - Acoustic".
+ */
+export function versionKey(artist: string, title: string): string {
+  const plain = (text: string) => text.normalize('NFKD').toLowerCase().replace(/&/g, 'and').replace(/[^\p{L}\p{N}]+/gu, '')
+  const parts: string[] = []
+  let base = withoutFeatured(title)
+  base = base.replace(/\s*[([]([^)\]]*)[)\]]/g, (_m, inside: string) => {
+    parts.push(inside)
+    return ''
+  })
+  const dash = /\s+-\s+(.*)$/.exec(base)
+  if (dash) {
+    parts.push(dash[1])
+    base = base.slice(0, dash.index)
+  }
+  const kept = parts.filter(part => {
+    const words = part.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+    // A featured artist ("(with Sia)") isn't a version either.
+    if (!words.length || /^(feat|ft|featuring|with)$/.test(words[0])) return false
+    return !words.every(w => SAME_RECORDING.has(w) || /^\d+$/.test(w))
+  })
+  return `${artistKey(artist)}|${plain(base.trim() || title)}${kept.length ? `|${kept.map(plain).sort().join('|')}` : ''}`
+}
+
+/**
+ * Last.fm play counts by song version (`versionKey`): the listings of one recording Last.fm keeps
+ * apart ("Karma Police" and "Karma Police - Remastered") added together, other versions (a remix,
+ * an acoustic one) each kept to itself.
  */
 export function playCountsByKey(tracks: { artist: string, title: string, plays: number }[]): Map<string, number> {
   const counts = new Map<string, number>()
   for (const t of tracks) {
-    const key = songKey(t.artist, t.title)
+    const key = versionKey(t.artist, t.title)
     counts.set(key, (counts.get(key) ?? 0) + t.plays)
   }
   return counts

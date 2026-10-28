@@ -49,7 +49,7 @@ import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics, writeLyrics, writeOwnTag } from './music-files'
 import { userPlayCounts } from './lastfm'
-import { songKey } from './lastfm-data'
+import { songKey, versionKey } from './lastfm-data'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
 
 export interface SyncResult {
@@ -294,20 +294,27 @@ export class PlexSync {
   private onlyLibraries: Set<string> | null = null
   /** "Apply to the rest of this group": the lines left unticked then, by group. */
   private readonly approvedGroups = new Map<string, Set<string>>()
+  /** Songs (`songKey`) the music libraries have more than one version of, for `planCountChoices`. */
+  private songsWithVersions = new Set<string>()
 
   /**
-   * A song's play count properties where Last.fm's count (from `counts`, by `songKey`) differs
+   * A song's play count properties where Last.fm's count (from `counts`, by `versionKey`) differs
    * from Plex's: `replaced` names them (their usual Plex line is left out, so a count you chose
    * isn't changed back), and `choices` offers whichever of the two the note doesn't have yet,
    * the higher one ticked when it has neither. A check only looks at the properties chosen. A
    * choice turned down isn't offered again while the note and both counts stay the same.
+   * A song with other versions in the library (`songsWithVersions`: a remix, an acoustic one) whose
+   * note has more plays than both sources is offered the higher of them anyway, unticked: before
+   * 0.0.165 every version was given Last.fm's plays of all of them added together.
    */
   private planCountChoices(file: TFile, item: PlexItem, lib: LibrarySetting, counts: Map<string, number>, chosen: Set<string> | null): { replaced: Set<string>, choices: CountChoice[] } | null {
     const artist = trackArtist(item)
     if (lib.target !== 'music' || item.type !== 'track' || !artist) return null
-    const lastfm = counts.get(songKey(artist, item.title))
+    const lastfm = counts.get(versionKey(artist, item.title))
     const plex = playCount(item)
-    if (lastfm === undefined || lastfm === plex) return null
+    if (lastfm === undefined) return null
+    const versioned = this.songsWithVersions.has(songKey(artist, item.title))
+    if (lastfm === plex && !versioned) return null
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const locked = this.settings.lockedProperties[file.path] ?? []
     const replaced = new Set<string>()
@@ -321,9 +328,15 @@ export class PlexSync {
       if (this.isKept(`${item.ratingKey}|count:${name}`, current, `${plex}/${lastfm}`)) continue
       // Never a lower count than the note's (it may count plays neither source knows about).
       const higher = (count: number) => !Number.isFinite(now) || count > now
-      const offer = { plex: now !== plex && higher(plex), lastfm: now !== lastfm && higher(lastfm) }
+      const offer = { plex: now !== plex && higher(plex), lastfm: lastfm !== plex && now !== lastfm && higher(lastfm) }
+      // Counted together with its other versions before: the right count, lower, for you to tick.
+      const fixing = versioned && Number.isFinite(now) && now > Math.max(plex, lastfm)
+      if (fixing) {
+        if (lastfm >= plex) offer.lastfm = true
+        else offer.plex = true
+      }
       if (!offer.plex && !offer.lastfm) continue
-      const ticked = offer.plex && offer.lastfm ? (lastfm > plex ? 'lastfm' : 'plex') : null
+      const ticked = fixing ? null : offer.plex && offer.lastfm ? (lastfm > plex ? 'lastfm' : 'plex') : null
       choices.push({ name, current, plex, lastfm, offer, ticked })
     }
     return { replaced, choices }
@@ -700,6 +713,15 @@ export class PlexSync {
       try {
         lastfmCounts = await userPlayCounts(this.settings.lastfmKey, this.settings.lastfmUser)
         if (!lastfmCounts) result.failed.push({ title: 'Last.fm', error: `Last.fm doesn't know the user "${this.settings.lastfmUser}"` })
+        // Songs the library has more than one version of ("Fantasy" and "Fantasy [Remix]").
+        const versions = new Map<string, Set<string>>()
+        for (const { item, lib } of entries) {
+          const artist = trackArtist(item)
+          if (lib.target !== 'music' || item.type !== 'track' || !artist) continue
+          const key = songKey(artist, item.title)
+          versions.set(key, (versions.get(key) ?? new Set()).add(versionKey(artist, item.title)))
+        }
+        this.songsWithVersions = new Set([...versions].filter(([, v]) => v.size > 1).map(([key]) => key))
       } catch (err) {
         result.failed.push({ title: 'Last.fm', error: `play counts couldn't be read: ${errorText(err)}` })
       }

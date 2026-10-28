@@ -1327,6 +1327,33 @@ describe('PlexSync', () => {
     vi.mocked(userPlayCounts).mockResolvedValue(null)
   })
 
+  it('offers the right, lower count to a song whose versions were counted together before, unticked', async () => {
+    const { userPlayCounts } = await import('../src/lastfm')
+    const { playCountsByKey } = await import('../src/lastfm-data')
+    vi.mocked(userPlayCounts).mockResolvedValue(playCountsByKey([
+      { artist: 'Mariah Carey', title: 'Fantasy', plays: 305 },
+      { artist: 'Mariah Carey', title: 'Fantasy (Remix)', plays: 40 },
+    ]))
+    const remix = 'Media/Music/Mariah Carey - Fantasy (Remix).md'
+    const song = 'Media/Music/Mariah Carey - Fantasy.md'
+    const { app } = makeApp({
+      [song]: { Link: 'http://plex:32400/library/metadata/200', Progress: 345 },
+      [remix]: { Link: 'http://plex:32400/library/metadata/201', Progress: 345 },
+    })
+    const settings = settingsWith({ lastfmKey: 'k', lastfmUser: 'me' })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [
+      { ratingKey: '200', type: 'track', title: 'Fantasy', grandparentTitle: 'Mariah Carey', viewCount: 20 },
+      { ratingKey: '201', type: 'track', title: 'Fantasy [Remix]', grandparentTitle: 'Mariah Carey', viewCount: 5 },
+    ] } })
+    const asked = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: r.lines.map(l => l.key) }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), asked).run(() => {}, 'check', ['Progress'])
+    const offered = (path: string) => asked.mock.calls.find(c => c[0].path === path)?.[0].lines.filter(l => l.label === 'Progress').map(l => [l.key, l.value, l.unticked])
+    expect(offered(song)).toEqual([['count:lastfm:Progress', '305', true]])
+    expect(offered(remix)).toEqual([['count:lastfm:Progress', '40', true]])
+    vi.mocked(userPlayCounts).mockResolvedValue(null)
+  })
+
   it('offers to write a song note\'s tempo and lyrics to its music and lyrics files, unticked', async () => {
     const song = 'Media/Music/Radiohead - Karma Police.md'
     vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Slow'] })

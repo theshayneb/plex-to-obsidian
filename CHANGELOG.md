@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.165] - 2026-10-28
+
+### Fixed
+- Last.fm play counts no longer add different versions of a song together. "Fantasy" and "Fantasy [Remix]", or "Speak Easy" and "Speak Easy [Acoustic]", each get their own count. Listings of the same recording ("Remastered 2011", "Album Version") are still added together.
+- Notes that already got the combined count: a check (or a sync) offers the right, lower count for songs you have more than one version of, unticked, so you can tick the ones to fix.
+
 ## [0.0.164] - 2026-10-28
 
 ### Added

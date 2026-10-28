@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { artistKey, lastfmError, lastfmSuggestions, parseSimilarTracks, pickSeeds, seedWeight, songKey, parseTopTracks, playCountsByKey, type Seed } from '../src/lastfm-data'
+import { artistKey, lastfmError, lastfmSuggestions, parseSimilarTracks, pickSeeds, seedWeight, songKey, parseTopTracks, playCountsByKey, versionKey, type Seed } from '../src/lastfm-data'
 
 describe('parsing Last.fm', () => {
   it('reads similar tracks, one or several', () => {
@@ -94,6 +94,26 @@ describe('Last.fm play counts', () => {
     ], '@attr': { totalPages: '3' } } })
     expect(page.pages).toBe(3)
     expect(playCountsByKey(page.tracks)).toEqual(new Map([['radiohead|karmapolice', 40], ['radiohead|airbag', 5]]))
+  })
+
+  it('keeps a remix, an acoustic or live version apart from the song, whichever brackets or dash it has', () => {
+    const counts = playCountsByKey([
+      { artist: 'Mariah Carey', title: 'Fantasy', plays: 300 },
+      { artist: 'Mariah Carey', title: 'Fantasy (Remix)', plays: 40 },
+      { artist: 'Mariah Carey', title: 'Fantasy - Remastered 2020', plays: 5 },
+      { artist: '311', title: 'Speak Easy', plays: 90 },
+      { artist: '311', title: 'Speak Easy - Acoustic', plays: 12 },
+      { artist: 'Sia', title: 'Chandelier (Album Version) [Explicit]', plays: 3 },
+      { artist: 'Sia', title: 'Chandelier', plays: 7 },
+    ])
+    expect(counts.get(versionKey('Mariah Carey', 'Fantasy'))).toBe(305)
+    expect(counts.get(versionKey('Mariah Carey', 'Fantasy [Remix]'))).toBe(40)
+    expect(counts.get(versionKey('311', 'Speak Easy [Acoustic]'))).toBe(12)
+    expect(counts.get(versionKey('311', 'Speak Easy'))).toBe(90)
+    expect(counts.get(versionKey('Sia', 'Chandelier'))).toBe(10)
+    // A featured artist isn't a version.
+    expect(versionKey('Calvin Harris', 'This Is What You Came For (feat. Rihanna)')).toBe(versionKey('Calvin Harris', 'This Is What You Came For'))
+    expect(versionKey('Mariah Carey', 'Fantasy (Bad Boy Fantasy) (Remix)')).not.toBe(versionKey('Mariah Carey', 'Fantasy (Remix)'))
     expect(parseTopTracks({ toptracks: { track: { name: 'One', playcount: '1', artist: { name: 'U2' } } } }).tracks).toHaveLength(1)
   })
 })

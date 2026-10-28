@@ -592,7 +592,7 @@ export class RecommendView extends ItemView {
 
   /** Habits: this week next to the weeks before, the year by month, and where things stand. Numbers only. */
   private pmnHabits(el: HTMLElement): void {
-    this.cards.header(el, 'Habits', 'This week next to the two before it, and this year month by month. Just the numbers.')
+    this.cards.header(el, 'Habits', '')
     if (this.pmnHistoryState) el.createDiv({ cls: 'pmn-dash-note', text: this.pmnHistoryState })
     const now = new Date()
     const { thisWeek, lastWeek, weekBefore } = weeks(now)

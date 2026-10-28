@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.172] - 2026-10-28
+
+### Changed
+- The Habits tab no longer has the line of explanation under its title (Insights keeps its own, which says which month it shows).
+
 ## [0.0.171] - 2026-10-28
 
 ### Changed

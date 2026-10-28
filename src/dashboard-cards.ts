@@ -125,7 +125,7 @@ export class DashCards {
     const header = parent.createDiv('pmn-dash-header')
     const titles = header.createDiv('pmn-dash-titles')
     titles.createDiv({ cls: 'pmn-dash-title', text: title })
-    titles.createDiv({ cls: 'pmn-dash-subtitle', text: subtitle })
+    if (subtitle) titles.createDiv({ cls: 'pmn-dash-subtitle', text: subtitle })
     const controls = header.createDiv('pmn-dash-controls')
     if (embed) this.copyButton(controls, embed)
     return controls

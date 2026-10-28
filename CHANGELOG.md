@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.171] - 2026-10-28
+
+### Changed
+- The Recommendations tab no longer has the line of explanation under its title.
+
 ## [0.0.170] - 2026-10-28
 
 ### Changed

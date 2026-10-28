@@ -283,15 +283,10 @@ export class RecommendView extends ItemView {
     const items = this.pmnItems ?? []
     const entries = this.pmnEntries()
     const recs = recommend(entries, new Set(settings.notInterested))
-    const loved = entries.filter(isLoved)
 
     const header = contentEl.createDiv('pmn-dash-header')
     const titles = header.createDiv('pmn-dash-titles')
     titles.createDiv({ cls: 'pmn-dash-title', text: 'Recommendations' })
-    titles.createDiv({
-      cls: 'pmn-dash-subtitle',
-      text: `What you haven't rated or watched yet that's most like the ${loved.length} thing${loved.length === 1 ? '' : 's'} you rated ⭐⭐⭐⭐ or 🩷.`,
-    })
     const refresh = header.createEl('button', { text: this.pmnLooking ? 'Looking in Plex and Steam…' : 'Refresh' })
     refresh.disabled = this.pmnLooking || Boolean(this.pmnLastfmState && !this.pmnLastfmError)
     refresh.addEventListener('click', () => void this.pmnLookUp())

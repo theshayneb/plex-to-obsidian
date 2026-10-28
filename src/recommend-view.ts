@@ -382,10 +382,14 @@ export class RecommendView extends ItemView {
   private pmnSongRow(parent: HTMLElement, song: SongSuggestion): void {
     const row = parent.createDiv('pmn-rec-row')
     const text = row.createDiv('pmn-rec-text')
-    text.createSpan({ cls: ['pmn-rec-title', 'pmn-rec-song'], text: song.title })
-    const buttons = row.createDiv('pmn-rec-buttons')
-    // Listening to it (or keeping it in a Spotify playlist to decide later) takes it off the list.
-    const listen = buttons.createEl('a', { cls: 'pmn-rec-listen', text: 'Listen on Spotify', href: spotifySearch(song.artist, song.track), attr: { target: '_blank', rel: 'noopener' } })
+    // Its name opens it on Spotify; listening to it (or keeping it in a playlist there to decide
+    // later) takes it off the list.
+    const listen = text.createEl('a', {
+      cls: ['pmn-rec-title', 'pmn-rec-song'],
+      text: song.title,
+      href: spotifySearch(song.artist, song.track),
+      attr: { target: '_blank', rel: 'noopener', 'aria-label': `Listen to ${song.title} on Spotify` },
+    })
     listen.addEventListener('click', () => {
       const settings = this.pmnPlugin.settings
       if (!settings.listenedTo.includes(song.id)) settings.listenedTo.push(song.id)
@@ -393,7 +397,7 @@ export class RecommendView extends ItemView {
       // After the link has opened.
       window.setTimeout(() => this.pmnRender(), 300)
     })
-    const no = buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
+    const no = row.createDiv('pmn-rec-buttons').createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
     no.addEventListener('click', () => void this.pmnNotInterested({ id: song.id, title: song.title }))
   }
 

@@ -656,25 +656,6 @@
   font-size: var(--font-ui-smaller);
 }
 
-/* "Listen on Spotify": a link that looks like the buttons beside it. */
-.pmn-rec-listen {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--size-4-1) var(--size-4-3);
-  border-radius: var(--button-radius, var(--radius-s));
-  background: var(--interactive-normal);
-  box-shadow: var(--input-shadow);
-  color: var(--text-normal);
-  font-size: var(--font-ui-smaller);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.pmn-rec-listen:hover {
-  background: var(--interactive-hover);
-  color: var(--text-normal);
-}
-
 @media (max-width: 600px) {
   .pmn-dash {
     padding: var(--size-4-3);
@@ -1009,7 +990,12 @@
   font-size: var(--font-ui-small);
 }
 
-/* A suggested song's name: in the accent colour, like the note links beside it. */
+/* A suggested song's name, which opens it on Spotify: in the accent colour, like the note links beside it. */
 .pmn-rec-song {
   color: var(--text-accent);
+  text-decoration: none;
+}
+
+.pmn-rec-song:hover {
+  text-decoration: underline;
 }

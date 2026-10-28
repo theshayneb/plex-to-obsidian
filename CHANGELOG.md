@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.168] - 2026-10-28
+
+### Changed
+- In the Songs card, a song's name opens it on Spotify (and takes it off the list, as the button did); the "Listen on Spotify" button is gone, so the card looks like the others.
+
 ## [0.0.167] - 2026-10-28
 
 ### Changed

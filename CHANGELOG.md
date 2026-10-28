@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.166] - 2026-10-28
+
+### Changed
+- The dashboard's Recommendations show one "Songs" card instead of "From Last.fm" and "From ListenBrainz": ten songs at a time from both, mixed together, each with "Listen on Spotify" and "Not interested". Books is back at the end of the top row.
+- Opening a song on Spotify takes it off the list too (it isn't suggested again), as you're listening to it or saving it there.
+- The Revisit card sits under the Songs card and shows the songs the playlist would hold first ("Show what it would hold", "Mix again"); "Make it in Plex" sends exactly those.
+
 ## [0.0.165] - 2026-10-28
 
 ### Fixed

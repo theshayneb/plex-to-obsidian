@@ -20,7 +20,7 @@ import { vaultPropertyValues } from './property-suggest'
 import type { Finished } from './reactions'
 import { RelatedModal, type RelatedAnswer } from './related-modal'
 import { checkInDue, dayOf } from './schedule'
-import { makeRevisitPlaylist, REVISIT_PLAYLIST } from './playlist'
+import { planRevisit, REVISIT_PLAYLIST, sendRevisit } from './playlist'
 import { minutesOf } from './daily-episodes'
 
 /**
@@ -303,15 +303,18 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /**
-   * Makes the "Revisit" playlist in Plex (`makeRevisitPlaylist`); answers with what happened, to
-   * show. Tried at most once a week in the background, even when it fails (say, without sonic analysis).
+   * Makes the "Revisit" playlist in Plex: these songs (the ones shown on the dashboard), else a new
+   * mix (`planRevisit`); answers with what happened, to show. Tried at most once a week in the
+   * background, even when it fails (say, without sonic analysis).
    */
-  async makeRevisit(progress: (message: string) => void = () => {}): Promise<string> {
+  async makeRevisit(progress: (message: string) => void = () => {}, songs?: PlexItem[]): Promise<string> {
     this.settings.lastRevisit = Date.now()
     await this.saveSettings()
     try {
-      const count = await makeRevisitPlaylist(this.settings, progress)
-      return `Made the ${REVISIT_PLAYLIST} playlist in Plex: ${count} song${count === 1 ? '' : 's'} you haven't played in a while`
+      const picks = songs ?? await planRevisit(this.settings, progress)
+      progress(`Sending ${picks.length} songs to Plex…`)
+      await sendRevisit(this.settings, picks)
+      return `Made the ${REVISIT_PLAYLIST} playlist in Plex: ${picks.length} song${picks.length === 1 ? '' : 's'} you haven't played in a while`
     } catch (err) {
       return `Couldn't make the ${REVISIT_PLAYLIST} playlist: ${errorMessage(err)}`
     }

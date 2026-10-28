@@ -134,6 +134,8 @@ export interface PlexNotesSettings {
   lastfmKey: string
   /** Your Last.fm username: songs' play counts there are offered beside Plex's. */
   lastfmUser: string
+  /** Suggested songs you opened on Spotify (their ids), not suggested again. */
+  listenedTo: string[]
   /** Your ListenBrainz username: the songs it recommends for you, on the dashboard. */
   listenbrainzUser: string
   /** Make the "Revisit" playlist in Plex again every week. */
@@ -243,6 +245,7 @@ export function defaultSettings(): PlexNotesSettings {
     lastfmKey: '',
     lastfmUser: '',
     listenbrainzUser: '',
+    listenedTo: [],
     revisitWeekly: true,
     lastRevisit: 0,
     dailyEpisodes: false,
@@ -428,6 +431,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reactionThemes)) settings.reactionThemes = saved.reactionThemes.map(String)
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
+  if (Array.isArray(saved.listenedTo)) settings.listenedTo = saved.listenedTo.map(String)
   if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)
   if (Array.isArray(saved.relatedPending)) {
     settings.relatedPending = (saved.relatedPending as Partial<RelatedOffer>[]).filter(o => o && typeof o.path === 'string' && typeof o.link === 'string')

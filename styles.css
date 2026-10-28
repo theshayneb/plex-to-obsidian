@@ -991,3 +991,20 @@
   gap: var(--size-4-2);
   padding: var(--size-4-1) 0;
 }
+
+/* Songs to try, with the Revisit playlist under them, in one place of the dashboard's grid. */
+.pmn-dash-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  min-width: 0;
+}
+
+/* What the Revisit playlist would hold. */
+.pmn-revisit-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: var(--size-4-2) 0;
+  padding-left: var(--size-4-6);
+  font-size: var(--font-ui-small);
+}

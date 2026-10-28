@@ -117,11 +117,11 @@ async function existingPlaylist(plex: PlexClient, name: string, instead: string)
 export const REVISIT_PLAYLIST = 'Revisit'
 
 /**
- * Makes (or refreshes) the "Revisit" playlist in Plex: songs in your music libraries you haven't
- * played in half a year that sound like up to 30 of your favorites (`revisitPicks`). Answers with
- * how many songs went in.
+ * The songs the "Revisit" playlist would hold, worked out without sending anything: songs in your
+ * music libraries you haven't played in half a year that sound like up to 30 of your favorites
+ * (`revisitPicks`), a new mix each time.
  */
-export async function makeRevisitPlaylist(settings: PlexNotesSettings, progress: (message: string) => void = () => {}): Promise<number> {
+export async function planRevisit(settings: PlexNotesSettings, progress: (message: string) => void = () => {}): Promise<PlexItem[]> {
   if (!plexReady(settings)) throw new Error('Set up Plex in the plugin settings first')
   const plex = new PlexClient(settings.serverUrl, settings.token)
   const libraries = Object.entries(settings.libraries).filter(([key, lib]) => lib.target === 'music' && /^\d+$/.test(key))
@@ -143,7 +143,12 @@ export async function makeRevisitPlaylist(settings: PlexNotesSettings, progress:
   }
   const picks = revisitPicks(near, Math.floor(Date.now() / 1000))
   if (!picks.length) throw new Error('Every song that sounds like your favorites was played in the last six months: nothing to revisit')
-  progress(`Sending ${picks.length} songs to Plex…`)
+  return picks
+}
+
+/** Sends these songs to Plex as the "Revisit" playlist (made, or emptied and refilled). */
+export async function sendRevisit(settings: PlexNotesSettings, picks: PlexItem[]): Promise<void> {
+  const plex = new PlexClient(settings.serverUrl, settings.token)
   const existing = await existingPlaylist(plex, REVISIT_PLAYLIST, 'Rename it in Plex so this one can be made.')
   await sendPlaylist(settings, {
     name: REVISIT_PLAYLIST,
@@ -151,7 +156,6 @@ export async function makeRevisitPlaylist(settings: PlexNotesSettings, progress:
     leftOut: [],
     existing,
   })
-  return picks.length
 }
 
 /**

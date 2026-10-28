@@ -4,7 +4,9 @@ import type { Finished } from './reactions'
 import type PlexMediaNotesPlugin from './main'
 import { artistsOf, type PlexItem } from './notes'
 import { similarTracks } from './lastfm'
-import { lastfmSuggestions, pickSeeds, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
+import { lastfmSuggestions, pickSeeds, seedWeight, songKey, type LastfmSuggestion, type Seed, type SimilarTrack } from './lastfm-data'
+import { recommendedSongs } from './listenbrainz'
+import { listenbrainzSuggestions, spotifySearch, type ListenBrainzSuggestion } from './listenbrainz-data'
 import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommendation } from './recommend'
 import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
@@ -42,6 +44,13 @@ export class RecommendView extends ItemView {
   /** How asking Last.fm is going, or why it failed (null: done, or not asked). */
   private pmnLastfmState: string | null = null
   private pmnLastfmError = false
+  /** ListenBrainz's suggestions, once asked (null: not yet), and how asking is going or why it failed. */
+  private pmnListenbrainz: ListenBrainzSuggestion[] | null = null
+  private pmnListenbrainzState: string | null = null
+  private pmnListenbrainzError = false
+  /** Making the Revisit playlist: how it's going, or how it ended. */
+  private pmnRevisitState: string | null = null
+  private pmnRevisitBusy = false
   private pmnTab: Tab = 'insights'
   /** Plex's watch history from `since` on, once read, with each movie's and show's note. */
   private pmnHistory: { since: number, events: WatchEvent[], notes: Map<string, TFile> } | null = null
@@ -160,7 +169,36 @@ export class RecommendView extends ItemView {
       this.pmnLooking = false
       this.pmnRender()
     }
-    if (!this.pmnLookupError) await this.pmnAskLastfm()
+    if (!this.pmnLookupError) await Promise.all([this.pmnAskLastfm(), this.pmnAskListenbrainz()])
+  }
+
+  /** Every song you have (a song key under each of its artists), so suggestions leave them out. */
+  private pmnOwned(): Set<string> {
+    const owned = new Set<string>()
+    for (const item of this.pmnTracks.values()) {
+      const names = [item.originalTitle, item.grandparentTitle].filter((a): a is string => Boolean(a))
+      for (const name of new Set(names.flatMap(n => artistsOf(n, item.title)))) owned.add(songKey(name, item.title))
+    }
+    return owned
+  }
+
+  /** Asks ListenBrainz for the songs it recommends for you (from listeners like you), then redraws with those you don't have. */
+  private async pmnAskListenbrainz(): Promise<void> {
+    const user = this.pmnPlugin.settings.listenbrainzUser?.trim()
+    if (!user) return
+    this.pmnListenbrainz = null
+    this.pmnListenbrainzError = false
+    this.pmnListenbrainzState = 'Asking ListenBrainz…'
+    this.pmnRender()
+    try {
+      const { recommended, recordings } = await recommendedSongs(user)
+      this.pmnListenbrainz = listenbrainzSuggestions(recommended, recordings, this.pmnOwned(), new Set(this.pmnPlugin.settings.notInterested))
+      this.pmnListenbrainzState = recommended.length ? null : 'ListenBrainz hasn\'t made recommendations for you yet (it makes them from your recent listens, about once a week).'
+    } catch (err) {
+      this.pmnListenbrainzError = true
+      this.pmnListenbrainzState = errorMessage(err)
+    }
+    this.pmnRender()
   }
 
   /** Every entry: notes (with what their Plex or Steam item knows) and items with no note. */
@@ -173,22 +211,22 @@ export class RecommendView extends ItemView {
   }
 
   /**
-   * Asks Last.fm for songs like your loved ones (up to 40, 🩷 first), then redraws with those you
-   * don't have.
+   * Asks Last.fm for songs like 50 of yours, drawn from your whole library (loved and much-played
+   * ones more often, `seedWeight`), then redraws with those you don't have.
    */
   private async pmnAskLastfm(): Promise<void> {
     const key = this.pmnPlugin.settings.lastfmKey?.trim()
     if (!key || this.pmnLastfmState) return
     const music = this.pmnEntries().filter(e => e.group === 'music')
     const seeds: Seed[] = []
-    for (const entry of music.filter(isLoved)) {
+    for (const entry of music) {
       const item = this.pmnTracks.get(entry.id)
       const artist = item?.originalTitle || item?.grandparentTitle
       if (!item || !artist) continue
-      seeds.push({ title: entry.title, artist, track: item.title, weight: entry.level === 5 ? 2 : 1 })
+      seeds.push({ title: entry.title, artist, track: item.title, weight: seedWeight(entry.level ?? 0, item.viewCount ?? 0) })
     }
     if (!seeds.length) return
-    const chosen = pickSeeds(seeds, 40)
+    const chosen = pickSeeds(seeds, 50)
     let done = 0
     this.pmnLastfmError = false
     const step = () => {
@@ -203,15 +241,7 @@ export class RecommendView extends ItemView {
         done++
         step()
       }
-      // Every song you have, under each of its artists.
-      const owned = new Set<string>()
-      for (const entry of music) {
-        const item = this.pmnTracks.get(entry.id)
-        if (!item) continue
-        const names = [item.originalTitle, item.grandparentTitle].filter((a): a is string => Boolean(a))
-        for (const name of new Set(names.flatMap(n => artistsOf(n, item.title)))) owned.add(songKey(name, item.title))
-      }
-      this.pmnLastfm = lastfmSuggestions(tracks, owned, new Set(this.pmnPlugin.settings.notInterested))
+      this.pmnLastfm = lastfmSuggestions(tracks, this.pmnOwned(), new Set(this.pmnPlugin.settings.notInterested))
       this.pmnLastfmState = null
     } catch (err) {
       this.pmnLastfmError = true
@@ -279,6 +309,8 @@ export class RecommendView extends ItemView {
       // Music is suggested by Last.fm only: you rate every song, so your own library has none to suggest.
       if (group === 'music') {
         this.pmnLastfmCard(grid)
+        this.pmnListenbrainzCard(grid)
+        this.pmnRevisitCard(grid)
         continue
       }
       const card = grid.createDiv('pmn-card')
@@ -302,7 +334,7 @@ export class RecommendView extends ItemView {
     const card = parent.createDiv('pmn-card pmn-lastfm')
     card.createDiv({ cls: 'pmn-card-title', text: 'From Last.fm' })
     if (!this.pmnPlugin.settings.lastfmKey?.trim()) {
-      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add a Last.fm API key in this plugin\'s settings, under other sources, to get songs like your ⭐⭐⭐⭐ and 🩷 ones that you don\'t have yet.' })
+      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add a Last.fm API key in this plugin\'s settings, under other sources, to get songs like the ones in your library that you don\'t have yet.' })
       return
     }
     if (this.pmnLastfmState) {
@@ -314,25 +346,73 @@ export class RecommendView extends ItemView {
       if (!this.pmnLastfmError) {
         card.createEl('p', {
           cls: 'pmn-dash-empty',
-          text: this.pmnLooking ? 'Waiting for Plex…' : 'Rate a few songs ⭐⭐⭐⭐ or 🩷 (in notes tied to Plex tracks, or in Plex) to get suggestions here.',
+          text: this.pmnLooking ? 'Waiting for Plex…' : 'Press Refresh to ask Last.fm about songs in your library.',
         })
       }
       return
     }
     const notInterested = new Set(this.pmnPlugin.settings.notInterested)
     const shown = found.filter(s => !notInterested.has(s.id))
-    if (!shown.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'No new songs found. Refresh to try other loved songs.' })
+    if (!shown.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'No new songs found. Refresh to try other songs of yours.' })
     for (const suggestion of shown) this.pmnLastfmRow(card, suggestion)
   }
 
+  /** Music from ListenBrainz: songs listeners with taste like yours play, that you don't have. */
+  private pmnListenbrainzCard(parent: HTMLElement): void {
+    const card = parent.createDiv('pmn-card pmn-lastfm')
+    card.createDiv({ cls: 'pmn-card-title', text: 'From ListenBrainz' })
+    if (!this.pmnPlugin.settings.listenbrainzUser?.trim()) {
+      card.createEl('p', { cls: 'pmn-dash-empty', text: 'Add your ListenBrainz username in this plugin\'s settings, under other sources, to get the songs it recommends for you.' })
+      return
+    }
+    if (this.pmnListenbrainzState) {
+      card.createEl('p', { cls: this.pmnListenbrainzError ? 'pmn-dash-note' : 'pmn-dash-empty', text: this.pmnListenbrainzError ? `ListenBrainz couldn't be asked: ${this.pmnListenbrainzState}` : this.pmnListenbrainzState })
+      return
+    }
+    const found = this.pmnListenbrainz
+    if (!found) {
+      card.createEl('p', { cls: 'pmn-dash-empty', text: this.pmnLooking ? 'Waiting for Plex…' : 'Press Refresh to ask ListenBrainz.' })
+      return
+    }
+    const notInterested = new Set(this.pmnPlugin.settings.notInterested)
+    const shown = found.filter(s => !notInterested.has(s.id))
+    if (!shown.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing new: you have every song ListenBrainz recommends, or turned them down.' })
+    for (const suggestion of shown) this.pmnLastfmRow(card, { ...suggestion, because: [] })
+  }
+
+  /** "Revisit": a Plex playlist of songs you have but haven't played in a while, that sound like your favorites. */
+  private pmnRevisitCard(parent: HTMLElement): void {
+    const card = parent.createDiv('pmn-card')
+    card.createDiv({ cls: 'pmn-card-title', text: 'Revisit' })
+    card.createEl('p', { cls: 'pmn-dash-empty', text: 'A playlist in Plex of songs you haven\'t played in six months that sound like your ⭐⭐⭐⭐ and 🩷 ones. It\'s made again every week; make it now for a new mix.' })
+    if (this.pmnRevisitState) card.createEl('p', { cls: 'pmn-dash-note', text: this.pmnRevisitState })
+    const button = card.createEl('button', { cls: 'pmn-rec-action', text: this.pmnRevisitBusy ? 'Making it…' : 'Make my "Revisit" playlist' })
+    button.disabled = this.pmnRevisitBusy
+    button.addEventListener('click', () => {
+      this.pmnRevisitBusy = true
+      this.pmnRender()
+      void this.pmnPlugin.makeRevisit(message => {
+        this.pmnRevisitState = message
+        this.pmnRender()
+      }).then(result => {
+        this.pmnRevisitBusy = false
+        this.pmnRevisitState = result
+        this.pmnRender()
+      })
+    })
+  }
+
   /** A song you don't have, linked to its Last.fm page. */
-  private pmnLastfmRow(parent: HTMLElement, suggestion: LastfmSuggestion): void {
+  private pmnLastfmRow(parent: HTMLElement, suggestion: Pick<LastfmSuggestion, 'id' | 'title' | 'url' | 'because' | 'artist' | 'track'>): void {
     const row = parent.createDiv('pmn-rec-row')
     const text = row.createDiv('pmn-rec-text')
     if (suggestion.url) text.createEl('a', { cls: 'pmn-rec-title external-link', text: suggestion.title, href: suggestion.url })
     else text.createSpan({ cls: 'pmn-rec-title', text: suggestion.title })
     if (suggestion.because.length) text.createDiv({ cls: 'pmn-rec-why', text: `Like ${suggestion.because.join(' and ')}` })
-    const no = row.createDiv('pmn-rec-buttons').createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
+    const buttons = row.createDiv('pmn-rec-buttons')
+    // To listen to it, and keep it in a playlist there (say, "To listen") to decide later.
+    buttons.createEl('a', { cls: 'pmn-rec-listen', text: 'Listen on Spotify', href: spotifySearch(suggestion.artist, suggestion.track), attr: { target: '_blank', rel: 'noopener' } })
+    const no = buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
     no.addEventListener('click', () => void this.pmnNotInterested({ id: suggestion.id, title: suggestion.title }))
   }
 

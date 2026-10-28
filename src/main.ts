@@ -20,6 +20,7 @@ import { vaultPropertyValues } from './property-suggest'
 import type { Finished } from './reactions'
 import { RelatedModal, type RelatedAnswer } from './related-modal'
 import { checkInDue, dayOf } from './schedule'
+import { makeRevisitPlaylist, REVISIT_PLAYLIST } from './playlist'
 import { minutesOf } from './daily-episodes'
 
 /**
@@ -112,6 +113,18 @@ export default class PlexMediaNotesPlugin extends Plugin {
       name: 'Sync every library with Plex and Steam',
       callback: () => {
         void this.syncFromPlex()
+      },
+    })
+
+    this.addCommand({
+      id: 'revisit-playlist',
+      name: 'Make the "Revisit" playlist in Plex',
+      callback: () => {
+        const notice = new ProgressNotice('Making the Revisit playlist…')
+        void this.makeRevisit(message => notice.set(message)).then(result => {
+          notice.hide()
+          new Notice(result, 10000)
+        })
       },
     })
 
@@ -289,6 +302,21 @@ export default class PlexMediaNotesPlugin extends Plugin {
     await this.backgroundUpdate(dailyCheckIn ? (checkIn ? 'check-in' : 'quiet') : 'ask')
   }
 
+  /**
+   * Makes the "Revisit" playlist in Plex (`makeRevisitPlaylist`); answers with what happened, to
+   * show. Tried at most once a week in the background, even when it fails (say, without sonic analysis).
+   */
+  async makeRevisit(progress: (message: string) => void = () => {}): Promise<string> {
+    this.settings.lastRevisit = Date.now()
+    await this.saveSettings()
+    try {
+      const count = await makeRevisitPlaylist(this.settings, progress)
+      return `Made the ${REVISIT_PLAYLIST} playlist in Plex: ${count} song${count === 1 ? '' : 's'} you haven't played in a while`
+    } catch (err) {
+      return `Couldn't make the ${REVISIT_PLAYLIST} playlist: ${errorMessage(err)}`
+    }
+  }
+
   /** Set while the check-in's questions are being asked, so no update starts in the middle. */
   private checkingIn = false
 
@@ -322,6 +350,11 @@ export default class PlexMediaNotesPlugin extends Plugin {
       }
       const days = await this.dailyEpisodes(() => {})
       if (days.length) console.log('Media Manager: episodes added to daily notes', days)
+      // The Revisit playlist, made again once a week (it asks nothing: it's the plugin's own playlist).
+      if (this.settings.revisitWeekly && now - this.settings.lastRevisit >= 7 * 86400 * 1000 && plexReady(this.settings)
+        && Object.values(this.settings.libraries).some(lib => lib.target === 'music')) {
+        console.log(`Media Manager: ${await this.makeRevisit()}`)
+      }
       this.settings.lastPlayCountUpdate = now
       if (how === 'check-in' && !byHand) this.settings.lastCheckIn = dayOf(new Date(now))
       await this.saveSettings()

@@ -188,6 +188,14 @@ export class PlexClient {
     await this.send('DELETE', `/playlists/${encodeURIComponent(playlistKey)}/items/${playlistItemID}`)
   }
 
+  /**
+   * Songs that sound like this one, by Plex's sonic analysis (Plex Pass; none for a song that
+   * hasn't been analysed), each with its `distance`, 0 (the same) to 1.
+   */
+  async nearest(ratingKey: string, limit = 30, maxDistance = 0.25): Promise<(PlexItem & { distance?: number })[]> {
+    return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}/nearest?limit=${limit}&maxDistance=${maxDistance}`)).Metadata ?? []
+  }
+
   /** What's inside an item: an album's tracks, a show's seasons. */
   async children(ratingKey: string): Promise<PlexItem[]> {
     return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}/children`)).Metadata ?? []

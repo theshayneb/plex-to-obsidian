@@ -828,6 +828,23 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           settings.lastfmUser = value.trim()
           await this.save()
         }))
+    new Setting(containerEl)
+      .setName('ListenBrainz username')
+      .setDesc('Optional. The media dashboard\'s recommendations then show the songs ListenBrainz recommends for you (from listeners with taste like yours) that you don\'t have. No key is needed.')
+      .addText(text => text
+        .setPlaceholder('Optional')
+        .setValue(settings.listenbrainzUser ?? '')
+        .onChange(async value => {
+          settings.listenbrainzUser = value.trim()
+          await this.save()
+        }))
+    new Setting(containerEl)
+      .setName('Revisit playlist every week')
+      .setDesc('Makes a playlist in Plex called "Revisit" again each week: 50 songs you haven\'t played in six months that sound like your ⭐⭐⭐⭐ and 🩷 ones. It needs Plex Pass and sonic analysis switched on for your music library. Make it any time with the command "Make the Revisit playlist in Plex" or on the media dashboard.')
+      .addToggle(toggle => toggle.setValue(settings.revisitWeekly).onChange(async value => {
+        settings.revisitWeekly = value
+        await this.save()
+      }))
   }
 
   /**

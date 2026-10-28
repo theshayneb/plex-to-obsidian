@@ -46,12 +46,25 @@ export function songKey(artist: string, title: string): string {
   return `${artistKey(artist)}|${bare.normalize('NFKD').toLowerCase().replace(/&/g, 'and').replace(/[^\p{L}\p{N}]+/gu, '')}`
 }
 
-/** A loved song Last.fm is asked about: how it's shown, and how much it counts (🩷 twice ⭐⭐⭐⭐). */
+/** A song of yours Last.fm is asked about: how it's shown, and how much it counts (`seedWeight`). */
 export interface Seed { title: string, artist: string, track: string, weight: number }
+
+/**
+ * How much a song of yours counts towards suggestions: more the higher you rated it (🩷 3,
+ * ⭐⭐⭐⭐ 2, ⭐⭐⭐ 1.5, else 1; `level` in the star scale, 0 unrated) and the more you've played it.
+ */
+export function seedWeight(level: number, plays: number): number {
+  const rating = level >= 5 ? 3 : level === 4 ? 2 : level === 3 ? 1.5 : 1
+  return rating * Math.log2(2 + Math.max(0, plays))
+}
 
 export interface LastfmSuggestion {
   /** `lastfm:track:<artist> – <title>`, for "Not interested". */
   id: string
+  artist: string
+  track: string
+  /** How many of your songs it's like. */
+  seeds: number
   /** "<artist> – <title>". */
   title: string
   url: string
@@ -61,8 +74,8 @@ export interface LastfmSuggestion {
 }
 
 /**
- * The songs you don't have (`owned`: song keys) that Last.fm finds most like your loved ones, by
- * any artist: each counts its match with every loved song it came from, 🩷 ones twice.
+ * The songs you don't have (`owned`: song keys) that Last.fm finds most like your songs, by any
+ * artist: first those like the most of your songs, then by their match with each, times its weight.
  */
 export function lastfmSuggestions(
   tracks: { seed: Seed, similar: SimilarTrack[] }[],
@@ -78,23 +91,26 @@ export function lastfmSuggestions(
       const id = `lastfm:track:${title}`
       if (owned.has(key) || notInterested.has(id)) continue
       const value = t.match * seed.weight
-      const entry = found.get(key) ?? { id, title, url: t.url, score: 0, because: [], from: new Map<string, number>() }
+      const entry = found.get(key) ?? { id, artist: t.artist, track: t.title, seeds: 0, title, url: t.url, score: 0, because: [], from: new Map<string, number>() }
       entry.score += value
       entry.from.set(seed.title, (entry.from.get(seed.title) ?? 0) + value)
       found.set(key, entry)
     }
   }
   return [...found.values()]
-    .map(({ from, ...s }) => ({ ...s, because: [...from.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name) }))
-    .sort((a, b) => b.score - a.score || compareTitles(a.title, b.title))
+    .map(({ from, ...s }) => ({ ...s, seeds: from.size, because: [...from.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name]) => name) }))
+    .sort((a, b) => b.seeds - a.seeds || b.score - a.score || compareTitles(a.title, b.title))
     .slice(0, count)
 }
 
-/** Up to `count` seeds: every 🩷 song before any ⭐⭐⭐⭐ one, in a random order within each, so a refresh tries others. */
+/**
+ * Up to `count` seeds drawn from your whole library, each as likely as its weight (a loved, much
+ * played song far more than one you rarely play, but every song can be drawn), so a refresh tries others.
+ */
 export function pickSeeds(seeds: Seed[], count: number, random: () => number = Math.random): Seed[] {
-  const shuffled = seeds.map(seed => ({ seed, order: random() }))
-    .sort((a, b) => b.seed.weight - a.seed.weight || a.order - b.order)
-  return shuffled.slice(0, count).map(s => s.seed)
+  // Weighted sampling without replacement: each song's key is random^(1/weight), the highest drawn.
+  const keyed = seeds.map(seed => ({ seed, key: Math.pow(Math.max(random(), 1e-12), 1 / Math.max(seed.weight, 1e-6)) }))
+  return keyed.sort((a, b) => b.key - a.key).slice(0, count).map(s => s.seed)
 }
 
 /** One page of `user.getTopTracks`: each song's play count, and how many pages there are. */

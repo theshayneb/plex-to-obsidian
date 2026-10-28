@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.164] - 2026-10-28
+
+### Added
+- Music recommendations from ListenBrainz: add your ListenBrainz username (Settings → Connections → Other sources) and the dashboard's Recommendations show the songs it recommends for you, from listeners with taste like yours, leaving out songs you have. No key needed.
+- A "Revisit" playlist in Plex: up to 50 songs you haven't played in six months that sound like your ⭐⭐⭐⭐ and 🩷 songs (Plex's sonic analysis, which needs Plex Pass). It's made again every week, or any time with the dashboard's Revisit card or the command "Make the "Revisit" playlist in Plex". Switch the weekly remake off in Settings → Connections → Other sources.
+- "Listen on Spotify" beside every suggested song, opening Spotify's search for it, so you can add it to a playlist there to decide later.
+
+### Changed
+- "From Last.fm" now starts from your whole library, not just your ⭐⭐⭐⭐ and 🩷 songs: 50 songs drawn at random, loved and much-played ones more often. Songs that are like several of yours come first.
+
 ## [0.0.163] - 2026-10-28
 
 ### Added

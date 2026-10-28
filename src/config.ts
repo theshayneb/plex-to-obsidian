@@ -134,6 +134,12 @@ export interface PlexNotesSettings {
   lastfmKey: string
   /** Your Last.fm username: songs' play counts there are offered beside Plex's. */
   lastfmUser: string
+  /** Your ListenBrainz username: the songs it recommends for you, on the dashboard. */
+  listenbrainzUser: string
+  /** Make the "Revisit" playlist in Plex again every week. */
+  revisitWeekly: boolean
+  /** When the "Revisit" playlist was last made (ms since 1970). */
+  lastRevisit: number
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -236,6 +242,9 @@ export function defaultSettings(): PlexNotesSettings {
     googleBooksKey: '',
     lastfmKey: '',
     lastfmUser: '',
+    listenbrainzUser: '',
+    revisitWeekly: true,
+    lastRevisit: 0,
     dailyEpisodes: false,
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
@@ -397,7 +406,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'revisitWeekly', 'lastRevisit', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

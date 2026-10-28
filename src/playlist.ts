@@ -3,6 +3,7 @@ import { plexReady, type PlexNotesSettings } from './config'
 import { normalizeTitle, ratingKeyFromLink, withoutFeatured, type PlexItem } from './notes'
 import { PlexClient } from './plex'
 import { linkPropertyNames } from './properties'
+import { revisitPicks, revisitSeeds } from './revisit'
 
 /** A song going into a playlist: its note and the Plex track it's tied to. */
 export interface PlaylistSong {
@@ -100,13 +101,57 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
       songs.push({ path, ratingKey: item.ratingKey, title: item.grandparentTitle ? `${item.title} (${item.grandparentTitle})` : item.title })
     }
   }
-  // The same name, give or take capitals and spaces at the ends.
+  return { name, songs, leftOut, existing: await existingPlaylist(plex, name, 'Give this view another playlist name.') }
+}
+
+/** Plex's music playlist of this name (give or take capitals and spaces at the ends); a smart one is refused. */
+async function existingPlaylist(plex: PlexClient, name: string, instead: string): Promise<PlaylistPlan['existing']> {
   const same = (await plex.audioPlaylists()).filter(p => p.title.trim().toLowerCase() === name.trim().toLowerCase())
   if (same.some(p => p.smart === true || p.smart === 1 || p.smart === '1')) {
-    throw new Error(`"${name}" is a smart playlist in Plex, which can't be filled from a note list. Give this view another playlist name.`)
+    throw new Error(`"${name}" is a smart playlist in Plex, which can't be filled from a list of songs. ${instead}`)
   }
-  const existing = same[0] ? { ratingKey: same[0].ratingKey, count: same[0].leafCount ?? 0 } : null
-  return { name, songs, leftOut, existing }
+  return same[0] ? { ratingKey: same[0].ratingKey, count: same[0].leafCount ?? 0 } : null
+}
+
+/** The playlist "Revisit" is made as, in Plex. */
+export const REVISIT_PLAYLIST = 'Revisit'
+
+/**
+ * Makes (or refreshes) the "Revisit" playlist in Plex: songs in your music libraries you haven't
+ * played in half a year that sound like up to 30 of your favorites (`revisitPicks`). Answers with
+ * how many songs went in.
+ */
+export async function makeRevisitPlaylist(settings: PlexNotesSettings, progress: (message: string) => void = () => {}): Promise<number> {
+  if (!plexReady(settings)) throw new Error('Set up Plex in the plugin settings first')
+  const plex = new PlexClient(settings.serverUrl, settings.token)
+  const libraries = Object.entries(settings.libraries).filter(([key, lib]) => lib.target === 'music' && /^\d+$/.test(key))
+  if (!libraries.length) throw new Error('No library is set to Music in the plugin settings')
+  const tracks: PlexItem[] = []
+  for (const [key, lib] of libraries) {
+    progress(`Reading ${lib.title}…`)
+    tracks.push(...await plex.libraryItems(key, true))
+  }
+  const seeds = revisitSeeds(tracks, 30)
+  if (!seeds.length) throw new Error('No songs are rated ⭐⭐⭐⭐ or 🩷 in Plex yet, so there\'s nothing to go on')
+  const near: { seed: PlexItem, similar: (PlexItem & { distance?: number })[] }[] = []
+  for (const [i, seed] of seeds.entries()) {
+    progress(`Finding songs that sound like your favorites: ${i + 1} of ${seeds.length}…`)
+    near.push({ seed, similar: await plex.nearest(seed.ratingKey) })
+  }
+  if (!near.some(n => n.similar.length)) {
+    throw new Error('Plex found no songs that sound like your favorites. This uses Plex\'s sonic analysis, which needs Plex Pass and the music library\'s "Sonic analysis" option (Plex analyses the songs in its scheduled tasks).')
+  }
+  const picks = revisitPicks(near, Math.floor(Date.now() / 1000))
+  if (!picks.length) throw new Error('Every song that sounds like your favorites was played in the last six months: nothing to revisit')
+  progress(`Sending ${picks.length} songs to Plex…`)
+  const existing = await existingPlaylist(plex, REVISIT_PLAYLIST, 'Rename it in Plex so this one can be made.')
+  await sendPlaylist(settings, {
+    name: REVISIT_PLAYLIST,
+    songs: picks.map(track => ({ path: '', ratingKey: track.ratingKey, title: track.title })),
+    leftOut: [],
+    existing,
+  })
+  return picks.length
 }
 
 /**

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.169] - 2026-10-28
+
+### Changed
+- Recommendations show at most three by the same author (or director, artist, studio) in a card while there's anything else to suggest; more of theirs only fill the list when nothing else is left.
+
 ## [0.0.168] - 2026-10-28
 
 ### Changed

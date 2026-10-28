@@ -27,7 +27,12 @@ export interface Recommendation {
   because: string[]
   /** What it shares with them, people first. */
   shared: string[]
+  /** The person it shares most with them (an author, a director), if any, to keep any one from filling the list. */
+  person?: string
 }
+
+/** At most this many of a group's suggestions share their main person, unless there's nothing else. */
+export const PER_PERSON = 3
 
 /** Loved: four stars or 🩷. */
 export const isLoved = (entry: RecEntry): boolean => (entry.level ?? 0) >= 4
@@ -41,6 +46,8 @@ const key = (text: string): string => text.trim().toLowerCase()
  * The open entries most like the ones you loved, per group, best first. A loved 🩷 counts twice a
  * four-star one; a shared person (director, author, artist…) counts three times a genre, and genre
  * overlap is scaled by how many genres both have, so a long genre list doesn't win on its own.
+ * No more than `PER_PERSON` share their main person (say, three books by one author) while
+ * others are left to fill the list; only then do more of theirs come in, after the others.
  */
 export function recommend(entries: RecEntry[], notInterested: Set<string>, perGroup = 10): Record<RecGroup, Recommendation[]> {
   const out: Record<RecGroup, Recommendation[]> = { video: [], music: [], game: [], book: [] }
@@ -71,7 +78,9 @@ export function recommend(entries: RecEntry[], notInterested: Set<string>, perGr
       }
     }
     if (!score) continue
+    const sharedPeople = [...sharedCount.values()].filter(s => s.person).sort((a, b) => b.count - a.count)
     out[candidate.group].push({
+      person: sharedPeople[0] ? key(sharedPeople[0].name) : undefined,
       entry: candidate,
       score,
       because: likeness.sort((a, b) => b.value - a.value).slice(0, 2).map(l => l.title),
@@ -81,7 +90,20 @@ export function recommend(entries: RecEntry[], notInterested: Set<string>, perGr
     })
   }
   for (const group of Object.keys(out) as RecGroup[]) {
-    out[group] = out[group].sort((a, b) => b.score - a.score || compareTitles(a.entry.title, b.entry.title)).slice(0, perGroup)
+    const ranked = out[group].sort((a, b) => b.score - a.score || compareTitles(a.entry.title, b.entry.title))
+    const perPerson = new Map<string, number>()
+    const picked: Recommendation[] = []
+    const later: Recommendation[] = []
+    for (const rec of ranked) {
+      const n = rec.person ? perPerson.get(rec.person) ?? 0 : 0
+      if (rec.person && n >= PER_PERSON) {
+        later.push(rec)
+        continue
+      }
+      if (rec.person) perPerson.set(rec.person, n + 1)
+      picked.push(rec)
+    }
+    out[group] = [...picked, ...later].slice(0, perGroup)
   }
   return out
 }

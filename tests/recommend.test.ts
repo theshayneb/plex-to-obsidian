@@ -30,4 +30,16 @@ describe('recommendations', () => {
     const recs = recommend([arrival, dune, contact], new Set(['note:Dune']))
     expect(recs.video.map(r => r.entry.title)).toEqual(['Contact'])
   })
+
+  it('suggests at most three by one author while there are others, then fills up with more of theirs', () => {
+    const loved = entry({ id: 'note:Ubik', group: 'book', genres: ['Sci-Fi'], people: ['Philip K. Dick'], level: 5 })
+    const lovedToo = entry({ id: 'note:Hyperion', group: 'book', genres: ['Sci-Fi'], level: 4 })
+    const pkd = [1, 2, 3, 4, 5, 6].map(n => entry({ id: `note:PKD ${n}`, group: 'book', genres: ['Sci-Fi'], people: ['Philip K. Dick'] }))
+    const others = [1, 2].map(n => entry({ id: `note:Other ${n}`, group: 'book', genres: ['Sci-Fi'], people: [`Author ${n}`] }))
+    const books = recommend([loved, lovedToo, ...pkd, ...others], new Set(), 7).book.map(r => r.entry.id)
+    expect(books.slice(0, 3).every(id => id.startsWith('note:PKD'))).toBe(true)
+    expect(books.slice(3, 5).sort()).toEqual(['note:Other 1', 'note:Other 2'])
+    expect(books.slice(5)).toHaveLength(2)
+    expect(books.slice(5).every(id => id.startsWith('note:PKD'))).toBe(true)
+  })
 })

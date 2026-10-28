@@ -66,6 +66,7 @@ export class ReactionModal extends Modal {
 
     new Setting(contentEl)
       .setName('In a few words')
+      .setDesc('Optional: how it felt this time. Your lasting take goes in the note\'s "Notes".')
       .addText(text => {
         text.setPlaceholder('Optional').onChange(value => { this.pmnText = value })
         text.inputEl.addClass('pmn-reaction-text')

@@ -1,7 +1,7 @@
 // The media dashboard's cards, shared by the dashboard (recommend-view.ts) and by cards embedded in
 // notes (the `media-manager` code block, embed-cards.ts): each draws into an element and calls
 // `redraw` when something it shows changes.
-import { moment, Notice, setIcon, TFile, type App } from 'obsidian'
+import { Notice, setIcon, TFile, type App } from 'obsidian'
 import { compared, daysWith, habitCounts, parseReaction, weeks, type DayLink, type DaysSpent, type HabitCounts, type Period, type PeriodSummary, type ReactionEvent, type WatchEvent } from './insights-data'
 import type PlexMediaNotesPlugin from './main'
 import { compareTitles, type MediaKind } from './notes'
@@ -186,18 +186,21 @@ export class DashCards {
     return out
   }
 
-  /** What you rated 🩷 or 💣 but never wrote about: no Notes and no reaction with words. */
+  /**
+   * What you rated 🩷 or 💣 but haven't written your Notes for (your lasting take; a reaction's
+   * few words are of the moment, so they don't count).
+   */
   reviewCandidates(): { path: string, title: string, level: number, kind: string }[] {
     const settings = this.plugin.settings
     const skipped = new Set(settings.reviewSkipped)
-    const written = new Set(this.reactions().filter(r => r.text).map(r => r.path))
     const out: { path: string, title: string, level: number, kind: string }[] = []
     const libs = Object.values(settings.libraries).map(lib => ({ folder: `${lib.folder.replace(/\/+$/, '')}/`, target: lib.target }))
     for (const note of noteEntries(this.app, settings)) {
-      if ((note.level !== 5 && note.level !== 1) || skipped.has(note.path) || written.has(note.path)) continue
+      if ((note.level !== 5 && note.level !== 1) || skipped.has(note.path)) continue
       const file = this.app.vault.getAbstractFileByPath(note.path)
       const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
-      const notesValue: unknown = fm.Notes ?? fm.notes
+      const notesKey = Object.keys(fm).find(key => key.toLowerCase() === 'notes')
+      const notesValue: unknown = notesKey ? fm[notesKey] : undefined
       if (typeof notesValue === 'string' ? notesValue.trim() : Array.isArray(notesValue) && notesValue.length) continue
       out.push({ path: note.path, title: note.title, level: note.level, kind: libs.find(l => note.path.startsWith(l.folder))?.target ?? note.group })
     }
@@ -215,7 +218,7 @@ export class DashCards {
     if (!found.length && !always) return
     const card = parent.createDiv('pmn-card')
     this.title(card, 'Worth a few words', embed)
-    if (!found.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: you\'ve written about everything you loved or hated.' })
+    if (!found.length) card.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: everything you loved or hated has "Notes".' })
     for (const { kind, label, list } of found) this.reviewCard(card, found.length > 1 ? label : '', kind, list)
   }
 
@@ -228,13 +231,13 @@ export class DashCards {
     this.link(text.createDiv('pmn-review-title'), pick.title, pick.path)
     const file = this.app.vault.getAbstractFileByPath(pick.path)
     const fm = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {}
-    text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and haven't written about it yet.${candidates.length > 1 ? ` ${candidates.length - 1} more like it.` : ''}` })
+    text.createDiv({ cls: 'pmn-rec-why', text: `You rated it ${pick.level === 5 ? '🩷' : '💣'} and its "Notes" are empty.${candidates.length > 1 ? ` ${candidates.length - 1} more like it.` : ''}` })
     const why: unknown = fm[this.plugin.settings.whyProperty || 'Why']
     if (typeof why === 'string' && why.trim()) text.createDiv({ cls: 'pmn-review-wanted', text: `You wanted it because: ${why.trim()}` })
     const buttons = card.createDiv('pmn-rec-buttons pmn-review-buttons')
     buttons.createEl('button', { text: 'Write about it' }).addEventListener('click', () => {
       if (!(file instanceof TFile)) return
-      void this.plugin.reactTo(file, moment.unix(Math.floor(Date.now() / 1000)).format('YYYY-MM-DD')).then(() => this.redraw())
+      void this.plugin.openNotes(file)
     })
     if (candidates.length > 1) {
       buttons.createEl('button', { text: 'Next', attr: { 'aria-label': 'Another one' } }).addEventListener('click', () => {

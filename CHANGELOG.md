@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.173] - 2026-10-28
+
+### Changed
+- Notes are your lasting take; reactions are of the moment. "Worth a few words" now only asks about notes whose Notes property is empty (a reaction's few words no longer count), and "Write about it" opens the note with the cursor in its Notes property (added if the note has none).
+- The reaction pop-up's "In a few words" says it's optional and for how it felt this time.
+
 ## [0.0.172] - 2026-10-28
 
 ### Changed

@@ -490,6 +490,41 @@ export default class PlexMediaNotesPlugin extends Plugin {
     return answer
   }
 
+  /**
+   * "Write about it": opens the note with the cursor in its Notes property (any case; added, empty,
+   * when the note has none), your lasting take on it. If the properties aren't showing (source
+   * mode, or hidden), a notice says where to write instead.
+   */
+  async openNotes(file: TFile): Promise<void> {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const name = Object.keys(fm).find(key => key.toLowerCase() === 'notes') ?? 'Notes'
+    if (!(name in fm)) {
+      await this.app.fileManager.processFrontMatter(file, (front: Record<string, unknown>) => {
+        if (!(name in front)) front[name] = ''
+      })
+    }
+    const leaf = this.app.workspace.getLeaf(false)
+    await leaf.openFile(file)
+    // The properties are drawn just after the note opens.
+    for (let tries = 0; tries < 10; tries++) {
+      await new Promise(resolve => window.setTimeout(resolve, 100))
+      const property = [...leaf.view.containerEl.querySelectorAll<HTMLElement>('.metadata-property')]
+        .find(el => el.dataset.propertyKey?.toLowerCase() === name.toLowerCase())
+      const value = property?.querySelector<HTMLElement>('.metadata-property-value [contenteditable="true"], .metadata-property-value input, .metadata-property-value textarea')
+      if (value) {
+        value.focus()
+        // The cursor at the end of what's there.
+        const selection = window.getSelection()
+        if (selection && value.isContentEditable) {
+          selection.selectAllChildren(value)
+          selection.collapseToEnd()
+        }
+        return
+      }
+    }
+    new Notice(`Write in the note's ${name} property (show its properties to see it)`)
+  }
+
   /** The reaction pop-up for a note; a reaction given is added to it. */
   reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
     const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())

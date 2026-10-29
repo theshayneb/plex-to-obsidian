@@ -1,9 +1,10 @@
 // Plex collections made from notes: the ones you name in a note's Collections property, and
-// automatic ones holding every note with a tag ("Comfort: comfort"). No Obsidian imports, so it
+// automatic ones holding every note with a tag or theme ("Comfort: comfort", "Found family:
+// found family"). No Obsidian imports, so it
 // can be unit tested; the requests are in plex-collections.ts.
 import { compareTitles } from './notes'
 
-/** An automatic collection: every movie (or show) note with this tag. */
+/** An automatic collection: every movie (or show) note with this tag, or this in its Themes. */
 export interface CollectionRule { name: string, tag: string }
 
 /** The owner's to start with. */
@@ -23,7 +24,7 @@ export function parseCollectionRules(text: string): CollectionRule[] {
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-/** A note that can go in a collection: its Plex item, the library it's in, its Collections and tags. */
+/** A note that can go in a collection: its Plex item, the library it's in, its Collections, tags and Themes. */
 export interface CollectionNote {
   path: string
   title: string
@@ -33,6 +34,12 @@ export interface CollectionNote {
   section: string
   collections: string[]
   tags: string[]
+  themes: string[]
+}
+
+/** Whether a note has a rule's tag (with or without "#") or theme, in any case. */
+export function fitsRule(note: Pick<CollectionNote, 'tags' | 'themes'>, rule: CollectionRule): boolean {
+  return note.tags.some(t => same(t.replace(/^#/, ''), rule.tag)) || note.themes.some(t => same(t, rule.tag))
 }
 
 /** What a collection should hold, by library: its name, the items, and whether a rule made it. */
@@ -46,7 +53,7 @@ export interface WantedCollection {
 
 /**
  * The collections the notes ask for: each name in a note's Collections (`manual`), and each rule's
- * tag (`auto`), per library; a name in both gets both kinds' notes. Names match in any case, the
+ * tag or theme (`auto`), per library; a name in both gets both kinds' notes. Names match in any case, the
  * first spelling kept.
  */
 export function wantedCollections(notes: CollectionNote[], rules: CollectionRule[], manual = true, auto = true): WantedCollection[] {
@@ -63,7 +70,7 @@ export function wantedCollections(notes: CollectionNote[], rules: CollectionRule
     if (manual) for (const name of note.collections) if (name.trim()) add(note, name, false)
     if (auto) {
       for (const rule of rules) {
-        if (note.tags.some(t => same(t.replace(/^#/, ''), rule.tag))) add(note, rule.name, true)
+        if (fitsRule(note, rule)) add(note, rule.name, true)
       }
     }
   }

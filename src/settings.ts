@@ -847,7 +847,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
       }))
     new Setting(containerEl)
       .setName('Automatic collections in Plex')
-      .setDesc('One a line, "Name: tag": a collection in Plex holding every movie or show note with that tag, sent again every week. Collections you name in a note\'s Collections property are sent with the command "Send collections to Plex…", which shows what would change first.')
+      .setDesc('One a line, "Name: tag or theme": a collection in Plex holding every movie or show note with that tag, or with it in its Themes (such as "Found family: found family"), sent again every week. Collections you name in a note\'s Collections property are sent with the command "Send collections to Plex…", which shows what would change first.')
       .addTextArea(text => {
         text.setPlaceholder('Comfort: comfort')
           .setValue(settings.collectionRules)

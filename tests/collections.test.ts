@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { collectionChanges, parseCollectionRules, wantedCollections, type CollectionNote } from '../src/collections'
 
-const note = (key: string, over: Partial<CollectionNote> = {}): CollectionNote => ({ path: `Movies/${key}.md`, title: `Movie ${key}`, key, section: '1', collections: [], tags: [], ...over })
+const note = (key: string, over: Partial<CollectionNote> = {}): CollectionNote => ({ path: `Movies/${key}.md`, title: `Movie ${key}`, key, section: '1', collections: [], tags: [], themes: [], ...over })
 
 describe('Plex collections from notes', () => {
   it('reads "Name: tag" rules', () => {
@@ -31,5 +31,15 @@ describe('Plex collections from notes', () => {
 
   it('works out what to add and remove', () => {
     expect(collectionChanges(['1', '2', '3'], ['3', '4'])).toEqual({ add: ['1', '2'], remove: ['4'] })
+  })
+
+  it('fills a rule\'s collection from Themes too, any case', () => {
+    const notes = [
+      note('1', { themes: ['Found family', 'loyalty'] }),
+      note('2', { tags: ['found family'] }),
+      note('3', { themes: ['found families'] }),
+    ]
+    const found = wantedCollections(notes, parseCollectionRules('Found family: found family'))
+    expect(found.map(c => [c.name, c.keys])).toEqual([['Found family', ['1', '2']]])
   })
 })

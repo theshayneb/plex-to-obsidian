@@ -1,8 +1,8 @@
 // Plex collections from your notes: the names in a movie or show note's Collections property, and
-// automatic collections of every note with a tag (`settings.collectionRules`). Worked out first
+// automatic collections of every note with a tag or theme (`settings.collectionRules`). Worked out first
 // (`planCollections`), sent afterwards (`sendCollections`); the pure parts are in collections.ts.
 import { normalizePath, type App } from 'obsidian'
-import { collectionChanges, parseCollectionRules, wantedCollections, type CollectionNote } from './collections'
+import { collectionChanges, fitsRule, parseCollectionRules, wantedCollections, type CollectionNote } from './collections'
 import { plexReady, type PlexNotesSettings } from './config'
 import type { PlexItem } from './notes'
 import { PlexClient } from './plex'
@@ -39,7 +39,7 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
   const plex = new PlexClient(settings.serverUrl, settings.token)
   const rules = parseCollectionRules(settings.collectionRules)
   const leftOut: { path: string, reason: string }[] = []
-  const wanting: { path: string, title: string, key: string, collections: string[], tags: string[] }[] = []
+  const wanting: { path: string, title: string, key: string, collections: string[], tags: string[], themes: string[] }[] = []
   const libraries = Object.entries(settings.libraries).filter(([key, lib]) => /^\d+$/.test(key) && ['movie', 'documentary', 'tv'].includes(lib.target))
   const seen = new Set<string>()
   for (const [, lib] of libraries) {
@@ -52,14 +52,16 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
       const name = Object.keys(fm).find(k => k.toLowerCase() === property.toLowerCase())
       const collections = name ? listOf(fm[name]) : []
       const tags = listOf(fm.tags).map(t => t.replace(/^#/, ''))
-      const ruled = rules.some(r => tags.some(t => t.toLowerCase() === r.tag.toLowerCase()))
+      const themesKey = Object.keys(fm).find(k => k.toLowerCase() === (settings.themesProperty || 'Themes').toLowerCase())
+      const themes = themesKey ? listOf(fm[themesKey]) : []
+      const ruled = rules.some(r => fitsRule({ tags, themes }, r))
       if (!collections.length && !ruled) continue
       const key = songKeyOf(fm, file.path, settings)
       if (!key) {
         leftOut.push({ path: file.path, reason: 'no Plex link' })
         continue
       }
-      wanting.push({ path: file.path, title: file.basename, key, collections, tags })
+      wanting.push({ path: file.path, title: file.basename, key, collections, tags, themes })
     }
   }
   // Which library each item is in (a collection holds one library's items).
@@ -72,7 +74,7 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
     if (!item) leftOut.push({ path: w.path, reason: 'not in Plex any more' })
     else if (item.type !== 'movie' && item.type !== 'show') leftOut.push({ path: w.path, reason: `its Link is to ${item.type === 'episode' ? 'an episode' : `a ${item.type ?? 'thing'}`} in Plex, not a movie or show` })
     else if (item.librarySectionID === undefined) leftOut.push({ path: w.path, reason: 'Plex didn\'t say which library it\'s in' })
-    else notes.push({ path: w.path, title: w.title, key: w.key, section: String(item.librarySectionID), collections: w.collections, tags: w.tags })
+    else notes.push({ path: w.path, title: w.title, key: w.key, section: String(item.librarySectionID), collections: w.collections, tags: w.tags, themes: w.themes })
   }
   const wanted = wantedCollections(notes, rules).filter(c => which === 'all' || c.auto)
   const plans: CollectionPlan[] = []

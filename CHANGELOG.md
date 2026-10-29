@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.175] - 2026-10-29
+
+### Added
+- Automatic collections can come from your Themes too: a rule like "Found family: found family" makes a Plex collection of every movie or show note with that theme (or that tag), in any case.
+
 ## [0.0.174] - 2026-10-29
 
 ### Added

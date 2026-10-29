@@ -24,7 +24,7 @@ function setup(notes: Record<string, Record<string, unknown>>) {
     vault: { getMarkdownFiles: () => Object.keys(notes).map(path => ({ path, basename: path.split('/').pop()!.replace(/\.md$/, '') })) },
     metadataCache: { getFileCache: (f: { path: string }) => ({ frontmatter: notes[f.path] }) },
   }
-  const settings = { ...defaultSettings(), serverUrl: 'http://plex:32400', token: 't', collectionRules: 'Comfort: comfort' }
+  const settings = { ...defaultSettings(), serverUrl: 'http://plex:32400', token: 't', collectionRules: 'Comfort: comfort\nFound family: found family' }
   settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
   return { app, settings }
 }
@@ -53,7 +53,7 @@ describe('Plex collections from notes', () => {
     const { app, settings } = setup({
       'Media/Movies/Heat (1995).md': { Link: link('1'), Collections: ['Heists', 'Michael Mann'] },
       'Media/Movies/Paddington (2014).md': { Link: link('2'), tags: ['movie', 'comfort'], collections: 'Bears' },
-      'Media/Movies/Elf (2003).md': { Link: link('3'), tags: ['#comfort'] },
+      'Media/Movies/Elf (2003).md': { Link: link('3'), tags: ['#comfort'], Themes: ['Found Family'] },
       'Media/Movies/Pilot.md': { Link: link('4'), Collections: ['Heists'] },
       'Media/Movies/No link.md': { Collections: ['Heists'] },
       'Media/Movies/Nothing.md': { Link: link('5') },
@@ -61,6 +61,7 @@ describe('Plex collections from notes', () => {
     const { plans, leftOut, unchanged } = await planCollections(app as never, settings)
     expect(plans.map(p => [p.name, p.existing, p.add.map(a => a.title), p.remove.map(r => r.title), p.auto])).toEqual([
       ['Bears', null, ['Paddington (2014)'], [], false],
+      ['Found family', null, ['Elf (2003)'], [], true],
       ['Heists', '50', [], ['Ronin'], false],
       ['Michael Mann', null, ['Heat (1995)'], [], false],
     ])
@@ -70,12 +71,14 @@ describe('Plex collections from notes', () => {
       'its Link is to an episode in Plex, not a movie or show',
       '"Comfort" in Movies is a smart collection in Plex, which can\'t be filled from notes',
     ])
-    // Only the automatic ones (here none can be sent: Comfort is smart).
-    expect((await planCollections(app as never, settings, 'auto')).plans).toEqual([])
+    // Only the automatic ones (Comfort is smart, so just Found family).
+    expect((await planCollections(app as never, settings, 'auto')).plans.map(p => p.name)).toEqual(['Found family'])
+    sent.length = 0
 
     await sendCollections(settings, plans)
     expect(sent.filter(r => !r.startsWith('GET'))).toEqual([
       'POST /library/collections?type=1&smart=0&sectionId=1&title=Bears&uri=server://abc/com.plexapp.plugins.library/library/metadata/2',
+      'POST /library/collections?type=1&smart=0&sectionId=1&title=Found family&uri=server://abc/com.plexapp.plugins.library/library/metadata/3',
       'DELETE /library/collections/50/items/9',
       'POST /library/collections?type=1&smart=0&sectionId=1&title=Michael Mann&uri=server://abc/com.plexapp.plugins.library/library/metadata/1',
     ])

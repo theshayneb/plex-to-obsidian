@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.177] - 2026-10-29
+
+### Changed
+- Randomizers embedded in notes no longer show the "…: randomizer" heading and its line of explanation; the dashboard's keeps them.
+
 ## [0.0.176] - 2026-10-29
 
 ### Changed

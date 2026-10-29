@@ -258,7 +258,8 @@ export class DashCards {
   randomizer(el: HTMLElement, only?: MediaKind): void {
     const settings = this.plugin.settings
     const onlyLabel = only ? PICK_KINDS.find(([k]) => k === only)?.[1] : undefined
-    this.header(el, onlyLabel ? `${onlyLabel}: randomizer` : 'Randomizer', 'Narrow it down, then let chance choose.', this.embedded ? undefined : { card: 'randomizer', kind: only ?? (PICK_KINDS.some(([k]) => k === settings.randomizer.kind) ? settings.randomizer.kind as MediaKind : 'movie') })
+    // In a note, no heading: the note around it says what it is.
+    if (!this.embedded) this.header(el, onlyLabel ? `${onlyLabel}: randomizer` : 'Randomizer', 'Narrow it down, then let chance choose.', { card: 'randomizer', kind: only ?? (PICK_KINDS.some(([k]) => k === settings.randomizer.kind) ? settings.randomizer.kind as MediaKind : 'movie') })
     const all = pickEntries(this.app, settings)
     const kinds = PICK_KINDS.filter(([kind]) => only ? kind === only : all.some(e => e.kind === kind))
     if (!kinds.length || (only && !all.some(e => e.kind === only))) {

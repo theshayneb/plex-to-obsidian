@@ -196,6 +196,32 @@ export class PlexClient {
     return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}/nearest?limit=${limit}&maxDistance=${maxDistance}`)).Metadata ?? []
   }
 
+  /** A library's collections (smart ones too, which can't be filled by hand). */
+  async collections(sectionKey: string): Promise<PlexPlaylist[]> {
+    return ((await this.get(`/library/sections/${encodeURIComponent(sectionKey)}/all?type=18`)).Metadata ?? []) as unknown as PlexPlaylist[]
+  }
+
+  /** The items in a collection. */
+  async collectionItems(collectionKey: string): Promise<PlexItem[]> {
+    return (await this.get(`/library/collections/${encodeURIComponent(collectionKey)}/children`)).Metadata ?? []
+  }
+
+  /** Makes a collection of these items (all of one kind, from this library); answers with its key. */
+  async createCollection(sectionKey: string, type: 'movie' | 'show', title: string, machineId: string, ratingKeys: string[]): Promise<string> {
+    const made = await this.send('POST', `/library/collections?type=${type === 'show' ? 2 : 1}&smart=0&sectionId=${encodeURIComponent(sectionKey)}&title=${encodeURIComponent(title)}&uri=${encodeURIComponent(itemsUri(machineId, ratingKeys))}`)
+    const key = made.Metadata?.[0]?.ratingKey
+    if (!key) throw new Error('Plex did not return the new collection')
+    return key
+  }
+
+  async addToCollection(collectionKey: string, machineId: string, ratingKeys: string[]): Promise<void> {
+    await this.send('PUT', `/library/collections/${encodeURIComponent(collectionKey)}/items?uri=${encodeURIComponent(itemsUri(machineId, ratingKeys))}`)
+  }
+
+  async removeFromCollection(collectionKey: string, ratingKey: string): Promise<void> {
+    await this.send('DELETE', `/library/collections/${encodeURIComponent(collectionKey)}/items/${encodeURIComponent(ratingKey)}`)
+  }
+
   /** What's inside an item: an album's tracks, a show's seasons. */
   async children(ratingKey: string): Promise<PlexItem[]> {
     return (await this.get(`/library/metadata/${encodeURIComponent(ratingKey)}/children`)).Metadata ?? []

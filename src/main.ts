@@ -21,6 +21,9 @@ import type { Finished } from './reactions'
 import { RelatedModal, type RelatedAnswer } from './related-modal'
 import { checkInDue, dayOf } from './schedule'
 import { planRevisit, REVISIT_PLAYLIST, sendRevisit } from './playlist'
+import { planCollections, sendCollections } from './plex-collections'
+import { parseCollectionRules } from './collections'
+import { CollectionsModal } from './collections-modal'
 import { minutesOf } from './daily-episodes'
 
 /**
@@ -114,6 +117,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
       callback: () => {
         void this.syncFromPlex()
       },
+    })
+
+    this.addCommand({
+      id: 'send-collections',
+      name: 'Send collections to Plex…',
+      callback: () => void this.sendCollectionsNow(),
     })
 
     this.addCommand({
@@ -320,6 +329,36 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
   }
 
+  /**
+   * "Send collections to Plex…": the collections your notes' Collections property names and your
+   * automatic ones, shown with what each would change, and sent once you say so.
+   */
+  async sendCollectionsNow(): Promise<void> {
+    const notice = new ProgressNotice('Working out your collections…')
+    let planned: Awaited<ReturnType<typeof planCollections>>
+    try {
+      planned = await planCollections(this.app, this.settings)
+    } catch (err) {
+      notice.hide()
+      new Notice(`Couldn't work out your collections: ${errorMessage(err)}`, 10000)
+      return
+    }
+    notice.hide()
+    const { plans, leftOut, unchanged } = planned
+    if (!plans.length && !leftOut.length) {
+      new Notice(unchanged ? `Plex's ${unchanged} collection${unchanged === 1 ? '' : 's'} already match your notes` : 'No note names a collection yet: add some to a movie note\'s Collections property, or set automatic ones in the settings')
+      return
+    }
+    new CollectionsModal(this.app, plans, leftOut, chosen => {
+      if (!chosen?.length) return
+      const sending = new ProgressNotice(`Sending ${chosen.length} collection${chosen.length === 1 ? '' : 's'} to Plex…`)
+      void sendCollections(this.settings, chosen).then(
+        () => new Notice(`Sent to Plex: ${chosen.map(p => p.name).join(', ')}`),
+        err => new Notice(`Sending collections failed: ${errorMessage(err)}`, 10000),
+      ).then(() => sending.hide())
+    }).open()
+  }
+
   /** Set while the check-in's questions are being asked, so no update starts in the middle. */
   private checkingIn = false
 
@@ -353,6 +392,18 @@ export default class PlexMediaNotesPlugin extends Plugin {
       }
       const days = await this.dailyEpisodes(() => {})
       if (days.length) console.log('Media Manager: episodes added to daily notes', days)
+      // Automatic collections ("Comfort: comfort"), sent again once a week, unasked: they hold
+      // what your tags say. Tried at most once a week, even when it fails.
+      if (parseCollectionRules(this.settings.collectionRules).length && now - this.settings.lastAutoCollections >= 7 * 86400 * 1000 && plexReady(this.settings)) {
+        this.settings.lastAutoCollections = now
+        try {
+          const { plans } = await planCollections(this.app, this.settings, 'auto')
+          await sendCollections(this.settings, plans)
+          if (plans.length) console.log('Media Manager: automatic collections sent to Plex', plans.map(p => p.name))
+        } catch (err) {
+          console.warn('Media Manager: automatic collections failed', err)
+        }
+      }
       // The Revisit playlist, made again once a week (it asks nothing: it's the plugin's own playlist).
       if (this.settings.revisitWeekly && now - this.settings.lastRevisit >= 7 * 86400 * 1000 && plexReady(this.settings)
         && Object.values(this.settings.libraries).some(lib => lib.target === 'music')) {

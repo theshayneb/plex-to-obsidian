@@ -1,4 +1,5 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
+import { DEFAULT_COLLECTION_RULES } from './collections'
 import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES } from './reactions'
 import type { PickFilter } from './randomizer'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
@@ -142,6 +143,10 @@ export interface PlexNotesSettings {
   revisitWeekly: boolean
   /** When the "Revisit" playlist was last made (ms since 1970). */
   lastRevisit: number
+  /** Automatic Plex collections, "Name: tag" a line: every movie or show note with the tag. */
+  collectionRules: string
+  /** When the automatic collections were last sent to Plex (ms since 1970). */
+  lastAutoCollections: number
   /** Subfolder of each library's folder that downloaded posters go in. */
   imagesSubfolder: string
   /** What each character that can't be in a file name becomes; missing or '' drops it. */
@@ -248,6 +253,8 @@ export function defaultSettings(): PlexNotesSettings {
     listenedTo: [],
     revisitWeekly: true,
     lastRevisit: 0,
+    collectionRules: DEFAULT_COLLECTION_RULES,
+    lastAutoCollections: 0,
     dailyEpisodes: false,
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
@@ -409,7 +416,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'revisitWeekly', 'lastRevisit', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'revisitWeekly', 'lastRevisit', 'collectionRules', 'lastAutoCollections', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }

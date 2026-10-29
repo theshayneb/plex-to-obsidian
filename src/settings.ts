@@ -845,6 +845,18 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         settings.revisitWeekly = value
         await this.save()
       }))
+    new Setting(containerEl)
+      .setName('Automatic collections in Plex')
+      .setDesc('One a line, "Name: tag": a collection in Plex holding every movie or show note with that tag, sent again every week. Collections you name in a note\'s Collections property are sent with the command "Send collections to Plex…", which shows what would change first.')
+      .addTextArea(text => {
+        text.setPlaceholder('Comfort: comfort')
+          .setValue(settings.collectionRules)
+          .onChange(async value => {
+            settings.collectionRules = value
+            await this.save()
+          })
+        text.inputEl.rows = 4
+      })
   }
 
   /**

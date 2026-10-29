@@ -999,3 +999,18 @@
 .pmn-rec-song:hover {
   text-decoration: underline;
 }
+
+/* "Send collections to Plex?": each collection, then what goes in (+) and comes out (−). */
+.pmn-collection-head {
+  margin-top: var(--size-4-2);
+}
+
+.pmn-collection-changes {
+  margin: 0 0 var(--size-4-2);
+  padding-left: var(--size-4-8);
+  font-size: var(--font-ui-small);
+}
+
+.pmn-collection-remove {
+  color: var(--text-muted);
+}

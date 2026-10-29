@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.174] - 2026-10-29
+
+### Added
+- Plex collections from your notes. Name collections in a movie (or show) note's Collections property, then run "Send collections to Plex…": a pop-up shows each collection, what goes in (+) and comes out (−), and the notes left out and why; untick any you don't want, then "Send to Plex". Each collection ends up holding just the notes that name it. Smart collections are never touched.
+- Automatic collections (Settings → Connections → Other sources → "Automatic collections in Plex"): one a line, "Name: tag", such as "Comfort: comfort" and "Holiday: holiday" (the two to start with). Each holds every movie or show note with that tag, and is sent to Plex again every week by itself.
+
 ## [0.0.173] - 2026-10-28
 
 ### Changed

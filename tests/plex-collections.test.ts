@@ -51,11 +51,11 @@ beforeEach(() => {
 describe('Plex collections from notes', () => {
   it('plans each named and tagged collection, what it adds and removes, and leaves smart ones alone', async () => {
     const { app, settings } = setup({
-      'Media/Movies/Heat (1995).md': { Link: link('1'), Collections: ['Heists', 'Michael Mann'] },
-      'Media/Movies/Paddington (2014).md': { Link: link('2'), tags: ['movie', 'comfort'], collections: 'Bears' },
+      'Media/Movies/Heat (1995).md': { Link: link('1'), Playlist: ['Heists', 'Michael Mann'] },
+      'Media/Movies/Paddington (2014).md': { Link: link('2'), tags: ['movie', 'comfort'], playlist: 'Bears' },
       'Media/Movies/Elf (2003).md': { Link: link('3'), tags: ['#comfort'], Themes: ['Found Family'] },
-      'Media/Movies/Pilot.md': { Link: link('4'), Collections: ['Heists'] },
-      'Media/Movies/No link.md': { Collections: ['Heists'] },
+      'Media/Movies/Pilot.md': { Link: link('4'), Playlist: ['Heists'] },
+      'Media/Movies/No link.md': { Playlist: ['Heists'] },
       'Media/Movies/Nothing.md': { Link: link('5') },
     })
     const { plans, leftOut, unchanged } = await planCollections(app as never, settings)

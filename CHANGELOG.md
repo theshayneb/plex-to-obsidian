@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.176] - 2026-10-29
+
+### Changed
+- Movie and show notes now name their Plex collections in a "Playlist" property instead of "Collections". The name can be changed in Settings → Connections → Other sources → "Property naming collections".
+
 ## [0.0.175] - 2026-10-29
 
 ### Added

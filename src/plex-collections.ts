@@ -1,4 +1,4 @@
-// Plex collections from your notes: the names in a movie or show note's Collections property, and
+// Plex collections from your notes: the names in a movie or show note's Playlist property, and
 // automatic collections of every note with a tag or theme (`settings.collectionRules`). Worked out first
 // (`planCollections`), sent afterwards (`sendCollections`); the pure parts are in collections.ts.
 import { normalizePath, type App } from 'obsidian'
@@ -42,9 +42,10 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
   const wanting: { path: string, title: string, key: string, collections: string[], tags: string[], themes: string[] }[] = []
   const libraries = Object.entries(settings.libraries).filter(([key, lib]) => /^\d+$/.test(key) && ['movie', 'documentary', 'tv'].includes(lib.target))
   const seen = new Set<string>()
+  // The property your movie and show notes name their collections in ("Playlist", any case).
+  const property = settings.collectionsProperty.trim() || 'Playlist'
   for (const [, lib] of libraries) {
     const folder = `${normalizePath(lib.folder)}/`
-    const property = lib.properties.find(m => m.source === 'collections' && m.name.trim())?.name.trim() ?? 'Collections'
     for (const file of app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(folder) || seen.has(file.path)) continue
       seen.add(file.path)

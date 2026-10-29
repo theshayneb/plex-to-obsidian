@@ -330,7 +330,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /**
-   * "Send collections to Plex…": the collections your notes' Collections property names and your
+   * "Send collections to Plex…": the collections your notes' Playlist property names and your
    * automatic ones, shown with what each would change, and sent once you say so.
    */
   async sendCollectionsNow(): Promise<void> {
@@ -346,7 +346,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     notice.hide()
     const { plans, leftOut, unchanged } = planned
     if (!plans.length && !leftOut.length) {
-      new Notice(unchanged ? `Plex's ${unchanged} collection${unchanged === 1 ? '' : 's'} already match your notes` : 'No note names a collection yet: add some to a movie note\'s Collections property, or set automatic ones in the settings')
+      new Notice(unchanged ? `Plex's ${unchanged} collection${unchanged === 1 ? '' : 's'} already match your notes` : `No note names a collection yet: add some to a movie note's ${this.settings.collectionsProperty || 'Playlist'} property, or set automatic ones in the settings`)
       return
     }
     new CollectionsModal(this.app, plans, leftOut, chosen => {

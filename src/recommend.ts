@@ -18,6 +18,10 @@ export interface RecEntry {
   level: number | null
   /** Not watched, read or played yet. */
   unseen: boolean
+  /** Its status says you've started, finished or given up on it (started, completed, abandoned): never suggested. */
+  closed?: boolean
+  /** Its status says you want to come back to it ("revisit"): suggested whatever its rating. */
+  revisit?: boolean
 }
 
 export interface Recommendation {
@@ -37,8 +41,12 @@ export const PER_PERSON = 3
 /** Loved: four stars or 🩷. */
 export const isLoved = (entry: RecEntry): boolean => (entry.level ?? 0) >= 4
 
-/** Something to recommend: no rating, or not watched (read, played) yet, and not loved. */
-export const isOpen = (entry: RecEntry): boolean => !isLoved(entry) && (entry.level === null || entry.unseen)
+/**
+ * Something to recommend: one marked to revisit, else one with no rating or not watched (read,
+ * played) yet and not loved; never one you've started, finished or abandoned.
+ */
+export const isOpen = (entry: RecEntry): boolean =>
+  !entry.closed && (Boolean(entry.revisit) || (!isLoved(entry) && (entry.level === null || entry.unseen)))
 
 const key = (text: string): string => text.trim().toLowerCase()
 

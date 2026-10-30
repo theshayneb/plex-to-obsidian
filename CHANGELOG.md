@@ -7,6 +7,7 @@
 
 ### Fixed
 - The "Add to your daily notes?" pop-up now opens after a sync, as intended; it was opening after "Check notes against sources" instead.
+- Recommendations no longer suggest anything whose Status is started, completed or abandoned (or your library's own watched or started value), and do suggest things whose Status is revisit when they fit, even ones you've rated.
 
 ## [0.0.177] - 2026-10-29
 

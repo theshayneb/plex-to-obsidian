@@ -44,6 +44,11 @@ export function noteEntries(app: App, settings: PlexNotesSettings): (RecEntry & 
       const level = ratingProps.map(m => noteStars(fm[m.name.trim()], m.source === 'userRating' ? 'stars' : scale)).find(l => l !== null) ?? null
       const unwatched = lib.values.unwatched.trim().toLowerCase()
       const unseen = statusProps.some(name => typeof fm[name] === 'string' && fm[name].trim().toLowerCase() === unwatched)
+      // Started, finished or given up on: never suggested; marked to revisit: suggested even if rated.
+      const statuses = statusProps.map((name): unknown => fm[name]).filter((v): v is string => typeof v === 'string').map(v => v.trim().toLowerCase())
+      const closedValues = new Set(['abandoned', 'started', 'completed', lib.values.watched.trim().toLowerCase(), lib.values.started.trim().toLowerCase()].filter(Boolean))
+      const closed = statuses.some(v => closedValues.has(v))
+      const revisit = statuses.includes('revisit')
       const people = peopleProps.flatMap(name => names(fm[name]))
       // A book named "Title by Author" has its author even without an author property.
       const byAuthor = kind === 'book' && !people.length ? / by (.+)$/.exec(file.basename)?.[1] : undefined
@@ -56,6 +61,8 @@ export function noteEntries(app: App, settings: PlexNotesSettings): (RecEntry & 
         people: byAuthor ? [byAuthor] : people,
         level,
         unseen,
+        closed,
+        revisit,
       })
     }
   }

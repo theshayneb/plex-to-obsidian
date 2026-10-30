@@ -16,6 +16,11 @@ describe('recommendations', () => {
 
   it('only suggests what has no rating or isn\'t watched yet, never what you loved', () => {
     expect([arrival, meh, dune, collateral].map(isOpen)).toEqual([false, false, true, true])
+    // Started, completed or abandoned: never; to revisit: yes, even rated and loved.
+    expect(isOpen({ ...dune, closed: true })).toBe(false)
+    expect(isOpen({ ...collateral, closed: true })).toBe(false)
+    expect(isOpen({ ...arrival, revisit: true })).toBe(true)
+    expect(isOpen({ ...meh, revisit: true })).toBe(true)
   })
 
   it('ranks by people in common first, then genres, within each kind of media, and says why', () => {

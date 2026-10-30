@@ -183,7 +183,7 @@ export class FinishedModal extends Modal {
       contentEl.createEl('p', { cls: 'setting-item-description', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
       return
     }
-    contentEl.createEl('p', { cls: 'setting-item-description', text: 'Pick one to say how it was. "Not now" keeps it here for later.' })
+    contentEl.createEl('p', { cls: 'setting-item-description', text: 'Pick one to say how it was, or "Not now" to come back to them later.' })
     for (const item of [...this.pmnItems]) {
       const row = contentEl.createEl('button', { cls: 'pmn-reaction-item' })
       row.createEl('strong', { text: item.title })
@@ -195,5 +195,7 @@ export class FinishedModal extends Modal {
         })
       })
     }
+    // Closing keeps them all, to answer later (they're asked about again at the next check-in).
+    contentEl.createDiv({ cls: 'modal-button-container' }).createEl('button', { text: 'Not now' }).addEventListener('click', () => this.close())
   }
 }

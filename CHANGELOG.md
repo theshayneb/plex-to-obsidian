@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.179] - 2026-10-30
+
+### Fixed
+- The "Just finished" list has the "Not now" button it talks about, which closes it and keeps everything for later.
+
 ## [0.0.178] - 2026-10-30
 
 ### Changed

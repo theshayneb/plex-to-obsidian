@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.178] - 2026-10-30
+
+### Changed
+- At the end of a sync, the "Send collections to Plex?" pop-up opens by itself, but only when a collection would change. A change you untick (or close the pop-up on) isn't offered after a sync again until it's different. The command "Send collections to Plex…" still shows everything.
+
+### Fixed
+- The "Add to your daily notes?" pop-up now opens after a sync, as intended; it was opening after "Check notes against sources" instead.
+
 ## [0.0.177] - 2026-10-29
 
 ### Changed

@@ -147,6 +147,8 @@ export interface PlexNotesSettings {
   collectionsProperty: string
   /** Automatic Plex collections, "Name: tag" a line: every movie or show note with the tag. */
   collectionRules: string
+  /** Collection changes you turned down after a sync (`planSignature`), not offered again while the same. */
+  collectionsDeclined: string[]
   /** When the automatic collections were last sent to Plex (ms since 1970). */
   lastAutoCollections: number
   /** Subfolder of each library's folder that downloaded posters go in. */
@@ -258,6 +260,7 @@ export function defaultSettings(): PlexNotesSettings {
     collectionsProperty: 'Playlist',
     collectionRules: DEFAULT_COLLECTION_RULES,
     lastAutoCollections: 0,
+    collectionsDeclined: [],
     dailyEpisodes: false,
     dailyAnchor: '[!writing] Journaling',
     dailyQuote: '> >',
@@ -442,6 +445,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
   if (Array.isArray(saved.listenedTo)) settings.listenedTo = saved.listenedTo.map(String)
+  if (Array.isArray(saved.collectionsDeclined)) settings.collectionsDeclined = saved.collectionsDeclined.map(String)
   if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)
   if (Array.isArray(saved.relatedPending)) {
     settings.relatedPending = (saved.relatedPending as Partial<RelatedOffer>[]).filter(o => o && typeof o.path === 'string' && typeof o.link === 'string')

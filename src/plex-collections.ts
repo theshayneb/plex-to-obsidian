@@ -22,6 +22,11 @@ export interface CollectionPlan {
   remove: { key: string, title: string }[]
 }
 
+/** A plan's change, to remember one you turned down: the collection and what it would add and remove. */
+export function planSignature(plan: CollectionPlan): string {
+  return `${plan.section}|${plan.name.toLowerCase()}|+${plan.add.map(a => a.key).sort().join(',')}|-${plan.remove.map(r => r.key).sort().join(',')}`
+}
+
 /** Plex sends items in batches this size, so a request's address stays short. */
 const BATCH = 100
 

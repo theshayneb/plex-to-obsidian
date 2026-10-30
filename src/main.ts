@@ -21,7 +21,7 @@ import type { Finished } from './reactions'
 import { RelatedModal, type RelatedAnswer } from './related-modal'
 import { checkInDue, dayOf } from './schedule'
 import { planRevisit, REVISIT_PLAYLIST, sendRevisit } from './playlist'
-import { planCollections, sendCollections } from './plex-collections'
+import { planCollections, planSignature, sendCollections } from './plex-collections'
 import { parseCollectionRules } from './collections'
 import { CollectionsModal } from './collections-modal'
 import { minutesOf } from './daily-episodes'
@@ -331,32 +331,45 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   /**
    * "Send collections to Plex…": the collections your notes' Playlist property names and your
-   * automatic ones, shown with what each would change, and sent once you say so.
+   * automatic ones, shown with what each would change, and sent once you say so. After a sync
+   * (`afterSync`) it says nothing unless a collection would change, and leaves out changes you
+   * turned down before (`settings.collectionsDeclined`) until they're different. Resolves once
+   * the pop-up is answered.
    */
-  async sendCollectionsNow(): Promise<void> {
-    const notice = new ProgressNotice('Working out your collections…')
+  async sendCollectionsNow(afterSync = false): Promise<void> {
+    const notice = afterSync ? null : new ProgressNotice('Working out your collections…')
     let planned: Awaited<ReturnType<typeof planCollections>>
     try {
       planned = await planCollections(this.app, this.settings)
     } catch (err) {
-      notice.hide()
-      new Notice(`Couldn't work out your collections: ${errorMessage(err)}`, 10000)
+      notice?.hide()
+      if (afterSync) console.warn('Media Manager: working out collections failed', err)
+      else new Notice(`Couldn't work out your collections: ${errorMessage(err)}`, 10000)
       return
     }
-    notice.hide()
-    const { plans, leftOut, unchanged } = planned
-    if (!plans.length && !leftOut.length) {
-      new Notice(unchanged ? `Plex's ${unchanged} collection${unchanged === 1 ? '' : 's'} already match your notes` : `No note names a collection yet: add some to a movie note's ${this.settings.collectionsProperty || 'Playlist'} property, or set automatic ones in the settings`)
+    notice?.hide()
+    const { leftOut, unchanged } = planned
+    const declined = new Set(this.settings.collectionsDeclined)
+    const plans = afterSync ? planned.plans.filter(p => !declined.has(planSignature(p))) : planned.plans
+    if (!plans.length && (afterSync || !leftOut.length)) {
+      if (!afterSync) new Notice(unchanged ? `Plex's ${unchanged} collection${unchanged === 1 ? '' : 's'} already match your notes` : `No note names a collection yet: add some to a movie note's ${this.settings.collectionsProperty || 'Playlist'} property, or set automatic ones in the settings`)
       return
     }
-    new CollectionsModal(this.app, plans, leftOut, chosen => {
+    await new Promise<void>(resolve => new CollectionsModal(this.app, plans, leftOut, chosen => {
+      // Turned down (unticked, or the pop-up closed): not offered after a sync again while it's the same.
+      const refused = plans.filter(p => !chosen?.includes(p)).map(planSignature)
+      if (refused.length) {
+        this.settings.collectionsDeclined = [...new Set([...this.settings.collectionsDeclined, ...refused])].slice(-200)
+        void this.saveSettings()
+      }
+      resolve()
       if (!chosen?.length) return
       const sending = new ProgressNotice(`Sending ${chosen.length} collection${chosen.length === 1 ? '' : 's'} to Plex…`)
       void sendCollections(this.settings, chosen).then(
         () => new Notice(`Sent to Plex: ${chosen.map(p => p.name).join(', ')}`),
         err => new Notice(`Sending collections failed: ${errorMessage(err)}`, 10000),
       ).then(() => sending.hide())
-    }).open()
+    }).open())
   }
 
   /** Set while the check-in's questions are being asked, so no update starts in the middle. */
@@ -715,7 +728,6 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.error('Media Manager: failed items', result.failed)
       }
       new UnmatchedModal(this.app, 'Check finished', `${parts.join(', ')}.`, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
-      if (!result.stopped) void this.askRelated()
     } catch (err) {
       notice.hide()
       new Notice(`Checking failed: ${errorMessage(err)}`, 10000)
@@ -881,6 +893,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
       if (result.unmatched.length) parts.push(`${result.unmatched.length} note${result.unmatched.length === 1 ? '' : 's'} ${result.unmatched.length === 1 ? 'matches' : 'match'} nothing`)
       new Notice(parts.join(', '), 8000)
       if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
+      // Then what's waiting for your daily notes, then collections that would change, one pop-up after another.
+      if (!result.stopped) void this.askRelated().then(() => this.sendCollectionsNow(true))
     } catch (err) {
       notice.hide()
       new Notice(`Sync failed: ${errorMessage(err)}`, 10000)

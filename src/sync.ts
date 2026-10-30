@@ -322,6 +322,10 @@ export class PlexSync {
     for (const m of lib.properties) {
       const name = m.name.trim()
       if (m.source !== 'viewCount' || !name || (chosen && !chosen.has(name)) || locked.includes(name)) continue
+      // Last.fm's count turned down for this song: left out (Plex's updates it as usual) until Last.fm
+      // gains plays Plex doesn't know about, its lead over Plex growing past what it was then.
+      const gap = this.settings.lastfmGaps[`${item.ratingKey}|${name}`]
+      if (gap !== undefined && lastfm - plex <= gap) continue
       replaced.add(name)
       const current: unknown = frontmatter[name]
       const now = typeof current === 'number' ? current : typeof current === 'string' && current.trim() ? Number(current) : NaN
@@ -897,6 +901,8 @@ export class PlexSync {
             // A play count from Plex or Last.fm, whichever was ticked (both ticked: the one that started unticked).
             const countValues: Record<string, unknown> = {}
             for (const c of countChoices) {
+              // Last.fm's left unticked: not offered for this song again while its lead over Plex stays the same.
+              if (c.offer.lastfm && excluded.has(`count:lastfm:${c.name}`)) this.settings.lastfmGaps[`${item.ratingKey}|${c.name}`] = c.lastfm - c.plex
               const ticked = (['plex', 'lastfm'] as const).filter(from => c.offer[from] && !excluded.has(`count:${from}:${c.name}`))
               const from = ticked.length > 1 ? ticked.find(f => f !== c.ticked)! : ticked[0]
               if (!from) {

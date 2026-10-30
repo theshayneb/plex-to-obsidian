@@ -1327,6 +1327,38 @@ describe('PlexSync', () => {
     vi.mocked(userPlayCounts).mockResolvedValue(null)
   })
 
+  it('stops offering Last.fm\'s count for a song once turned down, while Plex\'s keeps updating', async () => {
+    const { userPlayCounts } = await import('../src/lastfm')
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Progress: 6 } })
+    const settings = settingsWith({ lastfmKey: 'k', lastfmUser: 'me' })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    const plexPlays = (n: number) => responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], viewCount: n }] } })
+    plexPlays(6)
+    vi.mocked(userPlayCounts).mockResolvedValue(new Map([['radiohead|karmapolice', 47]]))
+    const asked: ApprovalRequest[] = []
+    const decline = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      asked.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: r.lines.filter(l => l.unticked).map(l => l.key) })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Progress'])
+    expect(asked[0].lines.map(l => l.key)).toEqual(['count:lastfm:Progress'])
+    expect(settings.lastfmGaps).toEqual({ '100|Progress': 41 })
+    // Listened once more (scrobbled too): Plex's 7 is offered as usual, Last.fm's 48 isn't.
+    asked.length = 0
+    plexPlays(7)
+    vi.mocked(userPlayCounts).mockResolvedValue(new Map([['radiohead|karmapolice', 48]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Progress'])
+    expect(asked[0].lines.filter(l => l.label === 'Progress').map(l => [l.key, l.value])).toEqual([['fix:Progress', '7']])
+    // Last.fm gains plays Plex doesn't know about: offered again.
+    asked.length = 0
+    frontmatter.get(song)!.Progress = 7
+    vi.mocked(userPlayCounts).mockResolvedValue(new Map([['radiohead|karmapolice', 60]]))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Progress'])
+    expect(asked[0].lines.map(l => [l.key, l.value])).toEqual([['count:lastfm:Progress', '60']])
+    vi.mocked(userPlayCounts).mockResolvedValue(null)
+  })
+
   it('offers the right, lower count to a song whose versions were counted together before, unticked', async () => {
     const { userPlayCounts } = await import('../src/lastfm')
     const { playCountsByKey } = await import('../src/lastfm-data')

@@ -166,7 +166,7 @@ export class ApprovalModal extends Modal {
     if (several.length) {
       contentEl.insertBefore(createEl('p', {
         cls: 'setting-item-description',
-        text: `${several.join(', ')}: more than one source has a value, each in its own column. Tick the one to write to the note.`,
+        text: `${several.join(', ')}: more than one source has a value, each in its own column. Tick the one to write to the note.${lines.some(l => l.source === 'Last.fm') ? ' Leave Last.fm\'s unticked and it isn\'t offered for this song again, unless it gains plays Plex doesn\'t know about; Plex\'s count still updates.' : ''}`,
       }), table.parentElement)
     }
     for (const row of rows) {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.180] - 2026-10-30
+
+### Changed
+- Turning down Last.fm's play count for a song (leaving its column unticked) now stops it being offered for that song, while Plex's count keeps updating the note as you listen. It's only offered again if Last.fm gains plays Plex doesn't know about. No need to lock Progress.
+
 ## [0.0.179] - 2026-10-30
 
 ### Fixed

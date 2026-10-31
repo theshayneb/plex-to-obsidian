@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.182] - 2026-10-31
+
+### Removed
+- Adding songs to Spotify (from 0.0.181) is gone again: Spotify only lets Premium accounts use it. The plugin is back to what 0.0.180 was.
+
 ## [0.0.181] - 2026-10-31
 
 ### Added

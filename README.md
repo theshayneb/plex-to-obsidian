@@ -103,7 +103,6 @@ Open the command palette (Ctrl/Cmd+P) and type "Media Manager".
 - **Last.fm API key** (optional): song suggestions on the dashboard.
 - **Last.fm username** (optional): your Last.fm play count is offered beside Plex's for songs.
 - **ListenBrainz username** (optional, no key): ListenBrainz's song suggestions on the dashboard.
-- **Spotify client ID** and **Connect** (optional): lets the dashboard add suggested songs to your Spotify playlist "To Listen". Create a free app at developer.spotify.com/dashboard with the redirect URI `http://127.0.0.1:43219/callback`, tick Web API, paste its client ID, and press **Connect** (once, on a computer; Spotify opens in your browser to approve). The plugin can only change your playlists.
 - **Revisit playlist every week**: remakes the Revisit playlist in Plex weekly (see [Revisit](#revisit)).
 - **Property naming collections** (default `Playlist`): the property in movie and show notes that names their Plex collections.
 - **Automatic collections in Plex**: one per line, `Name: tag or theme`, such as `Comfort: comfort`. See [collections](#collections).
@@ -432,8 +431,7 @@ What you haven't watched, read or played yet that's most like what you rated ⭐
 **Songs** suggests ten songs you don't have:
 - **From Last.fm**: songs like 50 drawn from your whole library, with loved and much-played songs drawn more often. Songs like several of yours come first. The line under each says "Like" and two of your songs it's like.
 - **From ListenBrainz**: its recommendations for you, from listeners with taste like yours.
-- **A song's name opens it on Spotify** (to listen). That takes it off the list, as does **Not interested**.
-- **Add to To Listen** (with Spotify connected) puts the song straight into your Spotify playlist "To Listen" (made, private, if you have none) and takes it off the list. If Spotify only has another version (a live one, say), it asks first.
+- **A song's name opens it on Spotify** (to listen, or add to your "To listen" playlist there). That takes it off the list, as does **Not interested**.
 
 **Revisit** sits under Songs. See [Revisit](#revisit).
 
@@ -505,8 +503,6 @@ Only these, and only as described:
   - collections, after you confirm, or weekly for automatic ones;
   - the Revisit playlist.
 - **Music files** (desktop only): one existing tag at a time, or the existing lyrics file, after you tick it in a pop-up.
-
-- **Spotify**: songs you add to your "To Listen" playlist (and the playlist itself, if you have none).
 
 Nothing is ever written to Steam, Last.fm, ListenBrainz, Open Library or Google Books. Your Plex token never goes in a note.
 

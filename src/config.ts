@@ -135,10 +135,6 @@ export interface PlexNotesSettings {
   lastfmKey: string
   /** Your Last.fm username: songs' play counts there are offered beside Plex's. */
   lastfmUser: string
-  /** Your Spotify app's Client ID, for adding songs to "To Listen". */
-  spotifyClientId: string
-  /** The Spotify connection (tokens), kept so every device can use it; null when not connected. */
-  spotifyAuth: { accessToken: string, refreshToken: string, expiresAt: number } | null
   /** Suggested songs you opened on Spotify (their ids), not suggested again. */
   listenedTo: string[]
   /** Your ListenBrainz username: the songs it recommends for you, on the dashboard. */
@@ -261,8 +257,6 @@ export function defaultSettings(): PlexNotesSettings {
     lastfmUser: '',
     listenbrainzUser: '',
     listenedTo: [],
-    spotifyClientId: '',
-    spotifyAuth: null,
     revisitWeekly: true,
     lastRevisit: 0,
     collectionsProperty: 'Playlist',
@@ -431,7 +425,7 @@ type SavedLibrary = Partial<LibrarySetting> & { title?: string, type?: string, t
 export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
-  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'spotifyClientId', 'revisitWeekly', 'lastRevisit', 'collectionsProperty', 'collectionRules', 'lastAutoCollections', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
+  for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'revisitWeekly', 'lastRevisit', 'collectionsProperty', 'collectionRules', 'lastAutoCollections', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
     'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
@@ -454,8 +448,6 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.reviewSkipped)) settings.reviewSkipped = saved.reviewSkipped.map(String)
   if (Array.isArray(saved.notRewatches)) settings.notRewatches = saved.notRewatches.map(String)
   if (Array.isArray(saved.listenedTo)) settings.listenedTo = saved.listenedTo.map(String)
-  const auth = saved.spotifyAuth as Partial<NonNullable<PlexNotesSettings['spotifyAuth']>> | null | undefined
-  if (auth && typeof auth.accessToken === 'string' && typeof auth.refreshToken === 'string') settings.spotifyAuth = { accessToken: auth.accessToken, refreshToken: auth.refreshToken, expiresAt: Number(auth.expiresAt) || 0 }
   if (saved.lastfmGaps && typeof saved.lastfmGaps === 'object') settings.lastfmGaps = Object.fromEntries(Object.entries(saved.lastfmGaps as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v as number]))
   if (Array.isArray(saved.collectionsDeclined)) settings.collectionsDeclined = saved.collectionsDeclined.map(String)
   if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)

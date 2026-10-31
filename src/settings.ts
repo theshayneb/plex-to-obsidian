@@ -20,8 +20,6 @@ import { compareTitles, OTHER_CHARS, ratingKeyFromLink, renderFileName, REPLACEA
 import { PlexClient } from './plex'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
-import { connectSpotify } from './spotify'
-import { SPOTIFY_PLAYLIST, SPOTIFY_REDIRECT } from './spotify-data'
 import { PropertyNameSuggest } from './property-suggest'
 import { defaultProperties, defaultValues, FIELD_SOURCES, linkPropertyNames, collectionStatusText, parseCollectionStatus, type FieldSource } from './properties'
 import { groupByKind, keptEntries, kindOfLibrary, kindOfPath, OTHER_KIND, type KeptEntry } from './remembered'
@@ -839,37 +837,6 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         .onChange(async value => {
           settings.listenbrainzUser = value.trim()
           await this.save()
-        }))
-    new Setting(containerEl)
-      .setName('Spotify client ID')
-      .setDesc(`Optional, for adding suggested songs to your Spotify playlist "${SPOTIFY_PLAYLIST}" (made if you have none). Create an app at developer.spotify.com/dashboard (free; any name), add the redirect URI ${SPOTIFY_REDIRECT} exactly, tick Web API, save, and paste its client ID here. Then press Connect.`)
-      .addText(text => text
-        .setPlaceholder('Client ID')
-        .setValue(settings.spotifyClientId)
-        .onChange(async value => {
-          settings.spotifyClientId = value.trim()
-          await this.save()
-        }))
-    new Setting(containerEl)
-      .setName('Spotify')
-      .setDesc(settings.spotifyAuth ? 'Connected: songs can be added to your playlist.' : 'Not connected. Connecting opens Spotify in your browser to approve, once (on a computer).')
-      .addButton(button => button
-        .setButtonText(settings.spotifyAuth ? 'Disconnect' : 'Connect')
-        .onClick(async () => {
-          if (settings.spotifyAuth) {
-            settings.spotifyAuth = null
-            await this.save()
-            this.refresh()
-            return
-          }
-          button.setDisabled(true)
-          try {
-            await connectSpotify(settings, () => this.plugin.saveSettings())
-            new Notice('Connected to Spotify')
-          } catch (err) {
-            new Notice(errorMessage(err), 10_000)
-          }
-          this.refresh()
         }))
     new Setting(containerEl)
       .setName('Revisit playlist every week')

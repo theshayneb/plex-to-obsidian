@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.181] - 2026-10-31
+
+### Added
+- Songs suggested on the dashboard can go straight into your Spotify playlist "To Listen" (made, private, if you have none): connect Spotify once in Settings → Connections → Other sources, and each song gets an "Add to To Listen" button. If Spotify only has another version of the song (a live one, say), you're asked first. An added song comes off the list. Only your playlists can be changed.
+
 ## [0.0.180] - 2026-10-30
 
 ### Changed

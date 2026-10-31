@@ -14,6 +14,9 @@ import { isLoved, isOpen, recommend, type RecEntry, type RecGroup, type Recommen
 import { itemEntry, noteEntries, withItem } from './recommend-data'
 import { errorMessage } from './settings'
 import { planRevisit } from './playlist'
+import { SpotifyClient } from './spotify'
+import { SPOTIFY_PLAYLIST } from './spotify-data'
+import { confirm } from './confirm-modal'
 import { PlexSync } from './sync'
 import { DashCards, HABIT_KINDS, type InsightsKind } from './dashboard-cards'
 
@@ -394,10 +397,41 @@ export class RecommendView extends ItemView {
       // After the link has opened.
       window.setTimeout(() => this.pmnRender(), 300)
     })
-    const no = row.createDiv('pmn-rec-buttons').createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
+    const buttons = row.createDiv('pmn-rec-buttons')
+    // Connected to Spotify: straight into your "To Listen" playlist, to decide on later.
+    if (this.pmnPlugin.settings.spotifyAuth) {
+      const add = buttons.createEl('button', { text: `Add to ${SPOTIFY_PLAYLIST}` })
+      add.addEventListener('click', () => {
+        add.disabled = true
+        void this.pmnAddToSpotify(song).finally(() => { add.disabled = false })
+      })
+    }
+    const no = buttons.createEl('button', { cls: 'pmn-rec-no', text: 'Not interested' })
     no.addEventListener('click', () => void this.pmnNotInterested({ id: song.id, title: song.title }))
     // Why: the songs of yours Last.fm found it like, or ListenBrainz's listeners like you.
     text.createDiv({ cls: 'pmn-rec-why', text: song.because?.length ? `Like ${song.because.join(' and ')}` : 'Played by listeners with taste like yours' })
+  }
+
+  /** Adds a suggested song to your Spotify "To Listen" playlist (asking first when Spotify only has another version), then takes it off the list. */
+  private async pmnAddToSpotify(song: SongSuggestion): Promise<void> {
+    const settings = this.pmnPlugin.settings
+    const spotify = new SpotifyClient(settings, () => this.pmnPlugin.saveSettings())
+    try {
+      const found = await spotify.find(song.artist, song.track)
+      if (!found) {
+        new Notice(`Spotify hasn't got ${song.title}`)
+        return
+      }
+      const name = `${found.track.artists.join(', ')} – ${found.track.name}`
+      if (!found.exact && !await confirm(this.app, `Add to ${SPOTIFY_PLAYLIST}?`, `Spotify doesn't have ${song.title} as such. Its closest is ${name}. Add that instead?`, 'Add it')) return
+      await spotify.add(found.track.uri)
+      if (!settings.listenedTo.includes(song.id)) settings.listenedTo.push(song.id)
+      await this.pmnPlugin.saveSettings()
+      new Notice(`Added ${name} to ${SPOTIFY_PLAYLIST}`)
+      this.pmnRender()
+    } catch (err) {
+      new Notice(`Couldn't add it to Spotify: ${errorMessage(err)}`, 10_000)
+    }
   }
 
   /**

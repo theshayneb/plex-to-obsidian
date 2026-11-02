@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.184] - 2026-11-02
+
+### Removed
+- The command "Send collections to Plex…": collections are sent from Bases, with the "Plex collection" view's button. The Playlist property, the pop-up after syncs and the automatic collections stay.
+
 ## [0.0.183] - 2026-11-02
 
 ### Added

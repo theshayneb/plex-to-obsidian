@@ -121,12 +121,6 @@ export default class PlexMediaNotesPlugin extends Plugin {
     })
 
     this.addCommand({
-      id: 'send-collections',
-      name: 'Send collections to Plex…',
-      callback: () => void this.sendCollectionsNow(),
-    })
-
-    this.addCommand({
       id: 'revisit-playlist',
       name: 'Make the "Revisit" playlist in Plex',
       callback: () => {
@@ -337,7 +331,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /**
-   * "Send collections to Plex…": the collections your notes' Playlist property names and your
+   * After a sync: the collections your notes' Playlist property names and your
    * automatic ones, shown with what each would change, and sent once you say so. After a sync
    * (`afterSync`) it says nothing unless a collection would change, and leaves out changes you
    * turned down before (`settings.collectionsDeclined`) until they're different. Resolves once

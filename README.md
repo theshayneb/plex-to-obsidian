@@ -75,7 +75,6 @@ Open the command palette (Ctrl/Cmd+P) and type "Media Manager".
 | **Add watched episodes to daily notes** | Adds the last week of watched episodes to your daily notes, bringing back lines you deleted. |
 | **Add what you watched to daily notes…** | Shows the movies and shows waiting to go in your daily notes' Related property. |
 | **Check in now (everything waiting for your yes)** | Runs the [daily check-in](#background-updates-and-the-daily-check-in) straight away. |
-| **Send collections to Plex…** | Shows the Plex collections your notes ask for and what would change, then sends them. |
 | **Make the "Revisit" playlist in Plex** | Makes a new Revisit mix and sends it to Plex. |
 | **React to this note…** | "How was it?" for the open note. |
 | **React to what you just finished…** | Lists movies and shows you finished lately, to react to. |
@@ -481,18 +480,15 @@ In a Base (Obsidian 1.10 or later), add a view of type **Plex playlist**. It lis
 - its name is the view's name, unless you set **Collection name in Plex** in the view's options;
 - a smart collection is never touched.
 
-**Also (older ways, still there):**
+**The Playlist property**: put collection names in a movie or show note's **Playlist** property (for example `Heists`), and filter a Base by it to send that collection with its button. The plugin reads this property too:
 
-- **By hand**: put collection names in a movie or show note's **Playlist** property (for example `Heists`).
-- **Automatic**: in the settings, one rule per line, `Name: tag or theme`, for example `Comfort: comfort`, `Holiday: holiday` or `Found family: found family`. Each collection holds every movie or show note with that tag (or that in its Themes).
-
-**Send collections to Plex…** shows each collection, what goes in (+) and comes out (−), and notes left out and why. Untick any you don't want, then **Send to Plex**.
+- **After a sync**, a "Send collections to Plex?" pop-up opens by itself, but only if a collection named in Playlist properties (or an automatic one) would change in Plex. It shows each one, what goes in (+) and comes out (−), and notes left out and why; untick any you don't want. A change you turn down isn't offered after syncs again until it's different.
 - Each collection ends up holding exactly the notes that name it (or have its tag). Watch the − lines: movies in a Plex collection that no note names are taken out.
 - A collection belongs to one library.
 - Smart collections are never touched.
 - A collection no note names any more is left as it is in Plex.
 - **After a sync**, the same pop-up opens by itself, but only if a collection would change. A change you turn down isn't offered after syncs again until it's different.
-- **Weekly**: automatic collections are sent unasked with the background update.
+- **Automatic collections**: in the settings, one rule per line, `Name: tag or theme`, for example `Comfort: comfort`, `Holiday: holiday` or `Found family: found family`. Each holds every movie or show note with that tag (or that in its Themes), and is sent unasked weekly with the background update.
 
 ### Revisit
 

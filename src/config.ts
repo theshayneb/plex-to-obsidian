@@ -21,7 +21,7 @@ export interface RelatedOffer {
   /** The link to add, "[[Lost (2004)]]". */
   link: string
   title: string
-  kind: 'show' | 'movie'
+  kind: 'show' | 'movie' | 'game'
   /** When it was (first) watched that day, seconds since 1970. */
   viewedAt: number
 }
@@ -129,6 +129,8 @@ export interface PlexNotesSettings {
   dailyEpisodesSince: number
   /** Shows and movies watched, waiting for your yes before going in their daily note's Related property. */
   relatedPending: RelatedOffer[]
+  /** Each Steam game's total playtime (minutes) when last looked at, by `steam-<appid>`, to tell which were played since; null before the first look. */
+  gamePlaytimes: Record<string, number> | null
   /** Related links you said no to (`relatedKey`: daily note path and link target), not offered again. */
   relatedDeclined: string[]
   /** Last.fm API key, for music suggestions from outside your library on the recommendations page. */
@@ -288,6 +290,7 @@ export function defaultSettings(): PlexNotesSettings {
     dailyEpisodesSince: 0,
     relatedPending: [],
     relatedDeclined: [],
+    gamePlaytimes: null,
     imagesSubfolder: 'Images',
     fileNameReplacements: { '[': '(', ']': ')' },
     renameExistingNotes: true,
@@ -450,10 +453,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.listenedTo)) settings.listenedTo = saved.listenedTo.map(String)
   if (saved.lastfmGaps && typeof saved.lastfmGaps === 'object') settings.lastfmGaps = Object.fromEntries(Object.entries(saved.lastfmGaps as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v as number]))
   if (Array.isArray(saved.collectionsDeclined)) settings.collectionsDeclined = saved.collectionsDeclined.map(String)
+  if (saved.gamePlaytimes && typeof saved.gamePlaytimes === 'object') settings.gamePlaytimes = Object.fromEntries(Object.entries(saved.gamePlaytimes as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v as number]))
   if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)
   if (Array.isArray(saved.relatedPending)) {
     settings.relatedPending = (saved.relatedPending as Partial<RelatedOffer>[]).filter(o => o && typeof o.path === 'string' && typeof o.link === 'string')
-      .map(o => ({ path: String(o.path), link: String(o.link), title: String(o.title ?? o.link), kind: o.kind === 'movie' ? 'movie' : 'show', viewedAt: Number(o.viewedAt) || 0 }))
+      .map(o => ({ path: String(o.path), link: String(o.link), title: String(o.title ?? o.link), kind: o.kind === 'movie' || o.kind === 'game' ? o.kind : 'show', viewedAt: Number(o.viewedAt) || 0 }))
   }
   if (saved.randomizer && typeof saved.randomizer === 'object') {
     const r = saved.randomizer as { kind?: unknown, filters?: unknown }

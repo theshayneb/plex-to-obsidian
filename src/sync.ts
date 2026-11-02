@@ -41,7 +41,7 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
@@ -1377,18 +1377,74 @@ export class PlexSync {
           ...showLinks.map((link, i) => ({ link, title: list[i][0].show, kind: 'show' as const, viewedAt: Math.min(...list[i].map(e => e.viewedAt)) })),
           ...watchedMovies.map((m: WatchedMovie) => ({ link: linkTo(m.key, m.title), title: m.title, kind: 'movie' as const, viewedAt: m.viewedAt })),
         ]
-        for (const offer of offered) {
-          const key = relatedKey(path, offer.link)
-          if (this.settings.relatedDeclined.includes(key) || this.settings.relatedPending.some(p => relatedKey(p.path, p.link) === key)) continue
-          if (!withRelated(has, [offer.link], same)) continue
-          this.settings.relatedPending.push({ path, ...offer })
-        }
+        for (const offer of offered) this.offerRelated(path, has, same, offer)
       }
       if (added) changed.push(path)
     }
     this.settings.dailyEpisodesSince = retryFrom
+    if (this.settings.dailyRelated && steamReady(this.settings)) {
+      try {
+        await this.offerGamesPlayed(pathOf)
+      } catch (err) {
+        console.warn('Media Manager: reading Steam for games played failed', err)
+      }
+    }
     await this.saveSettings()
     return changed
+  }
+
+  /** Lines up a link for a daily note's Related property, unless it's there, waiting already, or turned down. */
+  private offerRelated(path: string, has: unknown, same: (entry: string, link: string) => boolean, offer: Omit<RelatedOffer, 'path'>): void {
+    const key = relatedKey(path, offer.link)
+    if (this.settings.relatedDeclined.includes(key) || this.settings.relatedPending.some(p => relatedKey(p.path, p.link) === key)) return
+    if (!withRelated(has, [offer.link], same)) return
+    this.settings.relatedPending.push({ path, ...offer })
+  }
+
+  /**
+   * Steam games played since the last look (their playtime went up), offered for the Related property
+   * of the day Steam says each was last played. A game whose daily note isn't there yet is looked at
+   * again next time.
+   */
+  private async offerGamesPlayed(pathOf: (seconds: number) => string): Promise<void> {
+    const related = this.settings.dailyRelated
+    const { apiKey, account, includeFreeGames } = this.settings.steam
+    const owned = await new SteamClient(apiKey.trim(), account.trim(), includeFreeGames).ownedGames()
+    const { played, seen } = gamesPlayed(owned.map(g => ({ key: g.ratingKey, title: g.title, playtime: g.playtimeMinutes ?? 0, lastPlayed: g.lastViewedAt })), this.settings.gamePlaytimes, Math.floor(new Date().setHours(0, 0, 0, 0) / 1000))
+    // Each game's note, by the Steam link in it (or a tie).
+    const games = Object.values(this.settings.libraries).filter(lib => lib.target === 'game')
+    const linkNames = [...new Set(games.flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = games.map(lib => normalizePath(lib.folder))
+    const notes = new Map<string, TFile>()
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      for (const name of linkNames) {
+        const key = ratingKeyFromLink(frontmatter[name])
+        if (key && !notes.has(key)) notes.set(key, file)
+      }
+    }
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      const file = this.app.vault.getAbstractFileByPath(merged.path)
+      if (key.startsWith('steam-') && file instanceof TFile) notes.set(key, file)
+    }
+    for (const game of played) {
+      const note = notes.get(game.key)
+      if (!note || game.key in this.settings.ignored || this.settings.unmatchedIgnored.includes(note.path)) continue
+      const path = pathOf(game.lastPlayed)
+      const daily = this.app.vault.getAbstractFileByPath(path)
+      if (!(daily instanceof TFile)) {
+        // Not there yet: looked at again next time.
+        const before = this.settings.gamePlaytimes?.[game.key]
+        if (before === undefined) delete seen[game.key]
+        else seen[game.key] = before
+        continue
+      }
+      const has: unknown = this.app.metadataCache.getFileCache(daily)?.frontmatter?.[related]
+      const link = `[[${this.app.metadataCache.fileToLinktext(note, path, true)}]]`
+      this.offerRelated(path, has, this.relatedSame(path), { link, title: note.basename, kind: 'game', viewedAt: game.lastPlayed })
+    }
+    this.settings.gamePlaytimes = seen
   }
 
   /** Whether a Related entry already is that link (the same note, else the same name). */

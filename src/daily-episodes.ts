@@ -216,3 +216,21 @@ export function isListedShow(title: string, shows: string[]): boolean {
     return Boolean(want) && (name === want || name.startsWith(`${want} (`))
   })
 }
+
+/** A Steam game as seen now: its key (`steam-<appid>`), total playtime in minutes, and when Steam says it was last played. */
+export interface GameSeen { key: string, title: string, playtime: number, lastPlayed?: number }
+
+/**
+ * The games played since last time: more playtime than `previous` remembered (a game new to the
+ * list counts once it has playtime), with the day Steam last saw it played. Steam keeps no history,
+ * so a game played on several days between two looks counts only on the last. `previous` null (the
+ * first look) has nothing to compare with: only games last played since `today` (seconds) count, so
+ * nothing old is offered. `seen` is what to remember now.
+ */
+export function gamesPlayed(games: GameSeen[], previous: Record<string, number> | null, today: number): { played: (GameSeen & { lastPlayed: number })[], seen: Record<string, number> } {
+  const seen = Object.fromEntries(games.map(g => [g.key, g.playtime]))
+  const played = games.filter((g): g is GameSeen & { lastPlayed: number } => Boolean(g.lastPlayed) && g.playtime > 0
+    && (previous ? g.playtime > (previous[g.key] ?? 0) : (g.lastPlayed ?? 0) >= today))
+  return { played, seen }
+}
+

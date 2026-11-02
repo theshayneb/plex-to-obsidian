@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inWindow, isListedShow, episodeEntry, episodeLabel, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
+import { gamesPlayed, inWindow, isListedShow, episodeEntry, episodeLabel, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
 
 const ep = (show: string, season: number, episode: number, title: string, viewedAt: number): WatchedEpisode =>
   ({ show, showKey: show, season, episode, title, viewedAt })
@@ -76,5 +76,22 @@ describe('bedtime shows', () => {
     expect(isListedShow('Futurama', ['Dilbert', 'futurama'])).toBe(true)
     expect(isListedShow('Futurama (1999)', ['Futurama'])).toBe(true)
     expect(isListedShow('Futurama Forever', ['Futurama'])).toBe(false)
+  })
+})
+
+describe('games played, for the Related property', () => {
+  const day = 1_800_000_000
+  const game = (key: string, playtime: number, lastPlayed?: number) => ({ key, title: key, playtime, lastPlayed })
+
+  it('the first look offers only games played today, and remembers every playtime', () => {
+    const { played, seen } = gamesPlayed([game('steam-1', 120, day + 3600), game('steam-2', 600, day - 86400 * 30), game('steam-3', 0)], null, day)
+    expect(played.map(g => g.key)).toEqual(['steam-1'])
+    expect(seen).toEqual({ 'steam-1': 120, 'steam-2': 600, 'steam-3': 0 })
+  })
+
+  it('later looks offer games whose playtime went up, a new one once it has playtime', () => {
+    const previous = { 'steam-1': 120, 'steam-2': 600 }
+    const { played } = gamesPlayed([game('steam-1', 180, day), game('steam-2', 600, day - 86400), game('steam-4', 30, day), game('steam-5', 0)], previous, day)
+    expect(played.map(g => g.key)).toEqual(['steam-1', 'steam-4'])
   })
 })

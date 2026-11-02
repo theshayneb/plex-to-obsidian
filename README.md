@@ -350,7 +350,7 @@ With **Watched episodes in daily notes** on, each sync, background update and **
 - **Finding daily notes**: from **Daily notes folder and date format**, else Obsidian's Daily notes settings.
 - **Getting deleted lines back**: the command looks at the whole last week, so it brings back lines you deleted; a sync doesn't.
 
-**Related** (the property in **Link in a property**, default `Related`): every movie and show you watched that day is offered as a link for that day's daily note. It's **never added without asking**:
+**Related** (the property in **Link in a property**, default `Related`): every movie and show you watched that day is offered as a link for that day's daily note. So are **Steam games** whose playtime went up, for the day Steam says you last played them (Steam keeps no day-by-day history, so a game played on several days between two looks is only offered for the last of them). It's **never added without asking**:
 - the "Add to your daily notes?" pop-up comes after a sync, at the daily check-in, or with **Add what you watched to daily notes…**;
 - untick anything that's wrong, and it isn't offered again;
 - **Not now** keeps them for later;

@@ -1620,6 +1620,32 @@ describe('PlexSync', () => {
     expect(sync.relatedOffers()).toEqual([])
   })
 
+  it('offers a Steam game played today for that day\'s Related, and later only when its playtime goes up', async () => {
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    const at = Math.floor(now.getTime() / 1000)
+    const daily = `Daily/${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.md`
+    const { app } = makeApp({
+      'Media/Video Games/Portal 2 (2011).md': { Link: 'https://store.steampowered.com/app/620/' },
+      [daily]: { Related: [] },
+    })
+    const settings = settingsWith({ dailyEpisodes: true, dailyFolder: 'Daily', dailyFormat: 'YYYY-MM-DD', steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = { 2: newLibrary('TV Shows', 'show', 'tv'), steam: newLibrary('Steam', 'steam', 'game') }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [] } })
+    const owned = (minutes: number) => { steamResponses = { 'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: minutes, rtime_last_played: at }] } } } }
+    owned(120)
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    await sync.writeDailyEpisodes()
+    expect(sync.relatedOffers().map(o => [o.path, o.link, o.kind])).toEqual([[daily, '[[Portal 2 (2011)]]', 'game']])
+    expect(settings.gamePlaytimes).toEqual({ 'steam-620': 120 })
+    // Turned down: not offered again, even when played more.
+    await sync.addRelated([], sync.relatedOffers())
+    owned(180)
+    await sync.writeDailyEpisodes()
+    expect(sync.relatedOffers()).toEqual([])
+    expect(settings.gamePlaytimes).toEqual({ 'steam-620': 180 })
+  })
+
   it('lists movies and fully watched shows you finished, to react to, and adds a reaction to the note', async () => {
     const at = Math.floor(Date.now() / 1000) - 3600
     const { app, frontmatter } = makeApp({

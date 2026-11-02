@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.185] - 2026-11-02
+
+### Added
+- Steam games you played are offered for your daily notes' Related property too, in the same "Add to your daily notes?" pop-up as movies and shows: a game whose playtime went up is offered for the day Steam says you last played it. The first time, only games played today are offered.
+
 ## [0.0.184] - 2026-11-02
 
 ### Removed

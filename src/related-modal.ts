@@ -19,7 +19,7 @@ export class RelatedModal extends Modal {
     // A click beside it doesn't close it: only its buttons (or Escape) do.
     this.containerEl.addClass('pmn-related-container')
     const { contentEl } = this
-    contentEl.createEl('p', { cls: 'setting-item-description', text: `Plex says you watched these. Ticked ones are added to ${this.pmnProperty} in that day's daily note; unticked ones aren't offered again. "Not now" keeps them all for later.` })
+    contentEl.createEl('p', { cls: 'setting-item-description', text: `Plex and Steam say you watched or played these. Ticked ones are added to ${this.pmnProperty} in that day's daily note; unticked ones aren't offered again. "Not now" keeps them all for later.` })
     const ticked = new Set(this.pmnOffers)
     let day = ''
     for (const offer of this.pmnOffers) {
@@ -36,7 +36,7 @@ export class RelatedModal extends Modal {
         else ticked.delete(offer)
       })
       row.createEl('strong', { text: offer.title })
-      row.createSpan({ cls: 'pmn-add-detail', text: ` · ${offer.kind === 'show' ? 'TV show' : 'Movie'} · ${moment.unix(offer.viewedAt).format('HH:mm')}` })
+      row.createSpan({ cls: 'pmn-add-detail', text: ` · ${offer.kind === 'show' ? 'TV show' : offer.kind === 'game' ? 'Game, last played' : 'Movie'} · ${moment.unix(offer.viewedAt).format('HH:mm')}` })
     }
     const buttons = contentEl.createDiv({ cls: 'modal-button-container' })
     buttons.createEl('button', { cls: 'mod-cta', text: 'Add the ticked ones' }).addEventListener('click', () => {

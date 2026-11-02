@@ -14,6 +14,7 @@ import { displayName, ratingKeyFromLink, type PlexItem } from './notes'
 import { PlexSync } from './sync'
 import { DEFAULT_TAGS } from './properties'
 import { PLAYLIST_VIEW, playlistView } from './playlist-view'
+import { COLLECTION_VIEW, collectionView } from './collection-view'
 import { RECOMMEND_VIEW, RecommendView } from './recommend-view'
 import { FinishedModal, ReactionModal, type ReactionAnswer } from './reaction-modal'
 import { vaultPropertyValues } from './property-suggest'
@@ -263,6 +264,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
         icon: 'list-music',
         factory: (controller, containerEl) => playlistView(controller, containerEl, () => this.settings),
         options: () => [{ type: 'text', key: 'playlistName', displayName: 'Playlist name in Plex', placeholder: 'This view\'s name' }],
+      })
+      this.registerBasesView(COLLECTION_VIEW, {
+        name: 'Plex collection',
+        icon: 'library',
+        factory: (controller, containerEl) => collectionView(controller, containerEl, () => this.settings),
+        options: () => [{ type: 'text', key: 'collectionName', displayName: 'Collection name in Plex', placeholder: 'This view\'s name' }],
       })
     }
 

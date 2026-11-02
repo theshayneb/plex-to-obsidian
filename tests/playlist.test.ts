@@ -102,9 +102,11 @@ describe('Plex playlists from a Base', () => {
     const { files, app, settings } = setup({ 'Music/Airbag.md': { Link: link('101') }, 'Music/Karma Police.md': { Link: link('100') } })
     responses.set('/library/metadata/101,100', responses.get('/library/metadata/100,101,7'))
     responses.set('/playlists', { MediaContainer: { Metadata: [{ ratingKey: '55', title: 'Road Trip ', smart: false, leafCount: 2 }] } })
-    responses.set('/playlists/55/items', { MediaContainer: { Metadata: [{ playlistItemID: 1 }, { playlistItemID: 2 }] } })
+    responses.set('/playlists/55/items', { MediaContainer: { Metadata: [{ playlistItemID: 1, ratingKey: '100', title: 'Karma Police', grandparentTitle: 'Radiohead' }, { playlistItemID: 2, ratingKey: '7', title: 'Lucky' }] } })
     const plan = await planPlaylist(app as never, settings, 'Road trip', files as never)
     expect(plan.existing).toEqual({ ratingKey: '55', count: 2 })
+    // What it holds now, to show what sending adds and removes.
+    expect(plan.current).toEqual([{ ratingKey: '100', title: 'Karma Police (Radiohead)' }, { ratingKey: '7', title: 'Lucky' }])
     sent.length = 0
     await sendPlaylist(settings, plan)
     expect(sent).toEqual([

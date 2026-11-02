@@ -14,7 +14,7 @@ vi.mock('obsidian', () => ({
   }),
 }))
 
-const { planCollections, sendCollections } = await import('../src/plex-collections')
+const { planBaseCollection, planCollections, sendCollections } = await import('../src/plex-collections')
 const { defaultSettings, newLibrary } = await import('../src/config')
 
 const link = (key: string) => `https://app.plex.tv/desktop/#!/server/abc/details?key=%2Flibrary%2Fmetadata%2F${key}`
@@ -82,5 +82,23 @@ describe('Plex collections from notes', () => {
       'DELETE /library/collections/50/items/9',
       'POST /library/collections?type=1&smart=0&sectionId=1&title=Michael Mann&uri=server://abc/com.plexapp.plugins.library/library/metadata/1',
     ])
+  })
+
+  it('plans a collection from a Base\'s notes, by the view\'s name, whatever their properties say', async () => {
+    const { settings } = setup({})
+    responses.set('/library/metadata/1,3', { MediaContainer: { Metadata: [
+      { ratingKey: '1', type: 'movie', title: 'Heat', librarySectionID: 1 },
+      { ratingKey: '3', type: 'movie', title: 'Elf', librarySectionID: 1 },
+    ] } })
+    const file = (path: string, frontmatter: Record<string, unknown>) => ({ path, basename: path.split('/').pop()!.replace(/\.md$/, ''), frontmatter })
+    const { plans, leftOut } = await planBaseCollection(settings, 'Heists', [
+      file('Media/Movies/Heat (1995).md', { Link: link('1') }),
+      file('Media/Movies/Elf (2003).md', { Link: link('3') }),
+      file('Media/Movies/No link.md', {}),
+    ])
+    expect(plans.map(p => [p.name, p.existing, p.add.map(a => a.title), p.remove.map(r => r.title)])).toEqual([
+      ['Heists', '50', ['Elf (2003)'], ['Ronin']],
+    ])
+    expect(leftOut).toEqual([{ path: 'Media/Movies/No link.md', reason: 'no Plex link' }])
   })
 })

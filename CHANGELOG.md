@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.183] - 2026-11-02
+
+### Added
+- A "Plex collection" Bases view, like the "Plex playlist" one: the Base's movie and show notes with a "Send to Plex" button, which shows what goes in and comes out before sending. Name it in the view's options ("Collection name in Plex"), else the view's name is used.
+
+### Changed
+- Sending a music playlist from a Base now shows what changes before anything is sent: the songs going in (+) and coming out (−), with the whole list in order underneath.
+
 ## [0.0.182] - 2026-10-31
 
 ### Removed

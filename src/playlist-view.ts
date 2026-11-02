@@ -12,18 +12,32 @@ class PlaylistModal extends Modal {
   }
 
   onOpen(): void {
-    const { songs, leftOut, existing, name } = this.pmnPlan
+    const { songs, leftOut, existing, name, current } = this.pmnPlan
     this.titleEl.setText(`Send "${name}" to Plex`)
     this.modalEl.addClass('pmn-check')
     const { contentEl } = this
     const count = `${songs.length} song${songs.length === 1 ? '' : 's'}`
+    // What changes: the songs going in (+) and coming out (−), as for collections.
+    const now = new Set(current.map(c => c.ratingKey))
+    const wanted = new Set(songs.map(s => s.ratingKey))
+    const added = songs.filter(s => !now.has(s.ratingKey))
+    const removed = current.filter(c => !wanted.has(c.ratingKey))
+    const reordered = !added.length && !removed.length && current.map(c => c.ratingKey).join() !== songs.map(s => s.ratingKey).join()
     contentEl.createEl('p', {
-      text: existing
-        ? `Plex already has a music playlist called "${name}" (${existing.count} song${existing.count === 1 ? '' : 's'}). Its songs are replaced with these ${count}, in this order.`
-        : `A new music playlist in Plex with these ${count}, in this order.`,
+      text: !existing
+        ? `A new music playlist in Plex with these ${count}, in the Base's order.`
+        : added.length || removed.length
+          ? `Plex's "${name}" (${existing.count} song${existing.count === 1 ? '' : 's'} now) ends up with these ${count}, in the Base's order.`
+          : reordered ? `Plex's "${name}" already has these ${count}; sending puts them in the Base's order.` : `Plex's "${name}" already has just these ${count}, in this order.`,
     })
-    const list = contentEl.createEl('ol', { cls: 'pmn-playlist-songs' })
+    const changes = contentEl.createEl('ul', { cls: 'pmn-collection-changes' })
+    for (const song of existing ? added : []) changes.createEl('li', { text: `+ ${song.title}` })
+    for (const song of removed) changes.createEl('li', { cls: 'pmn-collection-remove', text: `− ${song.title}` })
+    const all = contentEl.createEl('details')
+    all.createEl('summary', { text: `All ${count}, in order` })
+    const list = all.createEl('ol', { cls: 'pmn-playlist-songs' })
     for (const song of songs) list.createEl('li', { text: song.title })
+    if (!existing) all.open = true
     if (leftOut.length) {
       contentEl.createEl('p', { cls: 'setting-item-description', text: `Left out (${leftOut.length}):` })
       const out = contentEl.createEl('ul', { cls: 'pmn-playlist-songs' })

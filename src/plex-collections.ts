@@ -2,7 +2,7 @@
 // automatic collections of every note with a tag or theme (`settings.collectionRules`). Worked out first
 // (`planCollections`), sent afterwards (`sendCollections`); the pure parts are in collections.ts.
 import { normalizePath, type App } from 'obsidian'
-import { collectionChanges, fitsRule, parseCollectionRules, wantedCollections, type CollectionNote } from './collections'
+import { collectionChanges, fitsRule, parseCollectionRules, wantedCollections, type CollectionNote, type WantedCollection } from './collections'
 import { plexReady, type PlexNotesSettings } from './config'
 import type { PlexItem } from './notes'
 import { PlexClient } from './plex'
@@ -44,7 +44,7 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
   const plex = new PlexClient(settings.serverUrl, settings.token)
   const rules = parseCollectionRules(settings.collectionRules)
   const leftOut: { path: string, reason: string }[] = []
-  const wanting: { path: string, title: string, key: string, collections: string[], tags: string[], themes: string[] }[] = []
+  const wanting: Wanting[] = []
   const libraries = Object.entries(settings.libraries).filter(([key, lib]) => /^\d+$/.test(key) && ['movie', 'documentary', 'tv'].includes(lib.target))
   const seen = new Set<string>()
   // The property your movie and show notes name their collections in ("Playlist", any case).
@@ -70,7 +70,34 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
       wanting.push({ path: file.path, title: file.basename, key, collections, tags, themes })
     }
   }
-  // Which library each item is in (a collection holds one library's items).
+  const { notes, items } = await notesInPlex(plex, wanting, leftOut)
+  const wanted = wantedCollections(notes, rules).filter(c => which === 'all' || c.auto)
+  const { plans, unchanged } = await plansFor(plex, settings, wanted, items, leftOut)
+  return { plans, leftOut, unchanged }
+}
+
+/** Sends planned collections to Plex: new ones made, existing ones have items added and removed until they hold just the notes'. */
+export async function sendCollections(settings: PlexNotesSettings, plans: CollectionPlan[]): Promise<void> {
+  if (!plans.length) return
+  const plex = new PlexClient(settings.serverUrl, settings.token)
+  const machineId = await plex.machineIdentifier()
+  for (const plan of plans) {
+    const keys = plan.add.map(a => a.key)
+    let collection = plan.existing
+    let start = 0
+    if (!collection) {
+      collection = await plex.createCollection(plan.section, plan.type, plan.name, machineId, keys.slice(0, BATCH))
+      start = BATCH
+    }
+    for (; start < keys.length; start += BATCH) await plex.addToCollection(collection, machineId, keys.slice(start, start + BATCH))
+    for (const r of plan.remove) await plex.removeFromCollection(collection, r.key)
+  }
+}
+
+type Wanting = { path: string, title: string, key: string, collections: string[], tags: string[], themes: string[] }
+
+/** Each note's Plex item, and the library it's in (a collection holds one library's items); the rest left out, with why. */
+async function notesInPlex(plex: PlexClient, wanting: Wanting[], leftOut: { path: string, reason: string }[]): Promise<{ notes: CollectionNote[], items: Map<string, PlexItem> }> {
   const keys = [...new Set(wanting.map(w => w.key))]
   const items = new Map<string, PlexItem>()
   for (let i = 0; i < keys.length; i += BATCH) for (const item of await plex.items(keys.slice(i, i + BATCH))) items.set(item.ratingKey, item)
@@ -82,7 +109,11 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
     else if (item.librarySectionID === undefined) leftOut.push({ path: w.path, reason: 'Plex didn\'t say which library it\'s in' })
     else notes.push({ path: w.path, title: w.title, key: w.key, section: String(item.librarySectionID), collections: w.collections, tags: w.tags, themes: w.themes })
   }
-  const wanted = wantedCollections(notes, rules).filter(c => which === 'all' || c.auto)
+  return { notes, items }
+}
+
+/** What sending each wanted collection would change in Plex; ones already right are only counted, smart ones refused. */
+async function plansFor(plex: PlexClient, settings: PlexNotesSettings, wanted: WantedCollection[], items: Map<string, PlexItem>, leftOut: { path: string, reason: string }[]): Promise<{ plans: CollectionPlan[], unchanged: number }> {
   const plans: CollectionPlan[] = []
   let unchanged = 0
   const inPlex = new Map<string, Awaited<ReturnType<PlexClient['collections']>>>()
@@ -111,23 +142,24 @@ export async function planCollections(app: App, settings: PlexNotesSettings, whi
       remove: remove.map(key => ({ key, title: holding.find(i => i.ratingKey === key)?.title ?? key })),
     })
   }
-  return { plans, leftOut, unchanged }
+  return { plans, unchanged }
 }
 
-/** Sends planned collections to Plex: new ones made, existing ones have items added and removed until they hold just the notes'. */
-export async function sendCollections(settings: PlexNotesSettings, plans: CollectionPlan[]): Promise<void> {
-  if (!plans.length) return
+/**
+ * What sending a Base's notes to Plex as the collection `name` would change (one collection per
+ * library its movies and shows are in): each ends up holding just these notes. Sends nothing.
+ */
+export async function planBaseCollection(settings: PlexNotesSettings, name: string, files: { path: string, basename: string, frontmatter: Record<string, unknown> }[]): Promise<{ plans: CollectionPlan[], leftOut: { path: string, reason: string }[], unchanged: number }> {
+  if (!plexReady(settings)) throw new Error('Set up Plex in the plugin settings first')
   const plex = new PlexClient(settings.serverUrl, settings.token)
-  const machineId = await plex.machineIdentifier()
-  for (const plan of plans) {
-    const keys = plan.add.map(a => a.key)
-    let collection = plan.existing
-    let start = 0
-    if (!collection) {
-      collection = await plex.createCollection(plan.section, plan.type, plan.name, machineId, keys.slice(0, BATCH))
-      start = BATCH
-    }
-    for (; start < keys.length; start += BATCH) await plex.addToCollection(collection, machineId, keys.slice(start, start + BATCH))
-    for (const r of plan.remove) await plex.removeFromCollection(collection, r.key)
+  const leftOut: { path: string, reason: string }[] = []
+  const wanting: Wanting[] = []
+  for (const file of files) {
+    const key = songKeyOf(file.frontmatter, file.path, settings)
+    if (!key) leftOut.push({ path: file.path, reason: 'no Plex link' })
+    else wanting.push({ path: file.path, title: file.basename, key, collections: [name], tags: [], themes: [] })
   }
+  const { notes, items } = await notesInPlex(plex, wanting, leftOut)
+  const { plans, unchanged } = await plansFor(plex, settings, wantedCollections(notes, [], true, false), items, leftOut)
+  return { plans, leftOut, unchanged }
 }

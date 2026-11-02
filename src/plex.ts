@@ -162,8 +162,8 @@ export class PlexClient {
   }
 
   /** The entries of a playlist, each with the id Plex removes it by. */
-  async playlistEntries(playlistKey: string): Promise<{ playlistItemID: number }[]> {
-    return ((await this.get(`/playlists/${encodeURIComponent(playlistKey)}/items`)).Metadata ?? []) as unknown as { playlistItemID: number }[]
+  async playlistEntries(playlistKey: string): Promise<{ playlistItemID: number, ratingKey?: string, title?: string, grandparentTitle?: string }[]> {
+    return ((await this.get(`/playlists/${encodeURIComponent(playlistKey)}/items`)).Metadata ?? []) as unknown as { playlistItemID: number, ratingKey?: string, title?: string, grandparentTitle?: string }[]
   }
 
   /** Makes a music playlist of these items, in this order, and answers with its key. */

@@ -469,10 +469,19 @@ The card stays up to date as your notes change. Embedded randomizers have no hea
 
 In a Base (Obsidian 1.10 or later), add a view of type **Plex playlist**. It lists the Base's songs in order, with **Send to Plex**:
 - you're shown what goes in, and what's left out and why, before anything is sent;
+- the pop-up shows what changes: the songs going in (+) and coming out (−), and the whole list in order;
 - a playlist of the same name is emptied and refilled; a smart playlist is never touched;
 - the playlist's name is the view's name, unless you set **Playlist name in Plex** in the view's options.
 
 ### Collections
+
+**From a Base (the same way as playlists):** in a Base, add a view of type **Plex collection**. It lists the Base's movie and show notes, with **Send to Plex**:
+- you're shown what goes in (+) and comes out (−), and notes left out and why, before anything is sent;
+- the collection ends up holding exactly the Base's notes (one collection per library they're in);
+- its name is the view's name, unless you set **Collection name in Plex** in the view's options;
+- a smart collection is never touched.
+
+**Also (older ways, still there):**
 
 - **By hand**: put collection names in a movie or show note's **Playlist** property (for example `Heists`).
 - **Automatic**: in the settings, one rule per line, `Name: tag or theme`, for example `Comfort: comfort`, `Holiday: holiday` or `Found family: found family`. Each collection holds every movie or show note with that tag (or that in its Themes).

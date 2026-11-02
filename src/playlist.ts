@@ -20,6 +20,8 @@ export interface PlaylistPlan {
   leftOut: { path: string, reason: string }[]
   /** The music playlist of that name already in Plex, whose songs are replaced. */
   existing: { ratingKey: string, count: number } | null
+  /** The songs that playlist holds now, in its order, to show what sending adds and removes. */
+  current: { ratingKey: string, title: string }[]
 }
 
 /** Plex sends items to a playlist in batches this size, so a request's address stays short. */
@@ -101,7 +103,9 @@ export async function planPlaylist(app: App, settings: PlexNotesSettings, name: 
       songs.push({ path, ratingKey: item.ratingKey, title: item.grandparentTitle ? `${item.title} (${item.grandparentTitle})` : item.title })
     }
   }
-  return { name, songs, leftOut, existing: await existingPlaylist(plex, name, 'Give this view another playlist name.') }
+  const existing = await existingPlaylist(plex, name, 'Give this view another playlist name.')
+  const current = existing ? (await plex.playlistEntries(existing.ratingKey)).filter(e => e.ratingKey).map(e => ({ ratingKey: String(e.ratingKey), title: e.grandparentTitle ? `${e.title ?? ''} (${e.grandparentTitle})` : e.title ?? '' })) : []
+  return { name, songs, leftOut, existing, current }
 }
 
 /** Plex's music playlist of this name (give or take capitals and spaces at the ends); a smart one is refused. */
@@ -155,6 +159,7 @@ export async function sendRevisit(settings: PlexNotesSettings, picks: PlexItem[]
     songs: picks.map(track => ({ path: '', ratingKey: track.ratingKey, title: track.title })),
     leftOut: [],
     existing,
+    current: [],
   })
 }
 

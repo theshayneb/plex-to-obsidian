@@ -8,6 +8,8 @@ describe('insights', () => {
     expect(parseReaction('2026-10-16 · 🩷 · moved, happy · cried at the end', ['moved', 'happy'])).toEqual({ day: '2026-10-16', rating: '🩷', feelings: ['moved', 'happy'], text: 'cried at the end' })
     expect(parseReaction('2026-10-16 · not great, honestly', ['moved'])).toEqual({ day: '2026-10-16', feelings: [], text: 'not great, honestly' })
     expect(parseReaction('loved it', [])).toBeNull()
+    expect(parseReaction('2026-11-04 · S02E01 – The Return, S02E02 – Next · happy · LOL', ['happy']))
+      .toEqual({ day: '2026-11-04', episodes: 'S02E01 – The Return, S02E02 – Next', feelings: ['happy'], text: 'LOL' })
   })
 
   it('sums up a month: movies, shows, songs, favourites, feelings and rewatches', () => {

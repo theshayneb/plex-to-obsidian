@@ -21,6 +21,12 @@ export interface Reaction {
   tags: string[]
   /** A few words of your own. */
   text?: string
+  /**
+   * For a TV show (a note tagged tv_show): the episodes watched that day ("S02E01 – Title, …",
+   * possibly empty). Set, the line names them in place of the rating, which is the show's, not
+   * the episodes': it still goes in the note's rating property.
+   */
+  episodes?: string
 }
 
 /** Where a reaction goes in a note's properties. */
@@ -32,9 +38,14 @@ export interface ReactionProperties {
   rating: string
 }
 
-/** A reaction as one line of the Reactions list: "2026-10-16 · 🩷 · moved, happy · cried at the end". */
+/**
+ * A reaction as one line of the Reactions list: "2026-10-16 · 🩷 · moved, happy · cried at the end";
+ * for a TV show, "2026-11-04 · S02E01 – Title · entertained, happy · words" (no rating).
+ */
 export function reactionLine(r: Reaction): string {
-  return [r.date, r.rating, r.feelings.join(', '), r.text?.replace(/\s+/g, ' ').trim()].filter(Boolean).join(' · ')
+  const oneLine = (text: string | undefined) => text?.replace(/\s+/g, ' ').trim()
+  const middle = r.episodes !== undefined ? oneLine(r.episodes) : r.rating
+  return [r.date, middle, r.feelings.join(', '), oneLine(r.text)].filter(Boolean).join(' · ')
 }
 
 const listOf = (value: unknown): unknown[] => Array.isArray(value) ? value : value === undefined || value === null || value === '' ? [] : [value]

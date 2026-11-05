@@ -110,6 +110,22 @@ export function episodeLabel(e: WatchedEpisode): string {
 }
 
 /**
+ * A show's episodes watched on one day (`dayOf` turns a time into the day's key), for a reaction:
+ * "S02E01 – Title, S02E02 – Title", in the order watched, each once. The show is found by its
+ * rating keys, else (when its note has none) by its name, any case.
+ */
+export function episodesOn(episodes: WatchedEpisode[], keys: Set<string>, name: string, day: string, dayOf: (seconds: number) => string): string {
+  const labels: string[] = []
+  for (const e of [...episodes].sort((a, b) => a.viewedAt - b.viewedAt)) {
+    const isShow = keys.size ? keys.has(e.showKey) : e.show.trim().toLowerCase() === name.trim().toLowerCase()
+    if (!isShow || dayOf(e.viewedAt) !== day) continue
+    const label = episodeLabel(e)
+    if (label && !labels.includes(label)) labels.push(label)
+  }
+  return labels.join(', ')
+}
+
+/**
  * The episodes to write, by day (`dayOf` turns a time into the day's key): each show's episodes
  * watched that day, in the order watched, the shows in the order they were first watched.
  */

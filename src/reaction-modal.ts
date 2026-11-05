@@ -19,6 +19,11 @@ export interface ReactionChoices {
   tags: string[]
   /** What the note already has: shown as such, never removed. */
   has: { feelings: string[], themes: string[], tags: string[] }
+  /**
+   * For a TV show: the episodes Plex says you watched that day ("S02E01 – Title, …", maybe empty),
+   * editable; the line names them and leaves out the rating, which is the show's.
+   */
+  episodes?: string
 }
 
 /** What the pop-up ended with: a reaction, "not now" (asked again later) or "don't ask" about this one. */
@@ -32,6 +37,7 @@ export class ReactionModal extends Modal {
   private pmnRating: string | undefined
   private readonly pmnPicked = { feelings: new Set<string>(), themes: new Set<string>(), tags: new Set<string>() }
   private pmnText = ''
+  private pmnEpisodes: string | undefined
   private pmnAnswered = false
   /** The "Add your own" box's theme not yet added with Enter: added when saving. */
   private pmnOwnTheme: HTMLInputElement | null = null
@@ -39,6 +45,7 @@ export class ReactionModal extends Modal {
   constructor(app: App, private readonly pmnChoices: ReactionChoices, private readonly pmnDone: (answer: ReactionAnswer) => void, private readonly pmnInbox = false) {
     super(app)
     this.pmnRating = pmnChoices.rating && RATINGS.includes(pmnChoices.rating) ? pmnChoices.rating : undefined
+    this.pmnEpisodes = pmnChoices.episodes
   }
 
   onOpen(): void {
@@ -49,7 +56,19 @@ export class ReactionModal extends Modal {
     if (c.why) contentEl.createEl('p', { cls: 'pmn-review-wanted', text: `You wanted it because: ${c.why}` })
     contentEl.createEl('p', { cls: 'setting-item-description', text: `Everything here is optional. It's added to the note as a reaction for ${c.date}; nothing already there is removed.` })
 
-    const ratings = this.pmnSection('Rating').createDiv('pmn-reaction-chips')
+    if (this.pmnEpisodes !== undefined) {
+      new Setting(contentEl)
+        .setName('Episodes watched')
+        .setDesc(this.pmnEpisodes ? 'From Plex: named in the reaction instead of a rating.' : 'Plex has none of its episodes that day: type them if you like.')
+        .addText(text => {
+          text.setPlaceholder('Optional').setValue(this.pmnEpisodes ?? '').onChange(value => { this.pmnEpisodes = value })
+          text.inputEl.addClass('pmn-reaction-text')
+        })
+    }
+
+    const ratingSection = this.pmnSection(this.pmnEpisodes !== undefined ? 'Rating for the show' : 'Rating')
+    if (this.pmnEpisodes !== undefined) ratingSection.createDiv({ cls: 'setting-item-description', text: 'Goes in the note\'s rating, not in this reaction.' })
+    const ratings = ratingSection.createDiv('pmn-reaction-chips')
     const buttons = RATINGS.map(r => {
       const b = ratings.createEl('button', { cls: 'pmn-reaction-chip pmn-reaction-rating', text: r })
       b.addEventListener('click', () => {
@@ -148,6 +167,7 @@ export class ReactionModal extends Modal {
       themes: [...this.pmnPicked.themes, ...this.pmnOwnTheme?.value.trim() ? [this.pmnOwnTheme.value.trim()] : []],
       tags: [...this.pmnPicked.tags],
       text: this.pmnText.trim() || undefined,
+      ...this.pmnEpisodes !== undefined ? { episodes: this.pmnEpisodes.trim() } : {},
     } })
   }
 

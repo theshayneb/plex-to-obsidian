@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.186] - 2026-11-05
+
+- A TV show's reaction now names the episodes you watched that day, from Plex, in place of a rating: "2026-11-04 · S02E01 – Title · entertained, happy · your words". The pop-up shows them in an "Episodes watched" box you can change (or fill in, when Plex has none), and the rating you pick there is the show's: it still goes in the note's rating, just not in the reaction line. Only for notes tagged tv_show; movies and everything else are as before.
+- Insights still counts a show you've rated 🩷 among the favorites of the months you reacted to it.
+
 ## [0.0.185] - 2026-11-02
 
 ### Added

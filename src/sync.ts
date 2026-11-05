@@ -41,10 +41,10 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { readFileTags, readLyrics, writeLyrics, writeOwnTag } from './music-files'
@@ -1301,6 +1301,34 @@ export class PlexSync {
     const ratingOf = (l: LibrarySetting | undefined) => l?.properties.find(m => m.source === 'userRatingEmoji' && m.name.trim())?.name.trim()
     const rating = ratingOf(lib) ?? Object.values(this.settings.libraries).map(ratingOf).find(Boolean) ?? 'Rating'
     return { reactions: this.settings.reactionsProperty || 'Reactions', feelings: this.settings.feelingsProperty || 'Feelings', themes: this.settings.themesProperty || 'Themes', rating }
+  }
+
+  /** Whether a note is a TV show's (tagged as the TV library's notes are, tv_show by default). */
+  isShowNote(file: TFile): boolean {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const showTags = new Set([DEFAULT_TAGS.tv, ...Object.values(this.settings.libraries).filter(l => l.target === 'tv').map(l => l.values.tag)]
+      .filter(Boolean).map(t => t.replace(/^#/, '').toLowerCase()))
+    return listOf(fm.tags).some(t => showTags.has(String(t).trim().replace(/^#/, '').toLowerCase()))
+  }
+
+  /**
+   * The episodes of a show's note watched on a day (YYYY-MM-DD), from Plex's history, for its
+   * reaction: "S02E01 – Title, …", empty when there are none (or no Plex). Bedtime viewing and
+   * other libraries' skipped plays aren't counted, as everywhere.
+   */
+  async episodesWatchedOn(file: TFile, day: string): Promise<string> {
+    if (!plexReady(this.settings)) return ''
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const names = [...new Set(Object.values(this.settings.libraries).flatMap(l => linkPropertyNames(l.properties)))]
+    const keys = new Set([
+      ...names.map(name => ratingKeyFromLink(fm[name])).filter((k): k is string => !!k),
+      ...Object.entries(this.settings.merged).filter(([, m]) => m.path === file.path).map(([key]) => key),
+    ])
+    const [y, m, d] = day.split('-').map(Number)
+    const start = Math.floor(new Date(y, m - 1, d).getTime() / 1000)
+    const episodes = watchedEpisodes(this.counted(await plex.history(start))).filter(e => !this.bedtime(e.show, e.viewedAt))
+    return episodesOn(episodes, keys, file.basename, day, seconds => moment.unix(seconds).format('YYYY-MM-DD'))
   }
 
   /** Adds a reaction to a note (nothing in it is removed; a rating picked becomes its rating, in the star scale). */

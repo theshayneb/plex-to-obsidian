@@ -173,14 +173,18 @@ export class DashCards {
     const settings = this.plugin.settings
     const out: ReactionEvent[] = []
     const list = (value: unknown): string[] => (Array.isArray(value) ? value : value ? [value] : []).map(String)
+    const tvFolders = Object.values(settings.libraries).filter(lib => lib.target === 'tv').map(lib => `${lib.folder.replace(/\/+$/, '')}/`)
+    const stars = ['💣', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '🩷']
     for (const note of noteEntries(this.app, settings)) {
       const file = this.app.vault.getAbstractFileByPath(note.path)
       if (!(file instanceof TFile)) continue
       const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
       const feelings = [...settings.feelings, ...list(fm[settings.feelingsProperty || 'Feelings'])]
+      // A show's reactions name episodes, not a rating: the show's own rating stands for them.
+      const showRating = tvFolders.some(f => note.path.startsWith(f)) && note.level ? stars[note.level - 1] : undefined
       for (const line of list(fm[settings.reactionsProperty || 'Reactions'])) {
         const r = parseReaction(line, feelings)
-        if (r) out.push({ ...r, path: note.path, title: note.title, group: note.group })
+        if (r) out.push({ ...r, ...!r.rating && showRating ? { rating: showRating } : {}, path: note.path, title: note.title, group: note.group })
       }
     }
     return out

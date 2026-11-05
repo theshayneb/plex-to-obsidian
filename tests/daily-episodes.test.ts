@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gamesPlayed, inWindow, isListedShow, episodeEntry, episodeLabel, episodesByDay, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
+import { gamesPlayed, inWindow, isListedShow, episodeEntry, episodeLabel, episodesByDay, episodesOn, insertEntries, watchedEpisodes, type WatchedEpisode } from '../src/daily-episodes'
 
 const ep = (show: string, season: number, episode: number, title: string, viewedAt: number): WatchedEpisode =>
   ({ show, showKey: show, season, episode, title, viewedAt })
@@ -93,5 +93,26 @@ describe('games played, for the Related property', () => {
     const previous = { 'steam-1': 120, 'steam-2': 600 }
     const { played } = gamesPlayed([game('steam-1', 180, day), game('steam-2', 600, day - 86400), game('steam-4', 30, day), game('steam-5', 0)], previous, day)
     expect(played.map(g => g.key)).toEqual(['steam-1', 'steam-4'])
+  })
+})
+
+describe('episodesOn', () => {
+  const dayOf = (s: number) => new Date(s * 1000).toISOString().slice(0, 10)
+  const t = (d: string, h: number) => Math.floor(Date.parse(`${d}T${String(h).padStart(2, '0')}:00:00Z`) / 1000)
+  const eps = [
+    ep('Show', 2, 2, 'Second', t('2026-11-04', 21)),
+    ep('Show', 2, 1, 'First', t('2026-11-04', 20)),
+    ep('Show', 2, 1, 'First', t('2026-11-04', 22)),
+    ep('Other', 1, 1, 'Pilot', t('2026-11-04', 20)),
+    ep('Show', 1, 9, 'Earlier', t('2026-11-03', 20)),
+  ]
+
+  it('lists a show\'s episodes of that day, in the order watched, each once', () => {
+    expect(episodesOn(eps, new Set(['Show']), 'whatever', '2026-11-04', dayOf)).toBe('S02E01 – First, S02E02 – Second')
+    expect(episodesOn(eps, new Set(['Show']), 'whatever', '2026-11-05', dayOf)).toBe('')
+  })
+
+  it('finds the show by name when its note has no Plex link', () => {
+    expect(episodesOn(eps, new Set(), 'other', '2026-11-04', dayOf)).toBe('S01E01 – Pilot')
   })
 })

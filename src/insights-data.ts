@@ -40,6 +40,8 @@ export interface ReactionEvent {
   group: 'video' | 'music' | 'game' | 'book'
   day: string
   rating?: string
+  /** A TV show's reaction: the episodes watched that day ("S02E01 – Title, …"). */
+  episodes?: string
   feelings: string[]
   text?: string
 }
@@ -50,12 +52,14 @@ const RATINGS = ['💣', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '🩷']
  * A Reactions line's parts. The feelings part is told from a few words of your own by being a list
  * of feelings the note has (its Feelings property); a line that isn't a reaction gives null.
  */
-export function parseReaction(line: string, feelings: string[]): Pick<ReactionEvent, 'day' | 'rating' | 'feelings' | 'text'> | null {
+export function parseReaction(line: string, feelings: string[]): Pick<ReactionEvent, 'day' | 'rating' | 'episodes' | 'feelings' | 'text'> | null {
   const parts = line.split(' · ').map(p => p.trim())
   const day = parts.shift() ?? ''
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
-  const out: Pick<ReactionEvent, 'day' | 'rating' | 'feelings' | 'text'> = { day, feelings: [] }
+  const out: Pick<ReactionEvent, 'day' | 'rating' | 'episodes' | 'feelings' | 'text'> = { day, feelings: [] }
   if (parts[0] && RATINGS.includes(parts[0])) out.rating = parts.shift()
+  // A TV show's reaction names the episodes watched in place of a rating.
+  else if (parts[0] && /^S\d+E\d+\b/.test(parts[0])) out.episodes = parts.shift()
   const known = new Set(feelings.map(f => f.toLowerCase()))
   if (parts[0]) {
     const words = parts[0].split(',').map(w => w.trim()).filter(Boolean)

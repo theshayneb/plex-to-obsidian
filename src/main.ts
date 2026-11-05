@@ -591,8 +591,18 @@ export default class PlexMediaNotesPlugin extends Plugin {
   }
 
   /** The reaction pop-up for a note; a reaction given is added to it. */
-  reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
+  async reactTo(file: TFile, date: string, inbox = false): Promise<ReactionAnswer> {
     const sync = new PlexSync(this.app, this.settings, () => this.saveSettings())
+    // A TV show's reaction names the episodes watched that day (from Plex) instead of a rating.
+    let episodes: string | undefined
+    if (sync.isShowNote(file)) {
+      try {
+        episodes = await sync.episodesWatchedOn(file, date)
+      } catch (err) {
+        console.warn('Media Manager: reading the episodes watched failed', err)
+        episodes = ''
+      }
+    }
     const names = sync.reactionProperties(file)
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const list = (value: unknown): string[] => (Array.isArray(value) ? value : value ? [value] : []).map(String)
@@ -610,6 +620,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
         tags: this.settings.reactionTags,
         // Type tags (movie, tv_show, song…) say what it is, not how it felt: not shown.
         has: { feelings: list(fm[names.feelings]), themes: list(fm[names.themes]), tags: list(fm.tags).map(t => t.replace(/^#/, '')).filter(t => !typeTags.has(t.toLowerCase())) },
+        episodes,
       }, answer => {
         // Answered once the reaction is in the note, so whatever shows it can redraw with it.
         if (typeof answer === 'object') {

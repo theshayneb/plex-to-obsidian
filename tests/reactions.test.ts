@@ -10,6 +10,15 @@ describe('reactions', () => {
     expect(reactionLine({ date: '2026-10-16', feelings: [], themes: [], tags: [] })).toBe('2026-10-16')
   })
 
+  it('names a TV show\'s episodes in place of the rating', () => {
+    const r = { date: '2026-11-04', rating: '⭐⭐⭐⭐', feelings: ['entertained', 'happy'], themes: [], tags: [], text: 'Just as strong!' }
+    expect(reactionLine({ ...r, episodes: 'S02E01 – The Return' })).toBe('2026-11-04 · S02E01 – The Return · entertained, happy · Just as strong!')
+    expect(reactionLine({ ...r, episodes: '' })).toBe('2026-11-04 · entertained, happy · Just as strong!')
+    const fm: Record<string, unknown> = {}
+    addReaction(fm, { ...r, episodes: 'S02E01 – The Return' }, names)
+    expect(fm.Rating).toBe('⭐⭐⭐⭐')
+  })
+
   it('adds to what the note has, never removing anything', () => {
     const fm: Record<string, unknown> = { Reactions: '2020-01-01 · ⭐⭐⭐', Feelings: ['Moved'], Themes: ['loyalty'], tags: ['movie'], Rating: '⭐⭐⭐' }
     addReaction(fm, { date: '2026-10-16', rating: '🩷', feelings: ['moved', 'sad'], themes: ['chosen family'], tags: ['#comfort'], text: 'better the second time' }, names)

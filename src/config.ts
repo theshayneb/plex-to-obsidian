@@ -1,6 +1,7 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
 import { DEFAULT_COLLECTION_RULES } from './collections'
 import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES } from './reactions'
+import { relatedKey } from './daily-episodes'
 import type { PickFilter } from './randomizer'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
 import {
@@ -627,4 +628,38 @@ function migrateOnce(settings: PlexNotesSettings, saved: { migrations?: unknown 
   if (settings.migrations.includes(name)) return
   if (Object.keys(saved).length) change()
   settings.migrations.push(name)
+}
+
+/** Your answers that must never be lost to an older copy of the settings: Related "no"s and finishings answered. */
+export interface KeptAnswers {
+  relatedDeclined: string[]
+  reactionsDone: Record<string, number>
+}
+
+/**
+ * Adds `other`'s answers to the settings' (each once; neither list can be undone by hand, so a
+ * union never brings back anything taken out on purpose), dropping waiting Related offers now
+ * refused. Whether anything was added.
+ */
+export function mergeAnswers(settings: PlexNotesSettings, other: Partial<KeptAnswers> | null | undefined): boolean {
+  let added = false
+  const declined = new Set(settings.relatedDeclined)
+  for (const key of Array.isArray(other?.relatedDeclined) ? other.relatedDeclined : []) {
+    if (typeof key === 'string' && !declined.has(key)) {
+      declined.add(key)
+      settings.relatedDeclined.push(key)
+      added = true
+    }
+  }
+  settings.relatedDeclined = settings.relatedDeclined.slice(-1000)
+  const done = other?.reactionsDone && typeof other.reactionsDone === 'object' ? other.reactionsDone : {}
+  for (const [key, at] of Object.entries(done)) {
+    if (typeof at === 'number' && !(key in settings.reactionsDone)) {
+      settings.reactionsDone[key] = at
+      added = true
+    }
+  }
+  const pending = settings.relatedPending.filter(o => !declined.has(relatedKey(o.path, o.link)))
+  if (pending.length !== settings.relatedPending.length) settings.relatedPending = pending
+  return added
 }

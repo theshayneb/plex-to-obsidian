@@ -8,7 +8,7 @@ import { ExplainModal } from './explain-modal'
 import { TieModal } from './tie-modal'
 import { plexReady } from './config'
 import { PlexClient } from './plex'
-import { defaultSettings, loadSettings, type PlexNotesSettings } from './config'
+import { defaultSettings, loadSettings, mergeAnswers, type KeptAnswers, type PlexNotesSettings } from './config'
 import { errorMessage, PlexNotesSettingTab } from './settings'
 import { displayName, ratingKeyFromLink, type PlexItem } from './notes'
 import { PlexSync } from './sync'
@@ -25,7 +25,10 @@ import { planRevisit, REVISIT_PLAYLIST, sendRevisit } from './playlist'
 import { planCollections, planSignature, sendCollections } from './plex-collections'
 import { parseCollectionRules } from './collections'
 import { CollectionsModal } from './collections-modal'
-import { minutesOf, relatedKey } from './daily-episodes'
+import { minutesOf } from './daily-episodes'
+
+/** Where each device keeps its own copy of your answers (`mergeAnswers`). */
+const ANSWERS_BACKUP = 'pmn-kept-answers'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -664,6 +667,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = loadSettings(await this.loadData())
+    // Answers this device remembers that an older copy from another device left out go back in.
+    if (mergeAnswers(this.settings, this.pmnAnswersBackup())) await this.saveSettings()
+  }
+
+  /** This device's own copy of your answers (kept in Obsidian's local storage, not synced). */
+  private pmnAnswersBackup(): Partial<KeptAnswers> | null {
+    try {
+      return this.app.loadLocalStorage(ANSWERS_BACKUP) as Partial<KeptAnswers> | null
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -673,17 +687,13 @@ export default class PlexMediaNotesPlugin extends Plugin {
    */
   async reloadSettings(): Promise<void> {
     if (this.plexSyncRunning) return
-    const before = { declined: [...this.settings.relatedDeclined], done: { ...this.settings.reactionsDone } }
+    const before: KeptAnswers = { relatedDeclined: [...this.settings.relatedDeclined], reactionsDone: { ...this.settings.reactionsDone } }
     Object.assign(this.settings, loadSettings(await this.loadData()))
-    // Answers given here are kept even when another device's older copy comes in through Sync:
-    // a "no" to a Related link, a reaction to something finished. Neither can be undone, so
-    // keeping both sides' never brings back anything taken out on purpose.
-    const declined = [...this.settings.relatedDeclined, ...before.declined.filter(k => !this.settings.relatedDeclined.includes(k))]
-    this.settings.relatedDeclined = declined.slice(-1000)
-    this.settings.relatedPending = this.settings.relatedPending.filter(o => !declined.includes(relatedKey(o.path, o.link)))
-    for (const [key, at] of Object.entries(before.done)) {
-      if (!(key in this.settings.reactionsDone)) this.settings.reactionsDone[key] = at
-    }
+    // Answers given here are kept even when another device's older copy comes in through Sync
+    // (a "no" to a Related link, a reaction to something finished), and written back so the
+    // other devices get them too.
+    const added = mergeAnswers(this.settings, before)
+    if (mergeAnswers(this.settings, this.pmnAnswersBackup()) || added) await this.saveSettings()
   }
 
   /** Obsidian calls this when the settings file changes on disk, say through Obsidian Sync. */
@@ -693,6 +703,12 @@ export default class PlexMediaNotesPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings)
+    try {
+      const kept: KeptAnswers = { relatedDeclined: this.settings.relatedDeclined, reactionsDone: this.settings.reactionsDone }
+      this.app.saveLocalStorage(ANSWERS_BACKUP, kept)
+    } catch {
+      // Only a backup.
+    }
   }
 
   /** Makes a note for an item picked in "Add something new", or opens the one it already has. */

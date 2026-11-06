@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.188] - 2026-11-06
+
+- Related links you've said no to (and things you've reacted to in "Just finished") now stay answered even when another device saves an older copy of the plugin's settings and Obsidian Sync brings it here, also after Obsidian restarts. Each device keeps its own copy of your answers and puts any that are missing back into the settings, which then carry them to your other devices.
+
 ## [0.0.187] - 2026-11-06
 
 - The dashboard's "Just finished" no longer keeps showing things you've reacted to since it opened (in the check-in, say): it's checked again every time the dashboard redraws. Anything whose note already has a reaction from that day or later counts as answered, wherever the reaction came from.

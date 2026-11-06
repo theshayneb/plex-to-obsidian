@@ -40,7 +40,7 @@ import {
 } from './notes'
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
-import { addReaction, finishedKey, type Finished, type Reaction, type ReactionProperties } from './reactions'
+import { addReaction, finishedKey, reactedSince, type Finished, type Reaction, type ReactionProperties } from './reactions'
 import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
@@ -1209,11 +1209,11 @@ export class PlexSync {
     const now = Math.floor(Date.now() / 1000)
     const history = this.counted(await plex.history(now - 14 * 86400))
     const { notes, ignoredShow, ignoredMovie } = this.watchNotes()
-    const done = (key: string, at: number) => finishedKey(key, moment.unix(at).format('YYYY-MM-DD')) in this.settings.reactionsDone
+    const done = (key: string, at: number, note: TFile) => this.finishedDone(key, at, note)
     const out: Finished[] = []
     for (const m of watchedMovies(history)) {
       const note = notes.get(m.key)
-      if (!note || ignoredMovie(m.key, m.title) || done(m.key, m.viewedAt) || out.some(f => f.key === m.key)) continue
+      if (!note || ignoredMovie(m.key, m.title) || done(m.key, m.viewedAt, note) || out.some(f => f.key === m.key)) continue
       out.push({ key: m.key, title: note.basename, kind: 'movie', viewedAt: m.viewedAt, path: note.path })
     }
     const lastSeen = new Map<string, number>()
@@ -1222,7 +1222,7 @@ export class PlexSync {
     }
     for (const [key, at] of lastSeen) {
       const note = notes.get(key)
-      if (!note || done(key, at)) continue
+      if (!note || done(key, at, note)) continue
       // Finished: every episode Plex has is watched.
       const show = await plex.item(key).catch(() => null)
       if (!show?.leafCount || (show.viewedLeafCount ?? 0) < show.leafCount) continue
@@ -1285,6 +1285,19 @@ export class PlexSync {
       KNOWN_LENGTHS.set(key, item?.duration ? Math.round(item.duration / 60000) : 0)
     })))
     return KNOWN_LENGTHS
+  }
+
+  /**
+   * Whether a finishing needs no reaction any more: answered or set aside here, or its note
+   * already has a reaction from that day or later (however it got there).
+   */
+  finishedDone(key: string, viewedAt: number, note: TFile): boolean {
+    const day = moment.unix(viewedAt).format('YYYY-MM-DD')
+    if (finishedKey(key, day) in this.settings.reactionsDone) return true
+    const fm = this.app.metadataCache.getFileCache(note)?.frontmatter ?? {}
+    const name = (this.settings.reactionsProperty || 'Reactions').toLowerCase()
+    const prop = Object.keys(fm).find(k => k.toLowerCase() === name)
+    return !!prop && reactedSince(fm[prop], day)
   }
 
   /** Remembers a finishing as answered or set aside, so it isn't offered again (forgetting those over a month old). */

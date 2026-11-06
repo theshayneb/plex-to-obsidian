@@ -19,7 +19,7 @@ export class RelatedModal extends Modal {
     // A click beside it doesn't close it: only its buttons (or Escape) do.
     this.containerEl.addClass('pmn-related-container')
     const { contentEl } = this
-    contentEl.createEl('p', { cls: 'setting-item-description', text: `Plex and Steam say you watched or played these. Ticked ones are added to ${this.pmnProperty} in that day's daily note; unticked ones aren't offered again. "Not now" keeps them all for later.` })
+    contentEl.createEl('p', { cls: 'setting-item-description', text: `Plex and Steam say you watched or played these. Ticked ones are added to ${this.pmnProperty} in that day's daily note; unticked ones aren't offered again (nor are any, with "None of these"). "Not now" asks again later.` })
     const ticked = new Set(this.pmnOffers)
     let day = ''
     for (const offer of this.pmnOffers) {
@@ -42,6 +42,7 @@ export class RelatedModal extends Modal {
     buttons.createEl('button', { cls: 'mod-cta', text: 'Add the ticked ones' }).addEventListener('click', () => {
       this.pmnAnswer({ yes: this.pmnOffers.filter(o => ticked.has(o)), no: this.pmnOffers.filter(o => !ticked.has(o)) })
     })
+    buttons.createEl('button', { text: 'None of these' }).addEventListener('click', () => this.pmnAnswer({ yes: [], no: [...this.pmnOffers] }))
     buttons.createEl('button', { text: 'Not now' }).addEventListener('click', () => this.pmnAnswer('later'))
   }
 

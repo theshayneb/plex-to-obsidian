@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addReaction, reactionLine, wordList } from '../src/reactions'
+import { addReaction, reactedSince, reactionLine, wordList } from '../src/reactions'
 
 const names = { reactions: 'Reactions', feelings: 'Feelings', themes: 'Themes', rating: 'Rating' }
 
@@ -37,5 +37,14 @@ describe('reactions', () => {
 
   it('reads the settings\' word lists', () => {
     expect(wordList('moved\n sad, happy\n\nMoved')).toEqual(['moved', 'sad', 'happy'])
+  })
+
+  it('tells whether a note already has a reaction from a day or later', () => {
+    const lines = ['2026-10-01 · ⭐⭐⭐', '2026-11-05 · S02E01 – Title · happy']
+    expect(reactedSince(lines, '2026-11-04')).toBe(true)
+    expect(reactedSince(lines, '2026-11-05')).toBe(true)
+    expect(reactedSince(lines, '2026-11-06')).toBe(false)
+    expect(reactedSince('2026-11-05 · 🩷', '2026-11-05')).toBe(true)
+    expect(reactedSince(undefined, '2026-11-05')).toBe(false)
   })
 })

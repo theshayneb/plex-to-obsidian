@@ -92,5 +92,16 @@ export interface Finished {
   path: string
 }
 
+/**
+ * Whether a note's Reactions already have one from that day or later (reaction lines start with
+ * their date), so a finishing it reacts to needn't be asked about.
+ */
+export function reactedSince(reactions: unknown, day: string): boolean {
+  return listOf(reactions).some(line => {
+    const date = /^(\d{4}-\d{2}-\d{2})\b/.exec(String(line).trim())?.[1]
+    return !!date && date >= day
+  })
+}
+
 /** What a finishing is remembered as once answered or set aside: the item and the day, so a rewatch is asked about again. */
 export const finishedKey = (key: string, day: string): string => `${key}@${day}`

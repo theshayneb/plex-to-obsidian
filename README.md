@@ -352,8 +352,9 @@ With **Watched episodes in daily notes** on, each sync, background update and **
 
 **Related** (the property in **Link in a property**, default `Related`): every movie and show you watched that day is offered as a link for that day's daily note. So are **Steam games** whose playtime went up, for the day Steam says you last played them (Steam keeps no day-by-day history, so a game played on several days between two looks is only offered for the last of them). It's **never added without asking**:
 - the "Add to your daily notes?" pop-up comes after a sync, at the daily check-in, or with **Add what you watched to daily notes…**;
-- untick anything that's wrong, and it isn't offered again;
-- **Not now** keeps them for later;
+- untick anything that's wrong, and it isn't offered again (for that day: watching it again on a later day offers it for that day);
+- **None of these** turns them all down, the same way;
+- **Not now** keeps them for later (so does closing it), and they're asked about again;
 - clicking beside the pop-up doesn't close it.
 
 Your books and games count on the dashboard by the days your daily notes' Related links them.
@@ -382,7 +383,7 @@ What it writes:
 
 **TV shows** (notes tagged `tv_show`) are a little different: the pop-up fills an **Episodes watched** box with that day's episodes from Plex (change it, or type them in when Plex has none), and the line names them instead of a rating, such as `2026-11-04 · S02E01 – Title · entertained, happy · just as strong as the first season`. The rating you pick there, **Rating for the show**, still becomes the note's rating, but isn't put in the line, since it's for the show rather than those episodes. Insights counts a 🩷 show among the favorites by its own rating. Movies and everything else work as above.
 
-**Just finished** lists the movies and shows you finished in the last two weeks that have a note (a show once every episode is watched). Pick one to react, or **Not now** to come back later. In the "How was it?" pop-up, **Don't ask about this** stops one coming back. A rewatch is asked about again.
+**Just finished** lists the movies and shows you finished in the last two weeks that have a note (a show once every episode is watched). Pick one to react, or **Not now** to come back later. In the "How was it?" pop-up, **Don't ask about this** stops one coming back. A rewatch is asked about again. Anything whose note already has a reaction from that day or later counts as answered, however the reaction got there.
 
 **Notes** (your note's `Notes` property) is yours alone. The plugin only checks whether it's empty: things you rated 🩷 or 💣 with empty Notes show in "Worth a few words" on the dashboard, and **Write about it** opens the note with the cursor in its Notes property.
 

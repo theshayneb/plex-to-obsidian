@@ -25,7 +25,7 @@ import { planRevisit, REVISIT_PLAYLIST, sendRevisit } from './playlist'
 import { planCollections, planSignature, sendCollections } from './plex-collections'
 import { parseCollectionRules } from './collections'
 import { CollectionsModal } from './collections-modal'
-import { minutesOf } from './daily-episodes'
+import { minutesOf, relatedKey } from './daily-episodes'
 
 /**
  * The progress message in the corner during a sync or check. It comes back if it was closed (a
@@ -673,7 +673,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
    */
   async reloadSettings(): Promise<void> {
     if (this.plexSyncRunning) return
+    const before = { declined: [...this.settings.relatedDeclined], done: { ...this.settings.reactionsDone } }
     Object.assign(this.settings, loadSettings(await this.loadData()))
+    // Answers given here are kept even when another device's older copy comes in through Sync:
+    // a "no" to a Related link, a reaction to something finished. Neither can be undone, so
+    // keeping both sides' never brings back anything taken out on purpose.
+    const declined = [...this.settings.relatedDeclined, ...before.declined.filter(k => !this.settings.relatedDeclined.includes(k))]
+    this.settings.relatedDeclined = declined.slice(-1000)
+    this.settings.relatedPending = this.settings.relatedPending.filter(o => !declined.includes(relatedKey(o.path, o.link)))
+    for (const [key, at] of Object.entries(before.done)) {
+      if (!(key in this.settings.reactionsDone)) this.settings.reactionsDone[key] = at
+    }
   }
 
   /** Obsidian calls this when the settings file changes on disk, say through Obsidian Sync. */

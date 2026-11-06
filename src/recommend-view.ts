@@ -575,7 +575,16 @@ export class RecommendView extends ItemView {
     const finished = parent.createDiv('pmn-card')
     finished.createDiv({ cls: 'pmn-card-title', text: 'Just finished' })
     if (!this.pmnFinished) finished.createEl('p', { cls: 'pmn-dash-empty', text: 'Looking in Plex…' })
-    else if (!this.pmnFinished.length) finished.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
+    // The list is read when the dashboard opens: what you've reacted to since (in the check-in,
+    // a pop-up or by hand) drops off at every redraw.
+    const sync = new PlexSync(this.app, this.pmnPlugin.settings, () => this.pmnPlugin.saveSettings())
+    if (this.pmnFinished) {
+      this.pmnFinished = this.pmnFinished.filter(item => {
+        const note = this.app.vault.getAbstractFileByPath(item.path)
+        return note instanceof TFile && !sync.finishedDone(item.key, item.viewedAt, note)
+      })
+      if (!this.pmnFinished.length) finished.createEl('p', { cls: 'pmn-dash-empty', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
+    }
     for (const item of this.pmnFinished ?? []) {
       const row = finished.createDiv('pmn-rec-row')
       const text = row.createDiv('pmn-rec-text')

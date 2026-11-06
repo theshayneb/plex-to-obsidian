@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.187] - 2026-11-06
+
+- The dashboard's "Just finished" no longer keeps showing things you've reacted to since it opened (in the check-in, say): it's checked again every time the dashboard redraws. Anything whose note already has a reaction from that day or later counts as answered, wherever the reaction came from.
+- The "Add to your daily notes?" pop-up has a "None of these" button, which turns everything in it down for good (for those days). "Not now" and closing it still ask again later.
+- Your "no" to a Related link and your answers to "Just finished" are no longer lost when Obsidian Sync brings in an older copy of the settings from another device.
+
 ## [0.0.186] - 2026-11-05
 
 - A TV show's reaction now names the episodes you watched that day, from Plex, in place of a rating: "2026-11-04 · S02E01 – Title · entertained, happy · your words". The pop-up shows them in an "Episodes watched" box you can change (or fill in, when Plex has none), and the rating you pick there is the show's: it still goes in the note's rating, just not in the reaction line. Only for notes tagged tv_show; movies and everything else are as before.

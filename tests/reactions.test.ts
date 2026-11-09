@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addReaction, reactedSince, reactionLine, wordList } from '../src/reactions'
+import { addReaction, finishSeen, reactedSince, reactionLine, wordList } from '../src/reactions'
 
 const names = { reactions: 'Reactions', feelings: 'Feelings', themes: 'Themes', rating: 'Rating' }
 
@@ -46,5 +46,15 @@ describe('reactions', () => {
     expect(reactedSince(lines, '2026-11-06')).toBe(false)
     expect(reactedSince('2026-11-05 · 🩷', '2026-11-05')).toBe(true)
     expect(reactedSince(undefined, '2026-11-05')).toBe(false)
+  })
+
+  it('remembers when each game was first seen in a finishing Steam collection', () => {
+    // The first look: what's there is marked as already there.
+    const first = finishSeen({ 'steam-1': 'completed' }, null, 100)
+    expect(first).toEqual({ 'steam-1': { status: 'completed', at: 100, existing: true } })
+    // Later: still there keeps its date; moved in gets this look's; taken out is forgotten.
+    const second = finishSeen({ 'steam-1': 'Completed', 'steam-2': 'abandoned' }, first, 200)
+    expect(second).toEqual({ 'steam-1': { status: 'completed', at: 100, existing: true }, 'steam-2': { status: 'abandoned', at: 200 } })
+    expect(finishSeen({ 'steam-2': 'completed' }, second, 300)).toEqual({ 'steam-2': { status: 'completed', at: 300 } })
   })
 })

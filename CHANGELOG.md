@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.195] - 2026-11-10
+
+- "Just finished" now includes games you move into a Steam collection that finishes them: any collection your Steam library's "Status from Steam collections" maps to completed or abandoned. Each shows its status and playtime, and "How was it?" records your rating, feelings, themes and words as for movies, dated the day the plugin first sees the game there. Games already in those collections are offered once, for a month, if their note has no reaction yet. This needs the computer with Steam on it.
+
 ## [0.0.194] - 2026-11-10
 
 - **Sync and Check are one command.** The "Sync with Plex and Steam…" pop-up lists every library with "Also compare these properties" under it. Tick some to compare those notes with their sources during the sync; tick none for a quick sync. Your choices are remembered. Books are in it too, off unless you switch them on, and slow lookups are pointed out. "Check notes against sources…" is gone; "Check this note" and "Fix year-only dates" stay.

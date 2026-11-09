@@ -205,11 +205,11 @@ export class FinishedModal extends Modal {
     if (!this.pmnItems.length) {
       contentEl.createEl('p', { cls: 'pmn-review-hint', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
     } else {
-      contentEl.createDiv({ cls: 'pmn-review-hint', text: 'Movies, and shows with every episode watched, in the last two weeks.' })
+      contentEl.createDiv({ cls: 'pmn-review-hint', text: 'Movies, shows with every episode watched, and games you moved into a Steam collection that finishes them, in the last two weeks.' })
       const head = contentEl.createDiv('pmn-review-section')
       head.createEl('h3', { text: 'To react to' })
       const flow = head.createSpan('pmn-review-flow')
-      flow.createSpan({ cls: 'pmn-review-pill', text: 'You' })
+      flow.createSpan({ cls: 'pmn-review-pill', text: 'Plex and Steam' })
       flow.createSpan({ cls: 'pmn-review-arrow', text: '→' })
       flow.createSpan({ cls: ['pmn-review-pill', 'is-obsidian'], text: 'Obsidian: Reactions, Feelings, Themes' })
       const card = contentEl.createDiv('pmn-review-card')
@@ -217,7 +217,11 @@ export class FinishedModal extends Modal {
         const row = card.createDiv('pmn-finished-row')
         const text = row.createDiv('pmn-finished-text')
         text.createEl('strong', { text: item.title })
-        text.createSpan({ cls: 'pmn-add-detail', text: ` ${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${moment.unix(item.viewedAt).format('ddd D MMM')}` })
+        if (item.kind === 'game') {
+          // A game: the Steam collection's status, when it went in, how long you played.
+          if (item.status) text.createSpan({ cls: ['pmn-finished-status', /abandon/i.test(item.status) ? 'is-abandoned' : 'is-completed'], text: item.status })
+          text.createDiv({ cls: 'pmn-add-detail', text: [`Game · moved in ${moment.unix(item.viewedAt).format('ddd D MMM')}`, item.playtime ? `${Math.round(item.playtime / 60)} h played` : ''].filter(Boolean).join(' · ') })
+        } else text.createSpan({ cls: 'pmn-add-detail', text: ` ${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${moment.unix(item.viewedAt).format('ddd D MMM')}` })
         // "Not this one": set aside for good (a rewatch is asked about again).
         if (this.pmnSetAside) {
           const setAside = this.pmnSetAside

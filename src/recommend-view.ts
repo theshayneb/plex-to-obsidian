@@ -589,7 +589,8 @@ export class RecommendView extends ItemView {
       const row = finished.createDiv('pmn-rec-row')
       const text = row.createDiv('pmn-rec-text')
       this.cards.link(text, item.title, item.path)
-      text.createDiv({ cls: 'pmn-rec-why', text: `${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${new Date(item.viewedAt * 1000).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}` })
+      const what = item.kind === 'game' ? `Game, ${item.status ?? 'finished'} in Steam` : item.kind === 'show' ? 'TV show, all watched' : 'Movie'
+      text.createDiv({ cls: 'pmn-rec-why', text: `${what} · ${new Date(item.viewedAt * 1000).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}` })
       row.createDiv('pmn-rec-buttons').createEl('button', { text: 'How was it?' }).addEventListener('click', () => {
         void this.pmnPlugin.reactToFinished(item).then(answer => {
           if (answer !== 'later') this.pmnFinished = (this.pmnFinished ?? []).filter(f => f !== item)

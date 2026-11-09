@@ -1,6 +1,6 @@
 // Settings shape, defaults and migration. No Obsidian imports, so it can be unit tested.
 import { DEFAULT_COLLECTION_RULES } from './collections'
-import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES } from './reactions'
+import { DEFAULT_FEELINGS, DEFAULT_REACTION_TAGS, DEFAULT_REACTION_THEMES, type FinishSeen } from './reactions'
 import { relatedKey } from './daily-episodes'
 import type { PickFilter } from './randomizer'
 import { defaultLibraryTarget, type LibraryTarget, type MatchBy, type MediaKind } from './notes'
@@ -132,6 +132,8 @@ export interface PlexNotesSettings {
   relatedPending: RelatedOffer[]
   /** Each Steam game's total playtime (minutes) when last looked at, by `steam-<appid>`, to tell which were played since; null before the first look. */
   gamePlaytimes: Record<string, number> | null
+  /** Games in a Steam collection that finishes them (completed, abandoned), by `steam-<appid>`, and since when (`finishSeen`); null before the first look. */
+  gameFinishSeen: Record<string, FinishSeen> | null
   /** Related links you said no to (`relatedKey`: daily note path and link target), not offered again. */
   relatedDeclined: string[]
   /** Last.fm API key, for music suggestions from outside your library on the recommendations page. */
@@ -302,6 +304,7 @@ export function defaultSettings(): PlexNotesSettings {
     relatedPending: [],
     relatedDeclined: [],
     gamePlaytimes: null,
+    gameFinishSeen: null,
     imagesSubfolder: 'Images',
     fileNameReplacements: { '[': '(', ']': ')' },
     renameExistingNotes: true,
@@ -466,6 +469,10 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.listenedTo)) settings.listenedTo = saved.listenedTo.map(String)
   if (saved.lastfmGaps && typeof saved.lastfmGaps === 'object') settings.lastfmGaps = Object.fromEntries(Object.entries(saved.lastfmGaps as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v as number]))
   if (Array.isArray(saved.collectionsDeclined)) settings.collectionsDeclined = saved.collectionsDeclined.map(String)
+  if (saved.gameFinishSeen && typeof saved.gameFinishSeen === 'object') {
+    settings.gameFinishSeen = Object.fromEntries(Object.entries(saved.gameFinishSeen as Record<string, unknown>)
+      .filter((e): e is [string, FinishSeen] => typeof (e[1] as FinishSeen | null)?.status === 'string' && typeof (e[1] as FinishSeen).at === 'number'))
+  }
   if (saved.gamePlaytimes && typeof saved.gamePlaytimes === 'object') settings.gamePlaytimes = Object.fromEntries(Object.entries(saved.gamePlaytimes as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v as number]))
   if (Array.isArray(saved.relatedDeclined)) settings.relatedDeclined = saved.relatedDeclined.map(String)
   if (Array.isArray(saved.relatedPending)) {

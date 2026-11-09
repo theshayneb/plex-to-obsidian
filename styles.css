@@ -1480,3 +1480,21 @@
 .pmn-finished-text {
   flex: 1;
 }
+
+/* A game's Steam status in "Just finished". */
+.pmn-finished-status {
+  margin-left: var(--size-4-2);
+  padding: 0 var(--size-4-2);
+  border-radius: var(--radius-l);
+  font-size: var(--font-ui-smaller);
+}
+
+.pmn-finished-status.is-completed {
+  color: var(--color-green);
+  background: rgba(var(--color-green-rgb), 0.15);
+}
+
+.pmn-finished-status.is-abandoned {
+  color: var(--color-red);
+  background: rgba(var(--color-red-rgb), 0.15);
+}

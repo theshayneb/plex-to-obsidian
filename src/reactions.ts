@@ -85,11 +85,39 @@ export function wordList(text: string): string[] {
 export interface Finished {
   key: string
   title: string
-  kind: 'movie' | 'show'
-  /** When it was finished (seconds since 1970). */
+  kind: 'movie' | 'show' | 'game'
+  /** When it was finished (seconds since 1970); for a game, when it was seen in a finishing Steam collection. */
   viewedAt: number
   /** Its note's path. */
   path: string
+  /** A game's status from its Steam collection (completed, abandoned…). */
+  status?: string
+  /** A game's playtime, in minutes, when known. */
+  playtime?: number
+}
+
+/** When a game was first seen in a Steam collection that finishes it, and with which status. */
+export interface FinishSeen {
+  status: string
+  /** When it was first seen there (seconds since 1970). */
+  at: number
+  /** Already there at the very first look (offered only if its note has no reaction yet). */
+  existing?: boolean
+}
+
+/**
+ * Which games are in a finishing Steam collection now (`now` by `steam-<appid>`, their status),
+ * remembered with when each was first seen there: a game still there keeps its date, one moved in
+ * (or moved to another finishing collection) gets `at`, one taken out is forgotten. Before the first
+ * look (`seen` null), the games already there are marked `existing`.
+ */
+export function finishSeen(now: Record<string, string>, seen: Record<string, FinishSeen> | null, at: number): Record<string, FinishSeen> {
+  const out: Record<string, FinishSeen> = {}
+  for (const [key, status] of Object.entries(now)) {
+    const before = seen?.[key]
+    out[key] = before && before.status.toLowerCase() === status.toLowerCase() ? before : { status, at, ...seen === null ? { existing: true } : {} }
+  }
+  return out
 }
 
 /**

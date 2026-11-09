@@ -2000,6 +2000,34 @@ describe('PlexSync', () => {
     expect(again.libraries.books.properties.map(p => p.name)).toEqual(['Author', 'Pages'])
   })
 
+  it('lists games moved into a Steam collection that finishes them, to react to', async () => {
+    steamResponses = {
+      'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 600 }, { appid: 440, name: 'Starfield', playtime_forever: 720 }] } },
+    }
+    const { app } = makeApp({
+      'Media/Video Games/Portal 2.md': { Link: 'https://store.steampowered.com/app/620/' },
+      'Media/Video Games/Starfield.md': { Link: 'https://store.steampowered.com/app/440/', Reactions: ['2025-01-01 · ⭐⭐'] },
+      'Media/Video Games/Hades.md': { Link: 'https://store.steampowered.com/app/1145360/' },
+    })
+    const settings = settingsWith({ steam: { apiKey: 'k', account: '76561197960287930', includeFreeGames: false } })
+    settings.libraries = {}
+    const { ensureSteamLibrary } = await import('../src/config')
+    ensureSteamLibrary(settings)
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    // The first look: games already there count only when their note has no reaction yet; "Right Now" finishes nothing.
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Completed']], [440, ['abandoned']], [1145360, ['Right Now']]]))
+    expect((await sync.finishedItems()).map(i => [i.title, i.kind, i.status, i.playtime])).toEqual([['Portal 2', 'game', 'completed', 600]])
+    // Later: a game moved into Abandoned is offered, dated that day, reaction or not.
+    vi.mocked(readSteamCollections).mockReturnValue(new Map([[620, ['Completed']], [440, ['abandoned']], [1145360, ['abandoned']]]))
+    const items = await sync.finishedItems()
+    expect(items.map(i => [i.title, i.status])).toEqual([['Portal 2', 'completed'], ['Hades', 'abandoned']])
+    // Answered or set aside: not listed again.
+    await sync.setFinishedDone(items[1])
+    expect((await sync.finishedItems()).map(i => i.title)).toEqual(['Portal 2'])
+    vi.mocked(readSteamCollections).mockReturnValue(null)
+  })
+
   it('keeps a game\'s Steam collections in step, and leaves them alone when they can\'t be read', async () => {
     steamResponses = {
       'https://api.steampowered.com/IPlayerService/GetOwnedGames': { response: { games: [{ appid: 620, name: 'Portal 2', playtime_forever: 0 }] } },

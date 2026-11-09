@@ -40,7 +40,7 @@ import {
 } from './notes'
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
-import { addReaction, finishedKey, reactedSince, type Finished, type Reaction, type ReactionProperties } from './reactions'
+import { addReaction, finishedKey, finishSeen, reactedSince, type Finished, type Reaction, type ReactionProperties } from './reactions'
 import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
@@ -1260,6 +1260,12 @@ export class PlexSync {
       if (!show?.leafCount || (show.viewedLeafCount ?? 0) < show.leafCount) continue
       out.push({ key, title: note.basename, kind: 'show', viewedAt: at, path: note.path })
     }
+    // Games moved into a Steam collection that finishes them (desktop only).
+    try {
+      out.push(...await this.finishedGames())
+    } catch (err) {
+      console.warn('Media Manager: reading Steam collections for finished games failed', err)
+    }
     return out.sort((a, b) => b.viewedAt - a.viewedAt)
   }
 
@@ -1496,23 +1502,7 @@ export class PlexSync {
     const { apiKey, account, includeFreeGames } = this.settings.steam
     const owned = await new SteamClient(apiKey.trim(), account.trim(), includeFreeGames).ownedGames()
     const { played, seen } = gamesPlayed(owned.map(g => ({ key: g.ratingKey, title: g.title, playtime: g.playtimeMinutes ?? 0, lastPlayed: g.lastViewedAt })), this.settings.gamePlaytimes, Math.floor(new Date().setHours(0, 0, 0, 0) / 1000))
-    // Each game's note, by the Steam link in it (or a tie).
-    const games = Object.values(this.settings.libraries).filter(lib => lib.target === 'game')
-    const linkNames = [...new Set(games.flatMap(lib => linkPropertyNames(lib.properties)))]
-    const folders = games.map(lib => normalizePath(lib.folder))
-    const notes = new Map<string, TFile>()
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
-      for (const name of linkNames) {
-        const key = ratingKeyFromLink(frontmatter[name])
-        if (key && !notes.has(key)) notes.set(key, file)
-      }
-    }
-    for (const [key, merged] of Object.entries(this.settings.merged)) {
-      const file = this.app.vault.getAbstractFileByPath(merged.path)
-      if (key.startsWith('steam-') && file instanceof TFile) notes.set(key, file)
-    }
+    const notes = this.gameNotes()
     for (const game of played) {
       const note = notes.get(game.key)
       if (!note || game.key in this.settings.ignored || this.settings.unmatchedIgnored.includes(note.path)) continue
@@ -1530,6 +1520,78 @@ export class PlexSync {
       this.offerRelated(path, has, this.relatedSame(path), { link, title: note.basename, kind: 'game', viewedAt: game.lastPlayed })
     }
     this.settings.gamePlaytimes = seen
+  }
+
+  /** Each game's note, by the Steam link in it (or a tie), by `steam-<appid>`. */
+  private gameNotes(): Map<string, TFile> {
+    const games = Object.values(this.settings.libraries).filter(lib => lib.target === 'game')
+    const linkNames = [...new Set(games.flatMap(lib => linkPropertyNames(lib.properties)))]
+    const folders = games.map(lib => normalizePath(lib.folder))
+    const notes = new Map<string, TFile>()
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!folders.some(f => file.path.startsWith(`${f}/`))) continue
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+      for (const name of linkNames) {
+        const key = ratingKeyFromLink(frontmatter[name])
+        if (key && !notes.has(key)) notes.set(key, file)
+      }
+    }
+    for (const [key, merged] of Object.entries(this.settings.merged)) {
+      const file = this.app.vault.getAbstractFileByPath(merged.path)
+      if (key.startsWith('steam-') && file instanceof TFile) notes.set(key, file)
+    }
+    return notes
+  }
+
+  /**
+   * Games you moved into a Steam collection that finishes them (one the Steam library's "Status
+   * from Steam collections" maps to completed or abandoned), for "Just finished": dated the day
+   * the plugin first saw them there, within two weeks; games already there at the very first look
+   * are offered for a month, and only when their note has no reaction yet. Desktop only (Steam's
+   * collections are in its files on this computer); none on a phone.
+   */
+  private async finishedGames(): Promise<Finished[]> {
+    const lib = this.settings.libraries[STEAM_LIBRARY] as LibrarySetting | undefined
+    if (!lib || lib.target === 'skip' || !steamReady(this.settings)) return []
+    const { apiKey, account, includeFreeGames } = this.settings.steam
+    const steam = new SteamClient(apiKey.trim(), account.trim(), includeFreeGames)
+    const collections = readSteamCollections(await steam.steamId(), this.settings.steam.folder ?? '')
+    if (!collections) return []
+    const finishing = new Set(['completed', 'abandoned', lib.values.watched.trim().toLowerCase()].filter(Boolean))
+    const now: Record<string, string> = {}
+    for (const [appid, names] of collections) {
+      const status = collectionStatus(names, lib.values.collectionStatus, true)
+      if (status && finishing.has(status.toLowerCase())) now[`steam-${appid}`] = status
+    }
+    const seconds = Math.floor(Date.now() / 1000)
+    const seen = finishSeen(now, this.settings.gameFinishSeen, seconds)
+    this.settings.gameFinishSeen = seen
+    await this.saveSettings()
+    const notes = this.gameNotes()
+    const reactions = (this.settings.reactionsProperty || 'Reactions').toLowerCase()
+    const candidates: Finished[] = []
+    for (const [key, { status, at, existing }] of Object.entries(seen)) {
+      const note = notes.get(key)
+      if (!note || key in this.settings.ignored || this.settings.unmatchedIgnored.includes(note.path)) continue
+      if (seconds - at > (existing ? 30 : 14) * 86400) continue
+      if (existing) {
+        // Already there at the first look: only if the note has no reaction at all.
+        const fm = this.app.metadataCache.getFileCache(note)?.frontmatter ?? {}
+        const prop = Object.keys(fm).find(k => k.toLowerCase() === reactions)
+        if (prop && listOf(fm[prop]).length) continue
+      }
+      if (this.finishedDone(key, at, note)) continue
+      candidates.push({ key, title: note.basename, kind: 'game', viewedAt: at, path: note.path, status })
+    }
+    if (candidates.length) {
+      // How long you played each, when Steam says (one request).
+      const owned = await steam.ownedGames().catch(() => [] as PlexItem[])
+      for (const game of candidates) {
+        const minutes = owned.find(g => g.ratingKey === game.key)?.playtimeMinutes
+        if (minutes) game.playtime = minutes
+      }
+    }
+    return candidates
   }
 
   /** Whether a Related entry already is that link (the same note, else the same name). */

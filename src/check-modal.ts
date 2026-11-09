@@ -29,7 +29,7 @@ export function checkableProperties(settings: PlexNotesSettings): { name: string
 }
 
 /**
- * The properties a check can compare in one library, in alphabetical order after the file name:
+ * The properties a check can compare in one library, in A–Z order (the file name among them):
  * its own, plus, for books, the rating property other libraries have (book notes may hold one).
  */
 export function libraryCheckables(settings: PlexNotesSettings, key: string): { name: string, source: FieldSource | null }[] {
@@ -46,10 +46,9 @@ export function libraryCheckables(settings: PlexNotesSettings, key: string): { n
       if (m.source === 'userRatingEmoji' && name && !byName.has(name)) byName.set(name, m.source)
     }
   }
-  const properties = [...byName.entries()]
-    .map(([name, source]) => ({ name, source }))
+  // One A–Z order in every library, the file name in its place among the rest.
+  return [{ name: FILE_NAME, source: null as FieldSource | null }, ...[...byName.entries()].map(([name, source]) => ({ name, source }))]
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-  return [{ name: FILE_NAME, source: null }, ...properties]
 }
 
 /** Libraries whose "Also compare" list is open in the sync pop-up, kept while Obsidian runs. */

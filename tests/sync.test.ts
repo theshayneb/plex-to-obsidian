@@ -1372,6 +1372,25 @@ describe('PlexSync', () => {
     expect(frontmatter.get(note)!.Summary).toBe('Linguist meets aliens.')
   })
 
+  it('says, step by step, what a sync sees in a song note\'s music file', async () => {
+    const song = 'Media/Music/311 - Still Dreaming.md'
+    const { app } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', tags: ['music'] } })
+    const settings = settingsWith()
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    responses.set('/library/metadata/100', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Still Dreaming.mp3' }] }] }] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    const file = app.vault.getAbstractFileByPath(song) as never
+    // No tags row: said first.
+    expect((await sync.songFileReport(file))[0]).toMatch(/^✗ Music has no "tags" row/)
+    settings.libraries[3].properties.push({ name: 'tags', source: 'fileTag', text: 'Obsidian Tags' })
+    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:obsidian tags': ['inspirational'] })
+    const report = await sync.songFileReport(file)
+    expect(report).toContain('✓ "Obsidian Tags": inspirational')
+    expect(report).toContain('A sync would offer to add to this note: inspirational')
+    vi.mocked(readFileTags).mockReturnValue(null)
+    expect((await sync.songFileReport(file)).pop()).toMatch(/^✗ That file can't be read here/)
+  })
+
   it('puts the music file\'s lyrics in a new song note', async () => {
     vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })
     const { app, frontmatter } = makeApp({})

@@ -1522,6 +1522,54 @@ export class PlexSync {
     this.settings.gamePlaytimes = seen
   }
 
+  /**
+   * What a sync would see in a song note's music file, step by step, to tell why its tags or lyrics
+   * don't come in: the Music library's tags row, the Plex item the note is tied to, the file Plex
+   * gives for it, whether it can be read here, and what's in it compared with the note.
+   */
+  async songFileReport(file: TFile): Promise<string[]> {
+    const out: string[] = []
+    const music = Object.values(this.settings.libraries).filter(l => l.target === 'music')
+    const lib = music.find(l => file.path.startsWith(`${normalizePath(l.folder)}/`)) ?? music[0]
+    if (!lib) return ['There\'s no music library in the settings.']
+    const row = lib.properties.find(m => m.name.trim().toLowerCase() === 'tags' && m.source === 'fileTag')
+    if (!row) out.push(`✗ ${lib.title} has no "tags" row whose source is "Music: a tag in the file, by name", so no tags are read from music files. Add one, named Obsidian Tags.`)
+    else if (!row.text?.trim()) out.push(`✗ ${lib.title}'s tags row has the source "Music: a tag in the file, by name" but no tag name in the box beside it. Type Obsidian Tags there.`)
+    else out.push(`✓ ${lib.title}'s tags row reads the file's tag "${row.text.trim()}".`)
+    if (!plexReady(this.settings)) return [...out, '✗ Plex isn\'t set up.']
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
+    const keys = [
+      ...linkPropertyNames(lib.properties).map(name => ratingKeyFromLink(fm[name])),
+      ...Object.entries(this.settings.merged).filter(([, m]) => m.path === file.path).map(([key]) => key),
+    ].filter((k): k is string => Boolean(k && /^\d+$/.test(k)))
+    if (!keys.length) return [...out, '✗ This note has no Plex link (or tie) to a song, so its file isn\'t known. A sync matches it by name; "Tie this note to a Plex item…" ties it for good.']
+    const plex = this.plex ?? new PlexClient(this.settings.serverUrl, this.settings.token)
+    const item = await plex.item(keys[0])
+    if (!item) return [...out, `✗ Plex has no item ${keys[0]} (the note's link). It may have been re-added: a sync matches the note by name again.`]
+    out.push(`✓ Tied to "${displayName(item)}" in Plex.`)
+    const path = item.Media?.[0]?.Part?.[0]?.file
+    if (!path) return [...out, '✗ Plex gives no file for this song.']
+    out.push(`File, as Plex gives it: ${path}`)
+    const tags = readFileTags(path)
+    if (!tags) return [...out, '✗ That file can\'t be read here: it isn\'t at that path on this computer (Plex may run elsewhere, or see the drive under another name), it isn\'t an MP3 with an ID3 tag, or this is a phone.']
+    out.push('✓ The file was read.')
+    const own = Object.keys(tags).filter(k => k.startsWith('TXXX:')).map(k => k.slice(5))
+    out.push(own.length ? `Its own tags: ${own.join(', ')}` : 'It has no tags of its own (TXXX).')
+    out.push(tags.USLT?.length ? '✓ It has lyrics.' : 'It has no lyrics.')
+    if (row?.text?.trim()) {
+      const fromFile = fileTagList(tags[`TXXX:${row.text.trim().replace(/^TXXX[/:]/i, '').toLowerCase()}`])
+      if (!fromFile.length) out.push(`✗ It has no "${row.text.trim()}" tag. Save the song's tags again in Music Manager.`)
+      else {
+        out.push(`✓ "${row.text.trim()}": ${fromFile.join(', ')}`)
+        const { toNote, toFile } = songTagDiff(fm[row.name.trim()], fromFile, this.typeTags())
+        out.push(toNote.length ? `A sync would offer to add to this note: ${toNote.join(', ')}` : 'This note already has all of them.')
+        if (toFile.length) out.push(`In this note but not the file (offered for the file): ${toFile.join(', ')}`)
+      }
+    }
+    if ((this.settings.lockedProperties[file.path] ?? []).some(l => l.toLowerCase() === 'tags')) out.push('✗ You locked "tags" for this note ("never change"), so it\'s never offered. Undo under Settings → Remembered choices → Never changed.')
+    return out
+  }
+
   /** Each game's note, by the Steam link in it (or a tie), by `steam-<appid>`. */
   private gameNotes(): Map<string, TFile> {
     const games = Object.values(this.settings.libraries).filter(lib => lib.target === 'game')

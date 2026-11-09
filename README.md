@@ -67,6 +67,7 @@ Open the command palette (Ctrl/Cmd+P) and type "Media Manager".
 | **Sync with Plex and Steam…** (also the clapperboard in the ribbon) | Asks which libraries, and which properties to also compare with their sources, then makes notes for new items and keeps existing notes up to date (see [What a sync does](#what-a-sync-does) and [Comparing notes with their sources](#checking-notes-against-sources)). |
 | **Sync every library with Plex and Steam** | The same, for every library, without asking which. |
 | **Check this note** | Compares every property of the note that's open with its source. |
+| **What does this song's music file say?** | For the song note that's open, shows step by step what a sync sees: your Music library's tags row, the Plex song it's tied to, the file Plex gives for it, whether that file can be read on this computer, its own tags and lyrics, and which tags a sync would offer. Use it when a song's tags or lyrics don't come in. |
 | **Fix year-only dates** | Checks just the notes whose date is only a year (written YYYY-01-01). |
 | **Add a movie, show, game or book…** | Searches outside Plex and Steam and makes a note. See [Adding something new](#adding-something-new). |
 | **Why isn't this imported?…** | Paste a Plex or Steam link (or part of a title); it explains what a sync does with that item and why, changing nothing. |
@@ -170,7 +171,7 @@ What the plugin has remembered from your answers in pop-ups, each listed so you 
 
 ## What a sync does
 
-**Sync with Plex and Steam…** opens a pop-up listing every library, each with a switch and, under it, **Also compare these properties**. Switch on the libraries to sync. Tick properties under a library to also compare its existing notes with their sources in the same run (see [Comparing notes with their sources](#checking-notes-against-sources)); nothing ticked is a quick sync. Everything you choose is remembered. Books are listed last and start switched off: they're only compared (no sync reads them). Comparing is slower, and the pop-up says so (and flags HowLongToBeat and Open Library lookups as slow).
+**Sync with Plex and Steam…** opens a pop-up listing every library, each with a switch and, under it, **Also compare these properties**. Switch on the libraries to sync. Tick properties under a library to also compare its existing notes with their sources in the same run (see [Comparing notes with their sources](#checking-notes-against-sources)); nothing ticked is a quick sync. Each library's properties are listed in the same A–Z order. Everything you choose is remembered. Books are listed last and start switched off: they're only compared (no sync reads them). Comparing is slower, and the pop-up says so (and flags HowLongToBeat and Open Library lookups as slow).
 
 A sync reads the libraries you chose from Plex (and Steam), then:
 

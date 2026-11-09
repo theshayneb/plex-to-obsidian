@@ -1498,3 +1498,15 @@
   color: var(--color-red);
   background: rgba(var(--color-red-rgb), 0.15);
 }
+
+/* "What does this song's music file say?": what worked, and in red what didn't. */
+.pmn-report-line,
+.pmn-report-bad {
+  margin: var(--size-4-1) 0;
+  font-size: var(--font-ui-small);
+  word-break: break-word;
+}
+
+.pmn-report-bad {
+  color: var(--text-error);
+}

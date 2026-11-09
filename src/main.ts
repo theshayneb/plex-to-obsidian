@@ -1,4 +1,4 @@
-import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian'
+import { App, Modal, moment, normalizePath, Notice, Plugin, TFile } from 'obsidian'
 import { EmbeddedCard } from './embed-cards'
 import { EMBED_LANGUAGE } from './embed-spec'
 import { AddModal } from './add-modal'
@@ -234,6 +234,22 @@ export default class PlexMediaNotesPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile()
         if (!file || file.extension !== 'md') return false
         if (!checking) new TieModal(this.app, file.basename, link => this.tieCandidates(link), item => this.tieNote(file, item)).open()
+        return true
+      },
+    })
+
+    this.addCommand({
+      id: 'song-file',
+      name: 'What does this song\'s music file say?',
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile()
+        if (!file || file.extension !== 'md') return false
+        if (!checking) {
+          void new PlexSync(this.app, this.settings, () => this.saveSettings()).songFileReport(file).then(
+            lines => new ReportModal(this.app, `${file.basename}: its music file`, lines).open(),
+            err => new Notice(`Couldn't read it: ${errorMessage(err)}`),
+          )
+        }
         return true
       },
     })
@@ -954,5 +970,21 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.plexSyncRunning = false
       this.syncs.clear()
     }
+  }
+}
+
+/** Lines of a report, each its own paragraph (✓ and ✗ say what worked). */
+class ReportModal extends Modal {
+  constructor(app: App, private readonly pmnTitle: string, private readonly pmnLines: string[]) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(this.pmnTitle)
+    for (const line of this.pmnLines) this.contentEl.createEl('p', { cls: line.startsWith('✗') ? 'pmn-report-bad' : 'pmn-report-line', text: line })
+  }
+
+  onClose(): void {
+    this.contentEl.empty()
   }
 }

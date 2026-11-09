@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.196] - 2026-11-10
+
+- The Sync pop-up lists every library's properties in the same A–Z order ("File name" is no longer pinned first).
+- New command "What does this song's music file say?": for the open song note, it shows step by step what a sync sees (the Music library's tags row, the Plex song, the file Plex gives for it, whether it can be read on this computer, its own tags and lyrics) and which tags a sync would offer, so it's clear where a song's tags stop coming in.
+
 ## [0.0.195] - 2026-11-10
 
 - "Just finished" now includes games you move into a Steam collection that finishes them: any collection your Steam library's "Status from Steam collections" maps to completed or abandoned. Each shows its status and playtime, and "How was it?" records your rating, feelings, themes and words as for movies, dated the day the plugin first sees the game there. Games already in those collections are offered once, for a month, if their note has no reaction yet. This needs the computer with Steam on it.

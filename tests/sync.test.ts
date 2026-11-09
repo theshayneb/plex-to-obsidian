@@ -1302,6 +1302,41 @@ describe('PlexSync', () => {
     vi.mocked(readFileTags).mockReturnValue(null)
   })
 
+  it('keeps song notes\' lyrics in step with their music files at every sync, and gives new song notes theirs', async () => {
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    vi.mocked(readFileTags).mockImplementation(path => path === '/music/Karma Police.mp3' ? { USLT: ['Karma police\nArrest this man'] } : null)
+    const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Lyrics: 'karma police arrest this man' } })
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Lyrics', source: 'lyricsFile' })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Karma Police.mp3' }] }] }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get(song)!.Lyrics).toBe('Karma police\nArrest this man')
+    // Only line endings differ: left as it is.
+    frontmatter.get(song)!.Lyrics = 'Karma police  \r\nArrest this man\n'
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get(song)!.Lyrics).toBe('Karma police  \r\nArrest this man\n')
+    // A file without lyrics never empties a note's.
+    vi.mocked(readFileTags).mockReturnValue(null)
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    expect(frontmatter.get(song)!.Lyrics).toBe('Karma police  \r\nArrest this man\n')
+    vi.mocked(readFileTags).mockReset()
+    vi.mocked(readFileTags).mockReturnValue(null)
+  })
+
+  it('puts the music file\'s lyrics in a new song note', async () => {
+    vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })
+    const { app, frontmatter } = makeApp({})
+    const settings = settingsWith({ askBeforeChanges: false })
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Lyrics', source: 'lyricsFile' })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Karma Police.mp3' }] }] }] } })
+    await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
+    const created = [...frontmatter.entries()].find(([path]) => path.startsWith('Media/Music/'))
+    expect(created?.[1].Lyrics).toBe('Karma police\nArrest this man')
+    vi.mocked(readFileTags).mockReturnValue(null)
+  })
+
   it('offers lyrics changed in the music file in a check, down to a capital or a line break', async () => {
     const song = 'Media/Music/Radiohead - Karma Police.md'
     vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })

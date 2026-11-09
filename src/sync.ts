@@ -44,7 +44,7 @@ import { addReaction, finishedKey, reactedSince, type Finished, type Reaction, t
 import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameLyrics, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { lyricsOf, readFileTags, writeOwnTag } from './music-files'
@@ -2071,6 +2071,8 @@ export class PlexSync {
       const name = m.name.trim()
       const value = sourceValue(m.source, item, ctx, m.text)
       if (value === undefined || from[name] === value || (Array.isArray(value) && sameValue(from[name], value))) continue
+      // Lyrics only count as changed when a word, a capital or a line break is different.
+      if (m.source === 'lyricsFile' && sameLyrics(from[name], value)) continue
       // A status only ever moves forward, and one of your own is left alone.
       if (STATUS_SOURCES.includes(m.source) && !statusMovesForward(from[name], value, lib.values)) continue
       // A playtime never goes down: one longer in the note than Steam's stays.

@@ -429,9 +429,10 @@ export function ratingDirection(note: number | null, plex: number, lastSeen: num
 
 /**
  * Sources every sync keeps up to date whenever they can be read, mirroring their source: your Steam
- * collections (on the desktop).
+ * collections and songs' lyrics from their music files (on the desktop; a source with nothing to
+ * say leaves the note alone).
  */
-export const MIRRORED_SOURCES: FieldSource[] = ['steamCollections']
+export const MIRRORED_SOURCES: FieldSource[] = ['steamCollections', 'lyricsFile']
 
 /** Sources kept up to date by "Keep status up to date", only ever moving forward. */
 export const STATUS_SOURCES: FieldSource[] = ['status']

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.192] - 2026-11-10
+
+- Every sync now copies each song's lyrics from its music file into its note when the note's Lyrics are empty or different, and new song notes get their lyrics when they're made. Only real differences count (a word, a capital, a line break); a music file without lyrics never empties a note's.
+
 ## [0.0.191] - 2026-11-10
 
 - Lyrics now come from each song's own music file (its lyrics tag), not the .txt file beside it, which isn't read any more.

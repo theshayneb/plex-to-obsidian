@@ -237,7 +237,7 @@ With "Ask before every change" on, every new note and every change comes as a po
 
 ## Ratings
 
-**Your rating scale** (in every library): 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷, one level per Plex star (Plex's 1–10 is the level × 2), empty for none. Notes written before this scale existed are read in their old scale until a pop-up offers them in the new one; answering either way marks them done.
+**Your rating scale** (in every library): 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷, one level per Plex star (Plex's 1–10 is the level × 2), empty for none. Every note is read in this scale and nothing offers to convert ratings (**All ratings are in the star scale**, in Syncing, on by default). Turned off, notes written before this scale existed are read in their old scale until a pop-up offers them in the new one; answering either way marks them done.
 
 **Ratings go both ways:**
 - **Plex → note**: with "Update ratings from Plex" on, a rating you changed in Plex goes into the note. A rating you changed in the note is never overwritten, and a note keeps its rating when Plex has none.

@@ -631,6 +631,16 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         }))
 
     new Setting(containerEl)
+      .setName('All ratings are in the star scale')
+      .setDesc('Every note\'s rating is already 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷, so pop-ups never offer to convert one. Turn off only to bring back the offers for notes still in an older scale.')
+      .addToggle(toggle => toggle
+        .setValue(settings.allRatingsInStars)
+        .onChange(async value => {
+          settings.allRatingsInStars = value
+          await this.save()
+        }))
+
+    new Setting(containerEl)
       .setName('Move statuses forward')
       .setDesc('Each sync moves a note\'s status forward as you watch or play: not watched, then started, then watched (games: not played, then played), using each library\'s status values. It never moves back, and a status of your own (such as revisit) is never changed.')
       .addToggle(toggle => toggle

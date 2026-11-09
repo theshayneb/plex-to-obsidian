@@ -204,6 +204,11 @@ export interface PlexNotesSettings {
   ratingsSeen: Record<string, number>
   /** Notes (by rating key) whose rating has been reviewed in the star scale (💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷), so it's read that way. */
   ratingsReviewed: Record<string, true>
+  /**
+   * Every note's rating is already in the star scale (the owner's, since 0.0.189): nothing is read in
+   * an old scale or offered for converting. Off, notes not in `ratingsReviewed` are as before.
+   */
+  allRatingsInStars: boolean
   /** Also refresh play counts in the background every this many hours; 0 is off. */
   playCountHours: number
   /** When play counts were last refreshed in the background (ms since 1970). */
@@ -316,6 +321,7 @@ export function defaultSettings(): PlexNotesSettings {
     sendRatings: false,
     ratingsSeen: {},
     ratingsReviewed: {},
+    allRatingsInStars: true,
     playCountHours: 0,
     lastPlayCountUpdate: 0,
     checkInAt: '19:00',
@@ -430,7 +436,7 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   const saved = (data ?? {}) as Partial<PlexNotesSettings> & LegacySettings & { libraries?: Record<string, SavedLibrary> }
   const settings = defaultSettings()
   for (const key of ['serverUrl', 'token', 'imagesSubfolder', 'renameExistingNotes', 'askBeforeChanges', 'omdbKey', 'googleBooksKey', 'lastfmKey', 'lastfmUser', 'listenbrainzUser', 'revisitWeekly', 'lastRevisit', 'collectionsProperty', 'collectionRules', 'lastAutoCollections', 'dailyEpisodes', 'dailyAnchor', 'dailyQuote', 'dailyRelated', 'reactionsProperty', 'feelingsProperty', 'themesProperty', 'reactionInbox', 'whyProperty', 'bedtimeFrom', 'bedtimeTo', 'dailyFolder', 'dailyFormat', 'dailyEpisodesSince',
-    'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
+    'updatePlayCounts', 'updateRatings', 'updateStatus', 'sendRatings', 'allRatingsInStars', 'tickDifferences', 'playCountHours', 'lastPlayCountUpdate', 'checkInAt', 'lastCheckIn'] as const) {
     if (saved[key] !== undefined) (settings as unknown as Record<string, unknown>)[key] = saved[key]
   }
   settings.fileNameReplacements = { ...settings.fileNameReplacements, ...saved.fileNameReplacements }

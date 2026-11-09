@@ -1735,7 +1735,7 @@ export class PlexSync {
    * the star scale came in), else in the scale it was written in before (music in plain stars).
    */
   private noteScale(noteKey: string, lib: LibrarySetting): RatingScale {
-    return this.settings.ratingsReviewed[noteKey] ? 'stars' : lib.target === 'music' ? 'plain' : 'emoji'
+    return this.settings.allRatingsInStars || this.settings.ratingsReviewed[noteKey] ? 'stars' : lib.target === 'music' ? 'plain' : 'emoji'
   }
 
   private reviewRating(noteKey: string): void {
@@ -1756,7 +1756,7 @@ export class PlexSync {
 
   /** As `planRescale`, for these properties of a note (by its key), written in `old` until reviewed. */
   private planRescaleOf(file: TFile, noteKey: string, names: string[], old: RatingScale): Rescale | null {
-    if (this.settings.ratingsReviewed[noteKey] || !names.length) return null
+    if (this.settings.allRatingsInStars || this.settings.ratingsReviewed[noteKey] || !names.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const to: Record<string, string> = {}
     for (const name of names) {

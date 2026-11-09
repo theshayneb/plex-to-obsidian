@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.189] - 2026-11-09
+
+- Pop-ups no longer offer to convert ratings to the star scale: every note's rating is now read as 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷. A new switch in Settings → Syncing, "All ratings are in the star scale" (on), brings the old offers back if it's ever turned off.
+
 ## [0.0.188] - 2026-11-06
 
 - Related links you've said no to (and things you've reacted to in "Just finished") now stay answered even when another device saves an older copy of the plugin's settings and Obsidian Sync brings it here, also after Obsidian restarts. Each device keeps its own copy of your answers and puts any that are missing back into the settings, which then carry them to your other devices.

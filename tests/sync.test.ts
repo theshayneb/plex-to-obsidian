@@ -449,6 +449,7 @@ describe('PlexSync', () => {
       'Media/Movies/Heat (1995).md': { Rating: '🩷' },
     })
     const settings = settingsWith()
+    settings.allRatingsInStars = false
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
     responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[0], userRating: 8 }, { ...movies[1], userRating: 10 }] } })
@@ -469,6 +470,22 @@ describe('PlexSync', () => {
     expect(requests.filter(r => r.action === 'change')).toEqual([])
   })
 
+
+  it('reads every rating in the star scale and offers no converting when all ratings are', async () => {
+    const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Rating: '⭐⭐⭐' } })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [{ ...movies[0], userRating: 6 }] } })
+    const requests: ApprovalRequest[] = []
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => {
+      requests.push(r)
+      return Promise.resolve({ choice: 'apply', excluded: [] })
+    })
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    expect(requests.flatMap(r => r.lines).filter(l => l.key.startsWith('rescale:'))).toEqual([])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Rating).toBe('⭐⭐⭐')
+  })
   it('sends Plex the rating as you edited it, on its own line or the note\'s', async () => {
     const { app } = makeApp({
       'Media/Movies/Arrival (2016).md': { Rating: '⭐⭐⭐' },
@@ -2061,6 +2078,7 @@ describe('PlexSync', () => {
       'Media/Books/Bad book.md': { Rating: '💣' },
     })
     const settings = settingsWith()
+    settings.allRatingsInStars = false
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     settings.libraries['1'].properties = [{ name: 'Rating', source: 'userRatingEmoji' }]
     const { addLibrary } = await import('../src/config')
@@ -2338,6 +2356,7 @@ describe('recommendation data', () => {
       'Media/Movies/Dune (2021).md': { Genre: ['Sci-Fi'], Status: 'pending' },
     })
     const settings = settingsWith({})
+    settings.allRatingsInStars = false
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
     settings.libraries[1].properties.push({ name: 'Rating', source: 'userRatingEmoji' }, { name: 'Director', source: 'directors' })
     const entries = noteEntries(app as never, settings)

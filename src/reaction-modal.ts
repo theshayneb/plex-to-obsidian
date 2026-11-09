@@ -1,4 +1,5 @@
 import { App, Modal, moment, Setting } from 'obsidian'
+import { renderCheckInSteps } from './check-in-steps'
 import { LinkSuggest, typingLink } from './link-suggest'
 import type { Finished, Reaction } from './reactions'
 
@@ -181,7 +182,7 @@ export class ReactionModal extends Modal {
 
 /** "Just finished": what you finished lately, each to react to (or set aside), one at a time. */
 export class FinishedModal extends Modal {
-  constructor(app: App, private readonly pmnItems: Finished[], private readonly pmnReact: (item: Finished) => Promise<ReactionAnswer>, private readonly pmnClosed?: () => void) {
+  constructor(app: App, private readonly pmnItems: Finished[], private readonly pmnReact: (item: Finished) => Promise<ReactionAnswer>, private readonly pmnClosed?: () => void, private readonly pmnSetAside?: (item: Finished) => Promise<void>) {
     super(app)
   }
 
@@ -199,23 +200,46 @@ export class FinishedModal extends Modal {
   private pmnRender(): void {
     const { contentEl } = this
     contentEl.empty()
+    this.modalEl.addClass('pmn-review')
+    renderCheckInSteps(contentEl)
     if (!this.pmnItems.length) {
-      contentEl.createEl('p', { cls: 'setting-item-description', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
-      return
-    }
-    contentEl.createEl('p', { cls: 'setting-item-description', text: 'Pick one to say how it was, or "Not now" to come back to them later.' })
-    for (const item of [...this.pmnItems]) {
-      const row = contentEl.createEl('button', { cls: 'pmn-reaction-item' })
-      row.createEl('strong', { text: item.title })
-      row.createSpan({ cls: 'pmn-add-detail', text: ` · ${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${moment.unix(item.viewedAt).format('ddd D MMM')}` })
-      row.addEventListener('click', () => {
-        void this.pmnReact(item).then(answer => {
-          if (answer !== 'later') this.pmnItems.splice(this.pmnItems.indexOf(item), 1)
-          this.pmnRender()
+      contentEl.createEl('p', { cls: 'pmn-review-hint', text: 'Nothing waiting: you\'ve reacted to everything you finished lately.' })
+    } else {
+      contentEl.createDiv({ cls: 'pmn-review-hint', text: 'Movies, and shows with every episode watched, in the last two weeks.' })
+      const head = contentEl.createDiv('pmn-review-section')
+      head.createEl('h3', { text: 'To react to' })
+      const flow = head.createSpan('pmn-review-flow')
+      flow.createSpan({ cls: 'pmn-review-pill', text: 'You' })
+      flow.createSpan({ cls: 'pmn-review-arrow', text: '→' })
+      flow.createSpan({ cls: ['pmn-review-pill', 'is-obsidian'], text: 'Obsidian: Reactions, Feelings, Themes' })
+      const card = contentEl.createDiv('pmn-review-card')
+      for (const item of [...this.pmnItems]) {
+        const row = card.createDiv('pmn-finished-row')
+        const text = row.createDiv('pmn-finished-text')
+        text.createEl('strong', { text: item.title })
+        text.createSpan({ cls: 'pmn-add-detail', text: ` ${item.kind === 'show' ? 'TV show, all watched' : 'Movie'} · ${moment.unix(item.viewedAt).format('ddd D MMM')}` })
+        // "Not this one": set aside for good (a rewatch is asked about again).
+        if (this.pmnSetAside) {
+          const setAside = this.pmnSetAside
+          row.createEl('button', { text: 'Not this one' }).addEventListener('click', () => {
+            void setAside(item).then(() => {
+              this.pmnItems.splice(this.pmnItems.indexOf(item), 1)
+              this.pmnRender()
+            })
+          })
+        }
+        row.createEl('button', { cls: 'mod-cta', text: 'How was it?' }).addEventListener('click', () => {
+          void this.pmnReact(item).then(answer => {
+            if (answer !== 'later') this.pmnItems.splice(this.pmnItems.indexOf(item), 1)
+            this.pmnRender()
+          })
         })
-      })
+      }
     }
+    const foot = contentEl.createDiv('pmn-review-foot')
+    foot.createSpan({ cls: 'pmn-review-count', text: this.pmnItems.length ? 'Closing keeps them, to answer later.' : '' })
     // Closing keeps them all, to answer later (they're asked about again at the next check-in).
-    contentEl.createDiv({ cls: 'modal-button-container' }).createEl('button', { text: 'Not now' }).addEventListener('click', () => this.close())
+    if (this.pmnItems.length) foot.createEl('button', { text: 'Not now' }).addEventListener('click', () => this.close())
+    foot.createEl('button', { cls: 'mod-cta', text: 'Done' }).addEventListener('click', () => this.close())
   }
 }

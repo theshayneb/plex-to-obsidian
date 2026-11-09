@@ -28,7 +28,7 @@ The sections below cover what each part does, every setting, and what happens be
 3. [Settings, section by section](#settings-section-by-section)
 4. [What a sync does](#what-a-sync-does)
 5. [The approval pop-up](#the-approval-pop-up)
-6. [Checking notes against sources](#checking-notes-against-sources)
+6. [Comparing notes with their sources](#checking-notes-against-sources)
 7. [Ratings](#ratings)
 8. [Games (Steam)](#games-steam)
 9. [Books](#books)
@@ -64,10 +64,9 @@ Open the command palette (Ctrl/Cmd+P) and type "Media Manager".
 
 | Command | What it does |
 |---|---|
-| **Sync with Plex and Steam…** (also the clapperboard in the ribbon) | Asks which libraries, then makes notes for new items and keeps existing notes up to date (see [What a sync does](#what-a-sync-does)). |
+| **Sync with Plex and Steam…** (also the clapperboard in the ribbon) | Asks which libraries, and which properties to also compare with their sources, then makes notes for new items and keeps existing notes up to date (see [What a sync does](#what-a-sync-does) and [Comparing notes with their sources](#checking-notes-against-sources)). |
 | **Sync every library with Plex and Steam** | The same, for every library, without asking which. |
-| **Check notes against sources…** | Compares chosen properties of your notes with Plex, Steam, Open Library and so on, and offers to fix differences. See [Checking notes](#checking-notes-against-sources). |
-| **Check this note** | The same, for the note that's open, every property. |
+| **Check this note** | Compares every property of the note that's open with its source. |
 | **Fix year-only dates** | Checks just the notes whose date is only a year (written YYYY-01-01). |
 | **Add a movie, show, game or book…** | Searches outside Plex and Steam and makes a note. See [Adding something new](#adding-something-new). |
 | **Why isn't this imported?…** | Paste a Plex or Steam link (or part of a title); it explains what a sync does with that item and why, changing nothing. |
@@ -171,6 +170,8 @@ What the plugin has remembered from your answers in pop-ups, each listed so you 
 
 ## What a sync does
 
+**Sync with Plex and Steam…** opens a pop-up listing every library, each with a switch and, under it, **Also compare these properties**. Switch on the libraries to sync. Tick properties under a library to also compare its existing notes with their sources in the same run (see [Comparing notes with their sources](#checking-notes-against-sources)); nothing ticked is a quick sync. Everything you choose is remembered. Books are listed last and start switched off: they're only compared (no sync reads them). Comparing is slower, and the pop-up says so (and flags HowLongToBeat and Open Library lookups as slow).
+
 A sync reads the libraries you chose from Plex (and Steam), then:
 
 1. **Finds each item's note**: by the Plex (or Steam) link in the note first, then by name, as each library's "Recognise existing notes by" allows. Movies, shows and documentaries also look in each other's folders. Songs are also recognised under each of their artists, with or without featured artists. A note you tied to an item (see "Use an existing note" and "Tie this note to a Plex item") always counts as that item's.
@@ -200,6 +201,17 @@ Items you chose **Skip every time** for are never created or changed, but still 
 
 With "Ask before every change" on, every new note and every change comes as a pop-up before anything is written. Nothing is written early: not a poster, not a folder.
 
+**Changes to a note you have** (since 0.0.194) come as cards, one per property, in sections: **Kept up to date** (the routine sync updates), **Differences found** (what comparing turned up), **Tags** (your note's and its source's or mp3's), then the rest of the note, folded, since nothing in it changes (open it to edit any value).
+- **Every card says where the value comes from and where it's written**, as pills beside the property's name: "Plex → Obsidian: Genre", "mp3 lyrics → Obsidian: Lyrics", "Obsidian → mp3". The Obsidian side is in your accent colour.
+- **One value**: the note's value ("Obsidian") and each source's are buttons; click the one you want. Picking "Obsidian" keeps yours. "Edit this value" lets you change the picked one first.
+- **Long text** (lyrics, summaries): both sides next to each other, the lines that differ marked, with one tick box to take the new one.
+- **Lists** (genres and such): your items, and each item only the source has as its own chip, so you can add just one. An item of yours the source lacks can be tapped away.
+- **Tags**: "In mp3, not Obsidian" (added to the note) and "In Obsidian, not mp3" (added to the music file), each tag its own chip, and what's in both.
+- **Buttons**: **Apply N changes**, **Skip**, and **More** for applying to the rest like this, applying to every note left, skipping this one every time, and stopping.
+- During the daily check-in, a step bar at the top shows where you are: Updates, Daily notes, Just finished.
+
+**New notes** keep the table described below.
+
 - **Each part is a line with a tick box**: a property to fill in, a play count, a rename, a link. Untick what you don't want; only the ticked parts happen.
 - **Every value can be edited first**. Lists show as chips (× removes one, the box adds one), and boxes suggest values that property already has in your vault, as Obsidian's own properties do.
 - **The whole note is shown**: properties that aren't changing are listed after the changes. Those can be edited too, and your edits are saved with the rest.
@@ -218,9 +230,9 @@ With "Ask before every change" on, every new note and every change comes as a po
 
 ---
 
-## Checking notes against sources
+## Comparing notes with their sources
 
-**Check notes against sources…** lets you pick, per library, which properties to compare (your choice is remembered; **File name** is one of them). Each note is compared with its item's full details, and every difference is offered:
+There's no separate command for this any more (since 0.0.194): tick properties under a library in the **Sync with Plex and Steam…** pop-up, and the sync also compares them (your choice is remembered; **File name** is one of them). Each note in that library is compared with its item's full details, and every difference is offered in the same pop-up as the note's sync changes:
 
 - **Ticked to start with**: empty values, durations written in hours, search-page links, genres (your kept ones plus the source's) and the source's type tag. Other differences start ticked only with "Start replacements ticked" on.
 - **Status**: offered ticked only if it moves forward, and never for books.
@@ -270,7 +282,7 @@ A line ending in "(until started)" only counts for a game you haven't started, s
 
 ## Books
 
-Books live in the **Books** library (`Media/Books`), which no Plex sync reads. They're added with **Add a movie, show, game or book…** and kept right with **Check notes against sources…**.
+Books live in the **Books** library (`Media/Books`), which no Plex sync reads. They're added with **Add a movie, show, game or book…** and kept right by ticking properties under Books in the **Sync with Plex and Steam…** pop-up.
 
 - **Where details come from**:
   - Open Library: title, authors, genres, year, pages and cover.
@@ -326,8 +338,8 @@ With **Update in the background** set (every 2, 6, 12 or 24 hours), the plugin l
 - watched episodes are added to your daily notes, and what you watched is lined up for their Related property;
 - once a week, your **automatic collections** are sent to Plex and the **Revisit** playlist is remade (each if set up). These two never ask.
 
-**At the daily check-in** (default 19:00, once a day, the first time Obsidian is open after that time, and not while another pop-up is open), questions come one after another:
-1. changes to approve: play counts, playtimes, ratings, statuses;
+**At the daily check-in** (default 19:00, once a day, the first time Obsidian is open after that time, and not while another pop-up is open), questions come one after another, with a step bar on each pop-up showing where you are:
+1. changes to approve: play counts, playtimes, ratings, statuses, and (on the computer with your music) songs' lyrics and tags from their music files;
 2. **Add to your daily notes?** for what you watched;
 3. **Just finished**, to react to.
 
@@ -384,7 +396,7 @@ What it writes:
 
 **TV shows** (notes tagged `tv_show`) are a little different: the pop-up fills an **Episodes watched** box with that day's episodes from Plex (change it, or type them in when Plex has none), and the line names them instead of a rating, such as `2026-11-04 · S02E01 – Title · entertained, happy · just as strong as the first season`. The rating you pick there, **Rating for the show**, still becomes the note's rating, but isn't put in the line, since it's for the show rather than those episodes. Insights counts a 🩷 show among the favorites by its own rating. Movies and everything else work as above.
 
-**Just finished** lists the movies and shows you finished in the last two weeks that have a note (a show once every episode is watched). Pick one to react, or **Not now** to come back later. In the "How was it?" pop-up, **Don't ask about this** stops one coming back. A rewatch is asked about again. Anything whose note already has a reaction from that day or later counts as answered, however the reaction got there.
+**Just finished** lists the movies and shows you finished in the last two weeks that have a note (a show once every episode is watched). **How was it?** reacts, **Not this one** sets it aside for good, **Not now** comes back to them later. In the "How was it?" pop-up, **Don't ask about this** stops one coming back. A rewatch is asked about again. Anything whose note already has a reaction from that day or later counts as answered, however the reaction got there.
 
 **Notes** (your note's `Notes` property) is yours alone. The plugin only checks whether it's empty: things you rated 🩷 or 💣 with empty Notes show in "Worth a few words" on the dashboard, and **Write about it** opens the note with the cursor in its Notes property.
 

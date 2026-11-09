@@ -176,6 +176,11 @@ export interface PlexNotesSettings {
   checkLibraries: string[] | null
   /** The libraries (settings keys) "Sync with Plex and Steam" syncs, as last chosen (null: not chosen yet, all). */
   syncLibraries: string[] | null
+  /**
+   * The properties a sync also compares with their sources, by library (settings key); none is a
+   * quick sync. Since 0.0.194, when "Check notes against sources" became part of the sync.
+   */
+  syncCompare: Record<string, string[]>
   /** The only genres written to notes, in every library; empty keeps them all. */
   allowedGenres: string[]
   /** Links you chose to keep when a sync offered a different one, by rating key: not offered again while unchanged. */
@@ -315,6 +320,7 @@ export function defaultSettings(): PlexNotesSettings {
     checkByLibrary: {},
     checkLibraries: null,
     syncLibraries: null,
+    syncCompare: {},
     updatePlayCounts: false,
     updateRatings: false,
     updateStatus: false,
@@ -481,6 +487,11 @@ export function loadSettings(data: unknown): PlexNotesSettings {
   if (Array.isArray(saved.checkProperties)) settings.checkProperties = saved.checkProperties.map(String)
   if (Array.isArray(saved.checkLibraries)) settings.checkLibraries = saved.checkLibraries.map(String)
   if (Array.isArray(saved.syncLibraries)) settings.syncLibraries = saved.syncLibraries.map(String)
+  if (saved.syncCompare && typeof saved.syncCompare === 'object') {
+    settings.syncCompare = Object.fromEntries(Object.entries(saved.syncCompare as Record<string, unknown>)
+      .filter((e): e is [string, unknown[]] => Array.isArray(e[1]))
+      .map(([key, names]) => [key, names.map(String)]))
+  }
   if (saved.checkByLibrary && typeof saved.checkByLibrary === 'object') {
     settings.checkByLibrary = Object.fromEntries(Object.entries(saved.checkByLibrary as Record<string, unknown>)
       .filter((e): e is [string, unknown[]] => Array.isArray(e[1]))

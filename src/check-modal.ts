@@ -1,4 +1,4 @@
-import { App, type ExtraButtonComponent, Modal, Notice, Setting, TFile, type ToggleComponent } from 'obsidian'
+import { App, Modal, Notice, Setting, TFile, ToggleComponent } from 'obsidian'
 import { BOOKS_LIBRARY, type PlexNotesSettings } from './config'
 import { FIELD_SOURCES, UNCHECKED_SOURCES, type FieldSource } from './properties'
 import { compareTitles } from './notes'
@@ -6,11 +6,6 @@ import { compareTitles } from './notes'
 
 /** Not a property: a check with it renames notes whose file name doesn't follow their library's format. */
 export const FILE_NAME = 'File name'
-
-/** What each kind of library holds, as shown beside its name. */
-const KIND_NAMES: Record<string, string> = {
-  movie: 'Movies', tv: 'TV shows', documentary: 'Documentaries', music: 'Music', game: 'Games', book: 'Books',
-}
 
 /**
  * The properties a check can compare, by name: which source fills them (none for the file name)
@@ -57,168 +52,130 @@ export function libraryCheckables(settings: PlexNotesSettings, key: string): { n
   return [{ name: FILE_NAME, source: null }, ...properties]
 }
 
-/** Libraries whose property list is open in the check pop-up, kept while Obsidian runs. */
-const openInCheck = new Set<string>()
+/** Libraries whose "Also compare" list is open in the sync pop-up, kept while Obsidian runs. */
+const openInSync = new Set<string>()
+
+/** Sources that need a slow lookup per note (HowLongToBeat), pointed out when one is ticked. */
+const SLOW_SOURCES: FieldSource[] = ['hltbMain', 'hltbLink', 'durationMinutes', 'durationText', 'durationClock']
 
 /**
- * "Check notes against sources": choose the libraries, and in each the properties to compare,
- * then start. The choice is remembered for next time.
- */
-export class CheckModal extends Modal {
-  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (properties: Record<string, string[]>, libraries: string[]) => void) {
-    super(app)
-  }
-
-  onOpen(): void {
-    this.titleEl.setText('Check notes against sources')
-    this.modalEl.addClass('pmn-check')
-    const { contentEl } = this
-    contentEl.createEl('p', {
-      cls: 'setting-item-description',
-      text: 'Each note matched to a Plex item or Steam game, and each book note (via Open Library), is compared with its source for the properties ticked here, and you choose what to keep in the usual pop-up. A property missing or empty in a note is filled in from the source (ticked). A status only starts ticked when it moves forward; a rating that differs from Plex\'s can go either way (use Plex\'s, or send yours to Plex), both unticked; the source\'s tag is added to your tags; an image you set yourself starts unticked. It\'s slow: each item\'s details are fetched. Notes nothing matched are listed at the end.',
-    })
-    contentEl.createEl('p', {
-      cls: 'setting-item-description',
-      text: 'Switch on the libraries to check, and open one to choose its properties.',
-    })
-    const settings = this.pmnSettings
-    const libraries = Object.entries(settings.libraries).filter(([, lib]) => lib.target !== 'skip')
-    const checkedLibraries = new Set(settings.checkLibraries?.filter(key => libraries.some(([k]) => k === key)) ?? libraries.map(([key]) => key))
-    const chosen = new Map<string, Set<string>>()
-    const list = contentEl.createDiv('pmn-check-libraries')
-    for (const [key, lib] of libraries) {
-      const properties = libraryCheckables(settings, key)
-      const saved = settings.checkByLibrary[key] ?? settings.checkProperties ?? properties.map(p => p.name)
-      const picked = new Set(saved.filter(name => properties.some(p => p.name === name)))
-      chosen.set(key, picked)
-
-      const section = list.createDiv('pmn-check-library')
-      const body = createDiv('pmn-check-properties pmn-indent')
-      let chevron: ExtraButtonComponent | null = null
-      const showOpen = () => {
-        const open = openInCheck.has(key)
-        body.toggleClass('pmn-hidden', !open)
-        chevron?.setIcon(open ? 'chevron-down' : 'chevron-right')
-      }
-      const toggleOpen = () => {
-        if (openInCheck.has(key)) openInCheck.delete(key)
-        else openInCheck.add(key)
-        showOpen()
-      }
-      const row = new Setting(section)
-        .setName(lib.title)
-        .addExtraButton(button => {
-          chevron = button
-          button.setTooltip('Choose properties').onClick(toggleOpen)
-        })
-        .addToggle(toggle => toggle
-          .setTooltip('Check this library')
-          .setValue(checkedLibraries.has(key))
-          .onChange(value => {
-            if (value) checkedLibraries.add(key)
-            else checkedLibraries.delete(key)
-          }))
-      row.settingEl.addClass('pmn-check-library-row')
-      row.nameEl.addEventListener('click', toggleOpen)
-      const describe = () => row.setDesc(`${KIND_NAMES[lib.target] ?? ''} · ${picked.size} of ${properties.length} properties`)
-      describe()
-      section.appendChild(body)
-
-      const toggles: ToggleComponent[] = []
-      new Setting(body)
-        .addButton(b => b.setButtonText('Tick all').onClick(() => { toggles.forEach(t => { t.setValue(true) }) }))
-        .addButton(b => b.setButtonText('Untick all').onClick(() => { toggles.forEach(t => { t.setValue(false) }) }))
-      for (const { name, source } of properties) {
-        new Setting(body)
-          .setName(name)
-          .setDesc(source ? FIELD_SOURCES[source] : 'Renamed to the library\'s file name format')
-          .addToggle(toggle => {
-            toggles.push(toggle)
-            toggle
-              .setValue(picked.has(name))
-              .onChange(value => {
-                if (value) picked.add(name)
-                else picked.delete(name)
-                describe()
-              })
-          })
-      }
-      showOpen()
-    }
-    new Setting(contentEl)
-      .addButton(b => b.setButtonText('Start').setCta().onClick(() => {
-        const byLibrary: Record<string, string[]> = {}
-        for (const [key] of libraries) {
-          // In the order the library lists them, for the pop-ups.
-          byLibrary[key] = libraryCheckables(settings, key).map(p => p.name).filter(name => chosen.get(key)!.has(name))
-        }
-        const keys = libraries.map(([key]) => key).filter(key => checkedLibraries.has(key) && byLibrary[key].length)
-        settings.checkByLibrary = byLibrary
-        settings.checkLibraries = libraries.map(([key]) => key).filter(key => checkedLibraries.has(key))
-        this.close()
-        if (!keys.length) {
-          new Notice('Nothing to check: switch on a library with at least one property ticked')
-          return
-        }
-        this.pmnStart(Object.fromEntries(keys.map(key => [key, byLibrary[key]])), keys)
-      }))
-      .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
-  }
-
-  onClose(): void {
-    this.contentEl.empty()
-  }
-}
-
-/**
- * "Sync with Plex and Steam": choose which libraries to sync (say, only Movies after adding a
- * film), then start. The choice is remembered for next time.
+ * "Sync with Plex and Steam": choose which libraries to sync and, under each, which properties to
+ * also compare with their sources (what "Check notes against sources" used to do). Nothing ticked
+ * is a quick sync. Books are only compared (no sync reads them), and start switched off. The
+ * choices are remembered for next time.
  */
 export class SyncModal extends Modal {
-  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (libraries: string[]) => void) {
+  constructor(app: App, private readonly pmnSettings: PlexNotesSettings, private readonly pmnStart: (libraries: string[], compare: Record<string, string[]>) => void) {
     super(app)
   }
 
   onOpen(): void {
     this.titleEl.setText('Sync with Plex and Steam')
-    this.modalEl.addClass('pmn-check')
+    this.modalEl.addClass('pmn-sync')
     const { contentEl } = this
     contentEl.createEl('p', {
       cls: 'setting-item-description',
-      text: 'Only the libraries switched on are read from Plex or Steam and their notes created, renamed, filled in and updated. Fewer libraries, quicker sync.',
+      text: 'Makes notes for anything new and keeps play counts, ratings, statuses, lyrics and song tags up to date. Tick properties under a library to also compare its existing notes with the source; nothing ticked is a quick sync.',
     })
     const settings = this.pmnSettings
-    // Books aren't synced (they come from Open Library, through checks).
-    const libraries = Object.entries(settings.libraries).filter(([key, lib]) => lib.target !== 'skip' && key !== BOOKS_LIBRARY)
-    const chosen = new Set(settings.syncLibraries?.filter(key => libraries.some(([k]) => k === key)) ?? libraries.map(([key]) => key))
-    const toggles: ToggleComponent[] = []
-    new Setting(contentEl)
-      .addButton(b => b.setButtonText('All').onClick(() => { toggles.forEach(t => { t.setValue(true) }) }))
-      .addButton(b => b.setButtonText('None').onClick(() => { toggles.forEach(t => { t.setValue(false) }) }))
-    for (const [key, lib] of libraries) {
-      new Setting(contentEl)
-        .setName(lib.title)
-        .setDesc(KIND_NAMES[lib.target] ?? '')
-        .addToggle(toggle => {
-          toggles.push(toggle)
-          toggle.setValue(chosen.has(key)).onChange(value => {
-            if (value) chosen.add(key)
-            else chosen.delete(key)
-          })
-        })
+    const libraries = Object.entries(settings.libraries).filter(([, lib]) => lib.target !== 'skip')
+    // Books are only compared, so they start switched off.
+    const switchedOn = new Set(settings.syncLibraries?.filter(key => libraries.some(([k]) => k === key))
+      ?? libraries.map(([key]) => key).filter(key => key !== BOOKS_LIBRARY))
+    const compare = new Map<string, Set<string>>()
+    const warning = createDiv({ cls: 'pmn-sync-warning' })
+    const describeAll = () => {
+      const on = libraries.filter(([key]) => switchedOn.has(key) && compare.get(key)!.size)
+      const count = on.reduce((n, [key]) => n + compare.get(key)!.size, 0)
+      warning.toggleClass('pmn-hidden', !on.length)
+      warning.setText(`Comparing ${count} propert${count === 1 ? 'y' : 'ies'} in ${on.length} librar${on.length === 1 ? 'y' : 'ies'}: every note in them is looked up one by one, so this sync takes longer. Each note gets one pop-up with its sync changes and its differences together.`)
     }
+    for (const [key, lib] of libraries) {
+      const properties = libraryCheckables(settings, key)
+      const picked = new Set((settings.syncCompare[key] ?? []).filter(name => properties.some(p => p.name === name)))
+      compare.set(key, picked)
+      const books = key === BOOKS_LIBRARY
+      const section = contentEl.createDiv('pmn-sync-library')
+      const row = section.createDiv('pmn-sync-row')
+      const summary = createSpan({ cls: 'pmn-sync-summary' })
+      new ToggleComponent(row).setValue(switchedOn.has(key)).setTooltip(books ? 'Compare book notes' : 'Sync this library').onChange(value => {
+        if (value) switchedOn.add(key)
+        else switchedOn.delete(key)
+        section.toggleClass('is-off', !value)
+        describe()
+        describeAll()
+      })
+      const name = row.createDiv({ cls: 'pmn-sync-name', text: lib.title })
+      if (books) name.createSpan({ cls: 'pmn-sync-only', text: 'compare only' })
+      row.appendChild(summary)
+      section.toggleClass('is-off', !switchedOn.has(key))
+      const describe = () => {
+        summary.empty()
+        if (!switchedOn.has(key)) {
+          summary.setText('Off')
+          return
+        }
+        const names = properties.filter(p => picked.has(p.name)).map(p => p.name)
+        summary.setText(!names.length ? (books ? 'Nothing to compare' : 'Quick sync only') : names.length <= 3 ? `Compare: ${names.join(', ')}` : `Compare: ${names.length} properties`)
+        const slow = books ? 'Open Library' : lib.target === 'game' && properties.some(p => picked.has(p.name) && p.source && SLOW_SOURCES.includes(p.source)) ? 'HowLongToBeat' : null
+        if (names.length && slow) summary.createSpan({ cls: 'pmn-sync-slow', text: ` · slow (${slow})` })
+      }
+      const details = section.createEl('details', { cls: 'pmn-sync-compare' })
+      details.open = openInSync.has(key)
+      details.addEventListener('toggle', () => {
+        if (details.open) openInSync.add(key)
+        else openInSync.delete(key)
+      })
+      details.createEl('summary', { text: 'Also compare these properties' })
+      const all = details.createDiv('pmn-sync-all')
+      const boxes: HTMLInputElement[] = []
+      const setAll = (value: boolean) => {
+        for (const [i, box] of boxes.entries()) {
+          box.checked = value
+          if (value) picked.add(properties[i].name)
+          else picked.delete(properties[i].name)
+        }
+        describe()
+        describeAll()
+      }
+      all.createEl('a', { text: 'Tick all', href: '#' }).addEventListener('click', evt => { evt.preventDefault(); setAll(true) })
+      all.createEl('a', { text: 'Untick all', href: '#' }).addEventListener('click', evt => { evt.preventDefault(); setAll(false) })
+      const grid = details.createDiv('pmn-sync-props')
+      for (const { name: property, source } of properties) {
+        const label = grid.createEl('label', { cls: 'pmn-sync-prop', attr: { 'aria-label': source ? FIELD_SOURCES[source] : 'Renamed to the library\'s file name format' } })
+        const box = label.createEl('input', { type: 'checkbox' })
+        box.checked = picked.has(property)
+        boxes.push(box)
+        label.createSpan({ text: property })
+        box.addEventListener('change', () => {
+          if (box.checked) picked.add(property)
+          else picked.delete(property)
+          describe()
+          describeAll()
+        })
+      }
+      describe()
+    }
+    contentEl.appendChild(warning)
+    describeAll()
     new Setting(contentEl)
+      .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
       .addButton(b => b.setButtonText('Sync').setCta().onClick(() => {
-        const keys = libraries.map(([key]) => key).filter(key => chosen.has(key))
+        const keys = libraries.map(([key]) => key).filter(key => switchedOn.has(key))
+        const chosen: Record<string, string[]> = {}
+        for (const [key] of libraries) {
+          // In the order the library lists them, for the pop-ups.
+          chosen[key] = libraryCheckables(settings, key).map(p => p.name).filter(name => compare.get(key)!.has(name))
+        }
         settings.syncLibraries = keys
+        settings.syncCompare = chosen
         this.close()
         if (!keys.length) {
           new Notice('Nothing to sync: switch on at least one library')
           return
         }
-        this.pmnStart(keys)
+        this.pmnStart(keys, Object.fromEntries(keys.filter(key => chosen[key].length).map(key => [key, chosen[key]])))
       }))
-      .addButton(b => b.setButtonText('Cancel').onClick(() => this.close()))
   }
 
   onClose(): void {

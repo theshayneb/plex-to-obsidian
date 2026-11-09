@@ -1,4 +1,5 @@
-import { App, FuzzySuggestModal, Modal, Setting, TFile, setIcon } from 'obsidian'
+import { App, FuzzySuggestModal, Menu, Modal, Setting, TFile, setIcon } from 'obsidian'
+import { renderCheckInSteps } from './check-in-steps'
 import { LinkSuggest } from './link-suggest'
 import { matchValues, PropertyValueSuggest, vaultPropertyValues, type VaultValues } from './property-suggest'
 import type { CoverChoice } from './steamgriddb'
@@ -115,6 +116,11 @@ export class ApprovalModal extends Modal {
   }
 
   onOpen(): void {
+    // A change to a note you have: the cards (since 0.0.194). A new note keeps its table.
+    if (this.pmnRequest.action === 'change') {
+      this.pmnReview()
+      return
+    }
     const { action, path, lines, position, total } = this.pmnRequest
     const create = action === 'create'
     this.titleEl.setText(create ? 'Create this note?' : 'Change this note?')
@@ -300,6 +306,399 @@ export class ApprovalModal extends Modal {
       .addButton(b => b.setButtonText('Stop').setWarning().onClick(() => this.pmnDecide('stop')))
   }
 
+  /** The count on the Apply button, kept current as choices change. */
+  private pmnApply: HTMLButtonElement | null = null
+  private pmnCount: HTMLElement | null = null
+
+  /**
+   * A change to an existing note, as cards: one per property, in sections (Kept up to date,
+   * Differences found, Tags, then the rest of the note, folded), each saying where its value comes
+   * from and where it's written. Choices come back as before: unticked lines in `excluded`, edited
+   * values in `edits`, locks in `locked`.
+   */
+  private pmnReview(): void {
+    const { path, lines, position, total, group, note } = this.pmnRequest
+    this.modalEl.addClass('pmn-review')
+    const { contentEl } = this
+    renderCheckInSteps(contentEl)
+    const name = path.split('/').pop()!.replace(/\.md$/, '')
+    const top = contentEl.createDiv('pmn-review-top')
+    top.createEl('h2', { text: name })
+    if (group) top.createSpan({ cls: 'pmn-review-chip', text: group })
+    else top.createSpan({ cls: 'pmn-review-chip', text: `${position} of ${total}` })
+    const where = contentEl.createDiv('pmn-review-where')
+    where.createSpan({ text: `${path.split('/').slice(0, -1).join('/')} · ` })
+    where.createEl('a', { text: 'Open note', href: '#' }).addEventListener('click', evt => {
+      evt.preventDefault()
+      void this.app.workspace.openLinkText(path, '', true)
+    })
+    if (note) contentEl.createEl('p', { cls: 'pmn-approval-note', text: note })
+    contentEl.createDiv({ cls: 'pmn-review-hint', text: 'Each card says where a value comes from → where it\'s written. Pick what you want; anything you leave as it is isn\'t asked about again while both sides stay the same.' })
+
+    // Lines start ticked or not as the sync planned them.
+    for (const line of lines) if (line.unticked) this.pmnExcluded.add(line.key)
+
+    const isTags = (line: ApprovalLine) => line.label.trim().toLowerCase() === 'tags'
+    const kept = (line: ApprovalLine) => /^(update:|count:|add:|rename$|rescale:|why$)/.test(line.key)
+    const sections: [string, string, ApprovalLine[]][] = [
+      ['Kept up to date', 'routine sync updates', lines.filter(l => !isTags(l) && kept(l))],
+      ['Differences found', 'from comparing; pick what you want', lines.filter(l => !isTags(l) && !kept(l))],
+      ['Tags', 'your note\'s tags and its source\'s', lines.filter(isTags)],
+    ]
+    const scroll = contentEl.createDiv('pmn-review-scroll')
+    for (const [title, hint, sectionLines] of sections) {
+      if (!sectionLines.length) continue
+      const head = scroll.createDiv('pmn-review-section')
+      head.createEl('h3', { text: title })
+      head.createSpan({ cls: 'pmn-review-section-hint', text: title === 'Tags' && sectionLines.some(l => l.key.startsWith('file:')) ? 'Obsidian\'s tags and the mp3\'s' : hint })
+      // One card per property.
+      const byLabel = new Map<string, ApprovalLine[]>()
+      for (const line of sectionLines) byLabel.set(line.label, [...byLabel.get(line.label) ?? [], line])
+      for (const [label, cardLines] of byLabel) {
+        if (title === 'Tags') this.pmnTagsCard(scroll, label, cardLines)
+        else if (cardLines.some(l => l.edit === 'list')) this.pmnListCard(scroll, label, cardLines)
+        else if (cardLines.some(l => isLong(l.value) || isLong(l.current))) this.pmnTextCard(scroll, label, cardLines)
+        else this.pmnChoiceCard(scroll, label, cardLines)
+      }
+    }
+    this.pmnRestOfNote(scroll)
+
+    const foot = contentEl.createDiv('pmn-review-foot')
+    this.pmnCount = foot.createSpan({ cls: 'pmn-review-count' })
+    foot.createEl('button', { text: 'Skip' }).addEventListener('click', () => this.pmnDecide('skip'))
+    const more = foot.createEl('button', { text: 'More ▾' })
+    more.addEventListener('click', evt => {
+      const menu = new Menu()
+      if (this.pmnRequest.groupKey && this.pmnRequest.groupLeft) {
+        menu.addItem(item => item.setTitle(`Apply to the ${this.pmnRequest.groupLeft} left like this`).onClick(() => this.pmnDecide('group')))
+      }
+      menu.addItem(item => item.setTitle('Apply to every note left').onClick(() => this.pmnDecide('all')))
+      menu.addItem(item => item.setTitle('Skip this one every time').onClick(() => this.pmnDecide('ignore')))
+      menu.addItem(item => item.setTitle('Stop').setWarning(true).onClick(() => this.pmnDecide('stop')))
+      menu.showAtMouseEvent(evt)
+    })
+    this.pmnApply = foot.createEl('button', { cls: 'mod-cta' })
+    this.pmnApply.addEventListener('click', () => this.pmnDecide('apply'))
+    this.pmnCounted()
+  }
+
+  /** "Apply 3 changes": how many lines are chosen, and edits to the rest of the note. */
+  private pmnCounted(): void {
+    const chosen = this.pmnRequest.lines.filter(l => !this.pmnExcluded.has(l.key)).length
+      + Object.keys(this.pmnEdits).filter(key => key.startsWith('own')).length
+    this.pmnCount?.setText(`${chosen} change${chosen === 1 ? '' : 's'} chosen`)
+    this.pmnApply?.setText(chosen ? `Apply ${chosen} change${chosen === 1 ? '' : 's'}` : 'Done')
+  }
+
+  private pmnInclude(line: ApprovalLine, on: boolean): void {
+    if (on) this.pmnExcluded.delete(line.key)
+    else this.pmnExcluded.add(line.key)
+    this.pmnCounted()
+  }
+
+  /** A card's frame: the property's name, where its value comes from → where it goes, and the lock. */
+  private pmnCard(parent: HTMLElement, label: string, lines: ApprovalLine[], flow = true): { card: HTMLElement, body: HTMLElement, locked: () => boolean, onLock: (f: (locked: boolean) => void) => void } {
+    const card = parent.createDiv('pmn-review-card')
+    const head = card.createDiv('pmn-review-head')
+    head.createSpan({ cls: 'pmn-review-prop', text: label })
+    const flowEl = head.createSpan('pmn-review-flow')
+    if (flow) {
+      const sources = [...new Set(lines.filter(l => !l.key.startsWith('file:')).map(l => sourceName(l.source)))]
+      if (sources.length) pills(flowEl, sources.join(' or '), destination(lines[0]))
+      else if (lines[0]) pills(flowEl, sourceName(lines[0].source), destination(lines[0]))
+    }
+    const warn = lines.find(l => l.warn)?.warn
+    if (warn) head.createSpan({ cls: 'pmn-review-warn', text: warn })
+    const lock = head.createEl('button', { cls: 'pmn-review-lock clickable-icon', attr: { 'aria-label': `Never change ${label} in this note` } })
+    setIcon(lock, 'lock-open')
+    const body = card.createDiv('pmn-review-body')
+    const listeners: ((locked: boolean) => void)[] = []
+    lock.addEventListener('click', evt => {
+      evt.preventDefault()
+      const locking = !this.pmnLocked.has(label)
+      if (locking) this.pmnLocked.add(label)
+      else this.pmnLocked.delete(label)
+      setIcon(lock, locking ? 'lock' : 'lock-open')
+      lock.toggleClass('is-active', locking)
+      card.toggleClass('is-locked', locking)
+      // Locked: none of it is changed, now or ever (undo in Settings → Remembered choices).
+      for (const line of lines) {
+        if (locking) this.pmnExcluded.add(line.key)
+        else if (!line.unticked) this.pmnExcluded.delete(line.key)
+      }
+      listeners.forEach(f => f(locking))
+      this.pmnCounted()
+    })
+    return { card, body, locked: () => this.pmnLocked.has(label), onLock: f => listeners.push(f) }
+  }
+
+  /** One value to pick: the note's (Obsidian) or a source's, each a button; the picked one can be edited. */
+  private pmnChoiceCard(parent: HTMLElement, label: string, lines: ApprovalLine[]): void {
+    const { body, onLock } = this.pmnCard(parent, label, lines)
+    const choices = body.createDiv('pmn-review-choices')
+    const editArea = body.createDiv('pmn-review-edit')
+    const options: { el: HTMLElement, line: ApprovalLine | null }[] = []
+    let picked: ApprovalLine | null = lines.find(l => !l.unticked) ?? null
+    const draw = () => {
+      for (const o of options) o.el.toggleClass('is-picked', o.line === picked)
+      editArea.empty()
+      if (picked?.edit) {
+        const line = picked
+        if (line.choices?.length) this.pmnValue(editArea, line)
+        else {
+          const link = editArea.createEl('a', { cls: 'pmn-review-link', text: 'Edit this value', href: '#' })
+          link.addEventListener('click', evt => {
+            evt.preventDefault()
+            editArea.empty()
+            this.pmnValue(editArea, line)
+          })
+        }
+      }
+    }
+    const option = (line: ApprovalLine | null, source: string, value: string | null, disabled = false, note?: string) => {
+      const el = choices.createEl('button', { cls: 'pmn-review-option' })
+      el.createSpan({ cls: 'pmn-review-option-source', text: source })
+      const text = el.createSpan({ cls: 'pmn-review-option-value' })
+      if (value === null) text.createEl('em', { text: 'Empty' })
+      else text.setText(value)
+      if (note) el.createSpan({ cls: 'pmn-review-option-note', text: note })
+      if (disabled) {
+        el.disabled = true
+        el.addClass('is-disabled')
+        return
+      }
+      options.push({ el, line })
+      el.addEventListener('click', evt => {
+        evt.preventDefault()
+        if (this.pmnLocked.has(label)) return
+        picked = line
+        for (const l of lines) this.pmnInclude(l, l === line)
+        draw()
+      })
+    }
+    // What's there now first: in the note, or (for a value written elsewhere) in the mp3 or Plex.
+    option(null, currentName(lines[0]), lines[0].current ?? null)
+    for (const line of lines) option(line, sourceName(line.source), line.value)
+    for (const other of lines[0].also ?? []) option(null, other.source, other.value, true, other.note)
+    onLock(locked => {
+      if (locked) picked = null
+      else picked = lines.find(l => !l.unticked) ?? null
+      draw()
+    })
+    draw()
+  }
+
+  /** Long text (lyrics, a summary): both sides, the lines that differ marked, and one box to take the new one. */
+  private pmnTextCard(parent: HTMLElement, label: string, lines: ApprovalLine[]): void {
+    const { body, onLock } = this.pmnCard(parent, label, lines)
+    const line = lines[0]
+    const now = (line.current ?? '').split('\n')
+    const next = (line.value ?? '').split('\n')
+    const cols = body.createDiv('pmn-review-cols')
+    // A changed line is one line different, not one taken out and one put in.
+    const differ = Math.max(now.filter(l => !next.includes(l)).length, next.filter(l => !now.includes(l)).length)
+    const short = 8
+    const column = (title: string, text: string[], other: string[], cls: string) => {
+      const col = cols.createDiv('pmn-review-col')
+      col.createDiv({ cls: 'pmn-review-col-title', text: title })
+      const box = col.createDiv('pmn-review-text')
+      const show = (all: boolean) => {
+        box.empty()
+        const shown = all ? text : text.slice(0, short)
+        shown.forEach((l, i) => {
+          if (i) box.createEl('br')
+          box.createSpan({ cls: other.includes(l) ? 'is-same' : cls, text: l || ' ' })
+        })
+        if (!text.join('').trim()) box.createEl('em', { text: 'Empty' })
+      }
+      show(false)
+      return show
+    }
+    const showNow = column(`${currentName(line)} now`, now, next, 'is-removed')
+    const showNext = column(`${sourceName(line.source)} (will replace it)`, next, now, 'is-added')
+    const more = body.createDiv('pmn-review-more')
+    if (Math.max(now.length, next.length) > short) {
+      let all = false
+      const toggle = more.createEl('a', { cls: 'pmn-review-link', text: 'Show all', href: '#' })
+      toggle.addEventListener('click', evt => {
+        evt.preventDefault()
+        all = !all
+        showNow(all)
+        showNext(all)
+        toggle.setText(all ? 'Show less' : 'Show all')
+      })
+      more.createSpan({ text: ' · ' })
+    }
+    more.createSpan({ text: `${differ} line${differ === 1 ? '' : 's'} different` })
+    const take = body.createEl('label', { cls: 'pmn-review-take' })
+    const box = take.createEl('input', { type: 'checkbox' })
+    box.checked = !line.unticked
+    take.createSpan({ text: `Copy the ${sourceName(line.source)}'s ${label} into ${destination(line)}` })
+    box.addEventListener('change', () => this.pmnInclude(line, box.checked))
+    if (line.edit) {
+      const editArea = body.createDiv('pmn-review-edit')
+      const link = editArea.createEl('a', { cls: 'pmn-review-link', text: 'Edit this value', href: '#' })
+      link.addEventListener('click', evt => {
+        evt.preventDefault()
+        editArea.empty()
+        this.pmnValue(editArea, line)
+      })
+    }
+    onLock(locked => {
+      box.checked = !locked && !line.unticked
+      box.disabled = locked
+    })
+  }
+
+  /** A list (genres and such): the note's items, and each of the source's it lacks as its own chip to add. */
+  private pmnListCard(parent: HTMLElement, label: string, lines: ApprovalLine[]): void {
+    const { body, onLock } = this.pmnCard(parent, label, lines)
+    for (const line of lines) {
+      const current = splitList(line.current)
+      const offered = line.items ?? splitList(line.value)
+      const has = (list: string[], v: string) => list.some(x => x.toLowerCase() === v.toLowerCase())
+      const additions = offered.filter(v => !has(current, v))
+      const dropped = current.filter(v => !has(offered, v))
+      const added = new Set(line.unticked ? [] : additions)
+      const removed = new Set<string>()
+      const result = () => [...current.filter(v => !removed.has(v)), ...additions.filter(v => added.has(v))]
+      const update = () => {
+        const list = result()
+        const same = list.length === current.length && list.every((v, i) => v === current[i])
+        if (same) this.pmnExcluded.add(line.key)
+        else {
+          this.pmnExcluded.delete(line.key)
+          this.pmnEdits[line.key] = list
+        }
+        this.pmnCounted()
+      }
+      body.createDiv({ cls: 'pmn-review-label', text: `In ${destination(line).replace(/:.*$/, '')}` })
+      const own = body.createDiv('pmn-review-chips')
+      if (!current.length) own.createEl('em', { cls: 'pmn-review-empty', text: 'Empty' })
+      for (const v of current) {
+        const chip = own.createEl('button', { cls: 'pmn-review-tag', text: v })
+        if (has(dropped, v)) {
+          // The source doesn't have it: yours stays unless you tap it away.
+          chip.addClass('can-remove')
+          chip.setAttr('aria-label', `Not in ${sourceName(line.source)}: tap to take it out`)
+          chip.addEventListener('click', evt => {
+            evt.preventDefault()
+            if (removed.has(v)) removed.delete(v)
+            else removed.add(v)
+            chip.toggleClass('is-removed', removed.has(v))
+            update()
+          })
+        } else chip.disabled = true
+      }
+      if (additions.length) {
+        body.createDiv({ cls: 'pmn-review-label', text: `Only in ${sourceName(line.source)}: tap any to add` })
+        const offer = body.createDiv('pmn-review-chips')
+        for (const v of additions) {
+          const chip = offer.createEl('button', { cls: 'pmn-review-tag is-offer', text: v })
+          chip.toggleClass('is-picked', added.has(v))
+          chip.addEventListener('click', evt => {
+            evt.preventDefault()
+            if (this.pmnLocked.has(label)) return
+            if (added.has(v)) added.delete(v)
+            else added.add(v)
+            chip.toggleClass('is-picked', added.has(v))
+            update()
+          })
+        }
+      }
+      update()
+      onLock(locked => { if (!locked) update() })
+    }
+  }
+
+  /** Tags: in the source and not Obsidian (to add to the note), in Obsidian and not the mp3 (to add to the file), in both. */
+  private pmnTagsCard(parent: HTMLElement, label: string, lines: ApprovalLine[]): void {
+    const { body, onLock } = this.pmnCard(parent, label, lines, false)
+    const toFile = lines.find(l => l.key.startsWith('file:'))
+    const toNote = lines.filter(l => l !== toFile)
+    const noteNow = splitList(toNote[0]?.current ?? (toFile ? null : lines[0].current))
+    const fileNow = toFile ? splitList(toFile.current) : []
+    const has = (list: string[], v: string) => list.some(x => x.toLowerCase() === v.toLowerCase())
+    const row = (title: string, line: ApprovalLine, base: string[], from: string, to: string) => {
+      const offered = line.items ?? splitList(line.value)
+      const additions = offered.filter(v => !has(base, v))
+      if (!additions.length) return
+      const picked = new Set(line.unticked ? [] : additions)
+      body.createDiv({ cls: 'pmn-review-label', text: title })
+      const chips = body.createDiv('pmn-review-chips')
+      const update = () => {
+        if (!picked.size) this.pmnExcluded.add(line.key)
+        else {
+          this.pmnExcluded.delete(line.key)
+          const list = [...base, ...additions.filter(v => picked.has(v))]
+          // Written to the music file as text; to the note as a list.
+          this.pmnEdits[line.key] = line.key.startsWith('file:') ? list.join(', ') : list
+        }
+        this.pmnCounted()
+      }
+      for (const v of additions) {
+        const chip = chips.createEl('button', { cls: 'pmn-review-tag is-offer', text: v })
+        chip.toggleClass('is-picked', picked.has(v))
+        chip.addEventListener('click', evt => {
+          evt.preventDefault()
+          if (this.pmnLocked.has(label)) return
+          if (picked.has(v)) picked.delete(v)
+          else picked.add(v)
+          chip.toggleClass('is-picked', picked.has(v))
+          update()
+        })
+      }
+      pills(chips.createSpan('pmn-review-flow'), from, to)
+      update()
+      onLock(locked => { if (!locked) update() })
+    }
+    for (const line of toNote) {
+      const from = sourceName(line.source)
+      row(`In ${from}, not Obsidian`, line, noteNow, from, 'Obsidian')
+    }
+    if (toFile) row('In Obsidian, not mp3', toFile, fileNow, 'Obsidian', 'mp3')
+    const both = toFile ? noteNow.filter(v => has(fileNow, v)) : noteNow
+    if (both.length) {
+      body.createDiv({ cls: 'pmn-review-label', text: toFile ? 'In both' : 'In Obsidian' })
+      const chips = body.createDiv('pmn-review-chips')
+      for (const v of both) chips.createEl('button', { cls: 'pmn-review-tag', text: v }).disabled = true
+    }
+  }
+
+  /** The rest of the note, nothing in it changing: folded, and each value can still be edited. */
+  private pmnRestOfNote(parent: HTMLElement): void {
+    const rest = this.pmnRequest.unchanged ?? []
+    if (!rest.length) return
+    const details = parent.createEl('details', { cls: 'pmn-review-rest' })
+    details.createEl('summary', { text: `Nothing to change in the rest of this note: ${rest.length} propert${rest.length === 1 ? 'y' : 'ies'} (open to edit)` })
+    for (const { label, value, warn, key, edit, items } of rest) {
+      const row = details.createDiv('pmn-review-rest-row')
+      const name = row.createDiv({ cls: 'pmn-review-rest-name', text: label })
+      const cellEl = row.createDiv('pmn-review-rest-value')
+      if (warn) name.createDiv({ cls: 'pmn-review-warn', text: warn })
+      if (!key || !edit) {
+        if (value === null) cellEl.createEl('em', { cls: 'pmn-review-empty', text: 'Empty' })
+        else cellEl.setText(value)
+        continue
+      }
+      const mark = () => {
+        name.toggleClass('pmn-approval-changed', key in this.pmnEdits)
+        this.pmnCounted()
+      }
+      if (edit === 'list') {
+        this.pmnListEditor(cellEl, key, items ?? [], mark, label)
+        continue
+      }
+      const original = value ?? ''
+      const field = this.pmnTextField(cellEl, label, original, edit, key === 'own-file')
+      field.addEventListener('input', () => {
+        if (field.value === original) delete this.pmnEdits[key]
+        else this.pmnEdits[key] = field.value
+        mark()
+      })
+    }
+  }
+
   /** A line's new value: shown, or in a box to edit it (its edit kept in `pmnEdits`). */
   private pmnValue(td: HTMLElement, line: ApprovalLine): HTMLTextAreaElement | HTMLInputElement | null {
     const { key, value, edit, items, choices } = line
@@ -450,6 +849,50 @@ export class ApprovalModal extends Modal {
 
 export function askApproval(app: App, request: ApprovalRequest): Promise<Decision> {
   return new Promise(resolve => new ApprovalModal(app, request, resolve).open())
+}
+
+/** Text too long or with several lines to show as a button: shown side by side instead. */
+function isLong(value: string | null | undefined): boolean {
+  return Boolean(value && (value.includes('\n') || value.length > 160))
+}
+
+/** A list as shown in a line ("a, b, c" or "a,b,c"), as items. */
+function splitList(value: string | null | undefined): string[] {
+  return (value ?? '').split(',').map(v => v.trim()).filter(Boolean)
+}
+
+/** A source as the cards name it: the note is "Obsidian", a music file "mp3". */
+function sourceName(source: string | undefined): string {
+  if (!source || source === 'This note') return 'Obsidian'
+  if (source === 'Music file') return 'mp3'
+  if (source === 'This note, in the star scale') return 'Obsidian, in stars'
+  return source
+}
+
+/** Where a line's value is written: "Obsidian: <property>", "mp3: <property>", "Plex". */
+function destination(line: ApprovalLine): string {
+  const to = line.writesTo ?? 'This note'
+  const property = line.label.replace(/ in the music file$/, '')
+  if (to === 'This note') return `Obsidian: ${property}`
+  if (to === 'Music file') return `mp3: ${property}`
+  if (to === 'This note\'s file name') return 'Obsidian: file name'
+  return to
+}
+
+/** What the "now" choice is called: the note's value, or the mp3's or Plex's when that's what changes. */
+function currentName(line: ApprovalLine): string {
+  const to = line.writesTo ?? 'This note'
+  if (to === 'Music file') return 'mp3'
+  if (to === 'Plex') return 'Plex'
+  return 'Obsidian'
+}
+
+/** "from → to", as two pills; the note's side in the accent colour. */
+function pills(el: HTMLElement, from: string, to: string): void {
+  const pill = (text: string) => el.createSpan({ cls: text.startsWith('Obsidian') ? ['pmn-review-pill', 'is-obsidian'] : 'pmn-review-pill', text })
+  pill(from)
+  el.createSpan({ cls: 'pmn-review-arrow', text: '→' })
+  pill(to)
 }
 
 /** A table cell showing a value, or "empty" in italics. */

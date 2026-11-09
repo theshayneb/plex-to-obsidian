@@ -1354,6 +1354,24 @@ describe('PlexSync', () => {
     vi.mocked(readFileTags).mockReturnValue(null)
   })
 
+  it('compares the properties ticked for a library during a sync, and nothing in a quick sync', async () => {
+    const note = 'Media/Movies/Arrival (2016).md'
+    const { app, frontmatter } = makeApp({ [note]: { Link: 'http://plex:32400/library/metadata/1', Summary: 'Mine.' } })
+    const settings = settingsWith()
+    settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
+    settings.libraries['1'].properties = [{ name: 'Summary', source: 'summary' }, { name: 'Link', source: 'plexLink' }]
+    responses.set('/library/sections/1/all', { MediaContainer: { Metadata: [movies[0]] } })
+    responses.set('/library/metadata/1', { MediaContainer: { Metadata: [{ ...movies[0], summary: 'Linguist meets aliens.' }] } })
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'full', {}, undefined, new Set(['1']))
+    expect(approve.mock.calls.filter(c => c[0].path === note)).toEqual([])
+    const result = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'full', { 1: ['Summary'] }, undefined, new Set(['1']))
+    const lines = approve.mock.calls.find(c => c[0].path === note)![0].lines
+    expect(lines.map(l => [l.key, l.value])).toEqual([['fix:Summary', 'Linguist meets aliens.']])
+    expect(result.checked).toEqual([note])
+    expect(frontmatter.get(note)!.Summary).toBe('Linguist meets aliens.')
+  })
+
   it('puts the music file\'s lyrics in a new song note', async () => {
     vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })
     const { app, frontmatter } = makeApp({})

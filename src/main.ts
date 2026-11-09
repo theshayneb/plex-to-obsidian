@@ -2,7 +2,7 @@ import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian'
 import { EmbeddedCard } from './embed-cards'
 import { EMBED_LANGUAGE } from './embed-spec'
 import { AddModal } from './add-modal'
-import { CheckModal, checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
+import { checkableProperties, SyncModal, UnmatchedModal } from './check-modal'
 import { askApproval, askOwner } from './approval-modal'
 import { ExplainModal } from './explain-modal'
 import { TieModal } from './tie-modal'
@@ -26,6 +26,7 @@ import { planCollections, planSignature, sendCollections } from './plex-collecti
 import { parseCollectionRules } from './collections'
 import { CollectionsModal } from './collections-modal'
 import { minutesOf } from './daily-episodes'
+import { checkInStep, endCheckIn, startCheckIn } from './check-in-steps'
 
 /** Where each device keeps its own copy of your answers (`mergeAnswers`). */
 const ANSWERS_BACKUP = 'pmn-kept-answers'
@@ -190,14 +191,6 @@ export default class PlexMediaNotesPlugin extends Plugin {
       name: 'React to what you just finished…',
       callback: () => {
         void this.openFinished()
-      },
-    })
-
-    this.addCommand({
-      id: 'check-notes',
-      name: 'Check notes against sources…',
-      callback: () => {
-        new CheckModal(this.app, this.settings, (properties, libraries) => void this.checkNotes(properties, undefined, new Set(libraries))).open()
       },
     })
 
@@ -400,6 +393,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const updating = updatePlayCounts || updateRatings || updateStatus
     this.plexSyncRunning = true
     let ran = false
+    // The check-in's pop-ups show its steps: Updates, Daily notes, Just finished.
+    if (how === 'check-in') startCheckIn()
     try {
       // With asking off nothing is asked, so it's done at every update.
       if (updating && (how !== 'quiet' || !askBeforeChanges) && plexReady(this.settings)) {
@@ -442,7 +437,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.plexSyncRunning = false
       this.syncs.clear()
     }
-    if (!ran) return
+    if (!ran) {
+      endCheckIn()
+      return
+    }
     if (how === 'ask') {
       void this.pointOutFinished()
       this.pointOutRelated()
@@ -451,11 +449,15 @@ export default class PlexMediaNotesPlugin extends Plugin {
     if (how === 'quiet') return
     this.checkingIn = true
     try {
+      const waiting = new PlexSync(this.app, this.settings, () => this.saveSettings()).relatedOffers().length
+      checkInStep(1, `${waiting} link${waiting === 1 ? '' : 's'} waiting`)
       const related = await this.askRelated()
+      checkInStep(2)
       const finished = await this.askFinished()
       if (byHand && !related && !finished) new Notice('Nothing is waiting for you')
     } finally {
       this.checkingIn = false
+      endCheckIn()
     }
   }
 
@@ -512,7 +514,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
       this.syncs.clear()
     }
     if (!items.length) return false
-    await new Promise<void>(resolve => new FinishedModal(this.app, items, item => this.reactToFinished(item), resolve).open())
+    checkInStep(2, `${items.length} to react to`)
+    await new Promise<void>(resolve => new FinishedModal(this.app, items, item => this.reactToFinished(item), resolve, item => this.setAside(item)).open())
     return true
   }
 
@@ -544,12 +547,17 @@ export default class PlexMediaNotesPlugin extends Plugin {
     }
     try {
       const items = await this.newSync().finishedItems()
-      new FinishedModal(this.app, items, item => this.reactToFinished(item)).open()
+      new FinishedModal(this.app, items, item => this.reactToFinished(item), undefined, item => this.setAside(item)).open()
     } catch (err) {
       new Notice(`Couldn't read what you finished: ${errorMessage(err)}`)
     } finally {
       this.syncs.clear()
     }
+  }
+
+  /** "Not this one" in Just finished: not asked about again (a rewatch is). */
+  private setAside(item: Finished): Promise<void> {
+    return new PlexSync(this.app, this.settings, () => this.saveSettings()).setFinishedDone(item)
   }
 
   /** The reaction pop-up for something you finished; answered or set aside, it isn't offered again. */
@@ -873,13 +881,16 @@ export default class PlexMediaNotesPlugin extends Plugin {
       new Notice('A sync or check is already running')
       return
     }
-    new SyncModal(this.app, this.settings, libraries => {
-      void this.saveSettings().then(() => this.syncFromPlex(new Set(libraries)))
+    new SyncModal(this.app, this.settings, (libraries, compare) => {
+      void this.saveSettings().then(() => this.syncFromPlex(new Set(libraries), compare))
     }).open()
   }
 
-  /** @param libraries just these libraries (settings keys); every one when left out. */
-  async syncFromPlex(libraries?: Set<string>): Promise<void> {
+  /**
+   * @param libraries just these libraries (settings keys); every one when left out.
+   * @param compare the properties to also compare with their sources, by library (none: a quick sync).
+   */
+  async syncFromPlex(libraries?: Set<string>, compare: Record<string, string[]> = {}): Promise<void> {
     if (this.plexSyncRunning) {
       new Notice('A sync or check is already running')
       return
@@ -888,7 +899,7 @@ export default class PlexMediaNotesPlugin extends Plugin {
     const notice = new ProgressNotice('Starting…')
     try {
       const result = await this.newSync()
-        .run(message => notice.set(message), 'full', [], undefined, libraries)
+        .run(message => notice.set(message), 'full', compare, undefined, libraries)
       const days = result.stopped ? [] : await this.dailyEpisodes(message => notice.set(message))
       notice.hide()
 
@@ -912,8 +923,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.log('Media Manager: values written to music or lyrics files', result.sentToFiles)
       }
       if (result.corrected.length) {
-        parts.push(`corrected ${result.corrected.length} duration${result.corrected.length === 1 ? '' : 's'}`)
-        console.log('Media Manager: corrected durations', result.corrected)
+        parts.push(`corrected ${result.corrected.length} note${result.corrected.length === 1 ? '' : 's'}`)
+        console.log('Media Manager: corrected from their sources', result.corrected)
       }
       if (result.links.length) {
         parts.push(`fixed ${result.links.length} link${result.links.length === 1 ? '' : 's'}`)

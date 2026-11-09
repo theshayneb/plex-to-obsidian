@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.194] - 2026-11-10
+
+- **Sync and Check are one command.** The "Sync with Plex and Steam…" pop-up lists every library with "Also compare these properties" under it. Tick some to compare those notes with their sources during the sync; tick none for a quick sync. Your choices are remembered. Books are in it too, off unless you switch them on, and slow lookups are pointed out. "Check notes against sources…" is gone; "Check this note" and "Fix year-only dates" stay.
+- **A new change pop-up.** Each note's changes come as cards, one per property, in sections: Kept up to date, Differences found, Tags, then the rest of the note, folded.
+  - Every card says where its value comes from and where it's written, for example "Plex → Obsidian: Genre" or "Obsidian → mp3".
+  - You pick a value by clicking it ("Obsidian" keeps yours).
+  - Lyrics and summaries show both sides with the changed lines marked.
+  - List values, like genres, offer each of the source's items as its own chip, so you can add just one.
+  - Tags are split into "In mp3, not Obsidian" and "In Obsidian, not mp3".
+  - Buttons: "Apply N changes", "Skip" and "More".
+- **The daily check-in matches.** A step bar (Updates, Daily notes, Just finished) shows on each of its pop-ups. "Add to your daily notes?" and "Just finished" are restyled the same way, and "Just finished" has "Not this one".
+
 ## [0.0.193] - 2026-11-10
 
 - Song tags from Music Manager: with a `tags` row in the Music library whose source is "Music: a tag in the file, by name" and the name `Obsidian Tags`:

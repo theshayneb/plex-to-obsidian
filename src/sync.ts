@@ -701,7 +701,10 @@ export class PlexSync {
     // The properties chosen for a library.
     const chosenOf = (lib: LibrarySetting): Set<string> =>
       everywhere ?? new Set((checking as Record<string, string[]>)[keyOf.get(lib) ?? ''] ?? [])
-    this.alwaysAsk = genreCheck
+    // A sync can also compare chosen properties with their sources, as a check does (since 0.0.194).
+    const comparing = full && Object.values(Array.isArray(checking) ? {} : checking).some(names => names.length)
+    const compareHere = (lib: LibrarySetting) => genreCheck || (full && chosenOf(lib).size > 0)
+    this.alwaysAsk = genreCheck || comparing
     if (full) {
       for (const family of FAMILIES) {
         await this.resolveAmbiguous(entries.filter(e => familyOf(e.lib) === family), indexes[family], result)
@@ -751,7 +754,7 @@ export class PlexSync {
         result.failed.push({ title: 'Last.fm', error: `play counts couldn't be read: ${errorText(err)}` })
       }
     }
-    if (renaming || filling || counting || genreCheck || sendingRatings) {
+    if (renaming || filling || counting || genreCheck || comparing || sendingRatings) {
       progress('Checking existing notes…')
       // Every note's changes are worked out first, then asked about grouped by library and by which
       // properties change, so a run of the same kind of change can be approved one after another.
@@ -775,12 +778,12 @@ export class PlexSync {
           const { lib, kind } = this.libraryFor(item, libOf.get(item)!)
           const file = this.app.vault.getAbstractFileByPath(path)
           if (!(file instanceof TFile)) continue
-          if (genreCheck) result.checked.push(path)
+          if (compareHere(lib)) result.checked.push(path)
 
           // Work out every change first, so it can be shown before anything happens.
           let renameTo: string | null = null
           // A note chosen with "Use an existing note" keeps the name you gave it.
-          if ((renaming || (genreCheck && chosenOf(lib).has(FILE_NAME))) && !this.isMerged(item)) {
+          if ((renaming || (compareHere(lib) && chosenOf(lib).has(FILE_NAME))) && !this.isMerged(item)) {
             try {
               renameTo = this.renameTarget(file, item, lib)
             } catch (err) {
@@ -831,7 +834,13 @@ export class PlexSync {
           const fileWrites = genreCheck || asking || (this.readMusicFiles && this.settings.askBeforeChanges && Boolean(this.approve)) ? this.planFileWrites(file, item, lib, genreCheck ? chosenOf(lib) : null) : []
           let checks: Checks | null = null
           try {
-            checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosenOf(lib)) : asking ? this.planChecks(file, item, lib) : null
+            checks = compareHere(lib) ? await this.planFullCheck(file, item, lib, kind, chosenOf(lib)) : asking ? this.planChecks(file, item, lib) : null
+            // In a sync, a property already being filled in or updated is offered once, not again as a difference.
+            if (checks && !genreCheck) {
+              const already = new Set([...fill?.additions.map(([name]) => name) ?? [], ...fill?.imageProperty ? [fill.imageProperty] : [], ...plays?.names ?? []])
+              checks.names = checks.names.filter(name => !already.has(name))
+              if (!checks.names.length) checks = null
+            }
           } catch (err) {
             result.failed.push({ title: item.title, error: `checking failed: ${errorText(err)}` })
           }
@@ -1070,10 +1079,12 @@ export class PlexSync {
       }
     }
     const books = this.settings.libraries[BOOKS_LIBRARY] as LibrarySetting | undefined
-    if (genreCheck && !result.stopped && books) await this.checkBooks(chosenOf(books), result, progress, only)
+    // Books are compared in a check, or in a sync with Books switched on and properties ticked.
+    const comparingBooks = Boolean(books) && (genreCheck || (full && chosenOf(books!).size > 0 && (!this.onlyLibraries || this.onlyLibraries.has(BOOKS_LIBRARY))))
+    if (comparingBooks && !result.stopped && books) await this.checkBooks(chosenOf(books), result, progress, only)
     // A sync renames book notes too (no sync reads the Books library otherwise), from what each note
     // says (its name, author and date), with nothing looked up.
-    if (renaming && !result.stopped && books) await this.checkBooks(new Set([FILE_NAME]), result, progress, undefined, false)
+    if (renaming && !comparingBooks && !result.stopped && books) await this.checkBooks(new Set([FILE_NAME]), result, progress, undefined, false)
     if (!full) return this.finish(result)
 
     const toCreate = entries.filter(({ item, lib }) =>

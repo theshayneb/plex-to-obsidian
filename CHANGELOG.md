@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.190] - 2026-11-10
+
+- "Check notes against sources" stops asking about the same games and books over and over:
+  - When HowLongToBeat doesn't answer, or a book record has no page count, your length or page count is no longer offered to be emptied (which then got offered back next time).
+  - Differences of 10% or less (at least 15 minutes, or 10 pages) aren't offered: HowLongToBeat's times and Open Library's page counts drift a little as people add to them.
+  - When several games on HowLongToBeat share a name, or several books on Open Library match equally, the same one is picked every time, instead of whichever the site listed first that day.
+
 ## [0.0.189] - 2026-11-09
 
 - Pop-ups no longer offer to convert ratings to the star scale: every note's rating is now read as 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷. A new switch in Settings → Syncing, "All ratings are in the star scale" (on), brings the old offers back if it's ever turned off.

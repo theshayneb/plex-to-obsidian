@@ -217,7 +217,8 @@ export function sameBooks(docs: OpenLibraryDoc[], title: string, author?: string
         return Boolean(got) && (got.includes(by) || by.includes(got))
       }))
     })
-    .sort((a, b) => (b.edition_count ?? 0) - (a.edition_count ?? 0))
+    // Most editions first; ties always the same way round, whatever order the search gives today.
+    .sort((a, b) => (b.edition_count ?? 0) - (a.edition_count ?? 0) || (a.key ?? '').localeCompare(b.key ?? ''))
 }
 
 /** The earliest first-publication year among these records of one book (`firstPublishYear` each). */

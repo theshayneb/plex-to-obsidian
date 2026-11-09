@@ -484,6 +484,27 @@ export function sameLengthOtherForm(value: unknown, minutes: number): boolean {
   return n !== null && n < 24 && Math.abs(n * 60 - minutes) <= Math.max(6, minutes * 0.05)
 }
 
+/**
+ * Whether a length or page count from a source is too close to the note's to be worth offering:
+ * within 10% (at least 15 minutes, or 10 pages), in the same form. HowLongToBeat's times and Open
+ * Library's page counts drift a little as people add to them, which otherwise asks about the same
+ * notes at every check. A note's length in another form (hours for minutes) is still offered.
+ */
+export function nearlySame(source: FieldSource, current: unknown, value: unknown): boolean {
+  const plain = (v: unknown) => typeof v === 'number' ? v : typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v) ? Number(v) : null
+  let a: number | null, b: number | null, floor: number
+  if (source === 'pages') {
+    a = plain(current); b = plain(value); floor = 10
+  } else if (source === 'durationMinutes' || source === 'hltbMain') {
+    a = plain(current); b = plain(value); floor = 15
+  } else if (source === 'durationText' || source === 'durationClock') {
+    a = typeof current === 'string' && plain(current) === null ? noteMinutes(current) : null
+    b = noteMinutes(value); floor = 15
+  } else return false
+  if (a === null || b === null) return false
+  return Math.abs(a - b) <= Math.max(floor, Math.max(a, b) * 0.1)
+}
+
 /** Sources that need a HowLongToBeat lookup. */
 export const HLTB_SOURCES: FieldSource[] = ['hltbMain', 'hltbLink']
 
@@ -683,6 +704,7 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
   }
   if (blank(current)) return { to: value, ticked: true }
   if (sameValue(current, value)) return null
+  if (nearlySame(source, current, value)) return null
   // A longer playtime in the note than Steam's stays.
   if (source === 'playtime' && playtimeShrinks(current, value)) return null
   // Nor does a song's play count (it may be Last.fm's, which counts plays elsewhere too).

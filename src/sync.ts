@@ -221,8 +221,6 @@ function hasImage(item: PlexItem): boolean {
 
 /** Sources whose properties should hold a plain number (minutes, pages). */
 const NUMBER_SOURCES: FieldSource[] = ['durationMinutes', 'pages']
-/** Lengths a check offers to empty when the source has none (a number of another unit can't be checked). */
-const CLEARABLE_SOURCES: FieldSource[] = [...LENGTH_SOURCES, 'hltbMain', 'pages']
 
 const POSTER_PREVIEW = 'poster downloaded from Plex'
 
@@ -2213,15 +2211,9 @@ export class PlexSync {
         else yours.add(name)
         continue
       }
+      // A source with no value (HowLongToBeat not answering, a book record without a page count)
+      // says nothing about the note's, so it's never offered as empty: that went back and forth.
       const sourced = sourceValue(m.source, item, ctx, m.text)
-      // A length the source has none for (say, a game HowLongToBeat doesn't know) is offered as
-      // empty, unticked: what's there can't be checked, and may be in another unit.
-      if (CLEARABLE_SOURCES.includes(m.source) && isBlank(sourced) && !isBlank(current)) {
-        if (kept(null)) continue
-        to[name] = null
-        yours.add(name)
-        continue
-      }
       const offer = checkValue(m.source, current, sourced, this.settings.allowedGenres, kind, lib.leaveOutGenres)
       if (!offer || kept(offer.to)) continue
       to[name] = offer.to

@@ -82,7 +82,7 @@ export function hltbMinutes(seconds: number | undefined): number | undefined {
 
 /**
  * The result that is this game: its name (or alias) must match the title, ignoring case and
- * punctuation. With several, the one released in the game's year wins. Never a near miss, so a
+ * punctuation. With several, the same one every time (see below). Never a near miss, so a
  * note never gets another game's times.
  */
 export function pickMatch(results: HltbGame[], title: string, year?: number): HltbGame | null {
@@ -90,7 +90,17 @@ export function pickMatch(results: HltbGame[], title: string, year?: number): Hl
   const same = results.filter(g =>
     normalizeTitle(g.game_name) === wanted || (g.game_alias ? g.game_alias.split(',').some(a => normalizeTitle(a) === wanted) : false))
   if (!same.length) return null
-  return same.find(g => year && g.release_world === year) ?? same[0]
+  // Always the same one, whatever order the site lists them in today: its own name over an
+  // alias, then released in the game's year (or the year either side), then the oldest entry.
+  const rank = (g: HltbGame) => [
+    normalizeTitle(g.game_name) === wanted ? 0 : 1,
+    !year || !g.release_world ? 2 : g.release_world === year ? 0 : Math.abs(g.release_world - year) === 1 ? 1 : 2,
+    g.game_id,
+  ]
+  return [...same].sort((a, b) => {
+    const x = rank(a), y = rank(b)
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]
+  })[0]
 }
 
 export function hltbTimes(game: HltbGame): HltbTimes {

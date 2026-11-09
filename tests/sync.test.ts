@@ -1749,7 +1749,7 @@ describe('PlexSync', () => {
     expect(texts.get(daily)!.split('\n')).toEqual(['> >[!writing] Journaling', '> >', '> >- ▶️ [[Lost]]: S01E01 – Pilot'])
   })
 
-  it('offers to empty a length the source has none for, unticked', async () => {
+  it('never offers to empty a length the source has none for', async () => {
     const { app, frontmatter } = makeApp({ 'Media/Movies/Arrival (2016).md': { Link: 'http://plex:32400/library/metadata/1', Duration: 5 } })
     const settings = settingsWith({})
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie') }
@@ -1762,9 +1762,8 @@ describe('PlexSync', () => {
       return Promise.resolve({ choice: 'apply', excluded: [] })
     }
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
-    expect(requests[0].lines).toMatchObject([{ label: 'Duration', current: '5', value: null, unticked: true }])
-    // Ticked and applied, the property is emptied.
-    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Duration ?? null).toBeNull()
+    expect(requests.filter(r => r.action === 'change')).toEqual([])
+    expect(frontmatter.get('Media/Movies/Arrival (2016).md')!.Duration).toBe(5)
   })
 
   it('points out a duration that isn\'t a number in the pop-up', async () => {
@@ -2011,9 +2010,9 @@ describe('PlexSync', () => {
     expect(frontmatter.get(path)).toMatchObject({ Duration: 320, Link: 'https://books.google.com/books?id=abc-1' })
 
     // Linked: that volume, looked up directly.
-    steamResponses = { 'https://www.googleapis.com/books/v1/volumes/abc-1': { ...volume, volumeInfo: { ...volume.volumeInfo, pageCount: 330 } } }
+    steamResponses = { 'https://www.googleapis.com/books/v1/volumes/abc-1': { ...volume, volumeInfo: { ...volume.volumeInfo, pageCount: 410 } } }
     await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Duration'])
-    expect(frontmatter.get(path)!.Duration).toBe(330)
+    expect(frontmatter.get(path)!.Duration).toBe(410)
   })
 
   it('never offers to replace a cover you set yourself (a [[link]] or ![[embed]] of a vault image) in a check', async () => {

@@ -227,7 +227,7 @@ With "Ask before every change" on, every new note and every change comes as a po
 - **Your rating**: offered both ways, unticked: Plex's into the note, or the note's to Plex.
 - **Image**: a Plex poster is offered only for an empty image property. An image you linked yourself (`[[…]]` or `![[…]]`) is never offered to be replaced.
 - **Dates**: never made vaguer. A note's year-only date gives way to the source's full date from the same year.
-- **Lengths**: a game's or book's length the source no longer has is offered as empty, unticked.
+- **Lengths and page counts**: a source with no value (HowLongToBeat not answering, a book record without a page count) never empties yours, and a difference of 10% or less (at least 15 minutes, or 10 pages) isn't offered, since these numbers drift a little as people add to them. A length in another form (hours where minutes go) is still offered.
 
 **Books** are looked up on Open Library by the note's link, or by title and author (a "Title by Author" file name counts). Google Books is used for summaries and exact dates (only when those are being checked), and for books Open Library doesn't have. A book found by searching also offers its link, so it's found directly next time; leave the link unticked and that note isn't looked up again. A book that can't be found is still renamed from what the note says.
 

@@ -62,14 +62,14 @@ vi.mock('obsidian', () => {
 vi.mock('../src/steam-local', () => ({ readSteamCollections: vi.fn(() => null) }))
 // Music files' own tags (desktop only) are read through this; each test says what it finds.
 vi.mock('../src/lastfm', () => ({ userPlayCounts: vi.fn(() => Promise.resolve(null)), similarTracks: vi.fn(() => Promise.resolve([])), testLastfmKey: vi.fn() }))
-vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), readLyrics: vi.fn(() => null), writeOwnTag: vi.fn(() => null), writeLyrics: vi.fn(() => null) }))
+vi.mock('../src/music-files', () => ({ readFileTags: vi.fn(() => null), lyricsOf: (tags: { USLT?: string[] } | null) => tags?.USLT?.[0] ?? null, writeOwnTag: vi.fn(() => null) }))
 
 import type { ApprovalRequest, Choice, Decision, OwnerRequest } from '../src/approval-modal'
 import type { PlexNotesSettings } from '../src/config'
 
 const { PlexSync } = await import('../src/sync')
 const { readSteamCollections } = await import('../src/steam-local')
-const { readFileTags, readLyrics, writeOwnTag, writeLyrics } = await import('../src/music-files')
+const { readFileTags, writeOwnTag } = await import('../src/music-files')
 const { SteamClient } = await import('../src/steam')
 SteamClient.storeGapMs = 0
 const { HltbClient } = await import('../src/hltb')
@@ -1288,9 +1288,9 @@ describe('PlexSync', () => {
     vi.mocked(readFileTags).mockReturnValue(null)
   })
 
-  it('fills a song\'s lyrics from the text file beside its music file, exactly as written', async () => {
+  it('fills a song\'s lyrics from its music file\'s lyrics tag, exactly as written', async () => {
     const lyrics = 'Karma police, arrest this man\nHe talks in maths\n\n  (chorus)\nThis is what you get'
-    vi.mocked(readLyrics).mockImplementation(path => path === '/music/Radiohead/Karma Police.mp3' ? lyrics : null)
+    vi.mocked(readFileTags).mockImplementation(path => path === '/music/Radiohead/Karma Police.mp3' ? { USLT: [lyrics] } : null)
     const { app, frontmatter } = makeApp({ 'Media/Music/Radiohead - Karma Police.md': { Link: 'http://plex:32400/library/metadata/100' } })
     const settings = settingsWith({ askBeforeChanges: false })
     settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
@@ -1298,9 +1298,28 @@ describe('PlexSync', () => {
     responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Radiohead/Karma Police.mp3' }] }] }] } })
     await new PlexSync(app as never, settings, () => Promise.resolve()).run(() => {})
     expect(frontmatter.get('Media/Music/Radiohead - Karma Police.md')!.Lyrics).toBe(lyrics)
-    expect(readFileTags).not.toHaveBeenCalled()
-    vi.mocked(readLyrics).mockReset()
-    vi.mocked(readLyrics).mockReturnValue(null)
+    vi.mocked(readFileTags).mockReset()
+    vi.mocked(readFileTags).mockReturnValue(null)
+  })
+
+  it('offers lyrics changed in the music file in a check, down to a capital or a line break', async () => {
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })
+    const { app } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Lyrics: 'Karma police arrest this man  \r\n' } })
+    const settings = settingsWith()
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'Lyrics', source: 'lyricsFile' })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Karma Police.mp3' }] }] }] } })
+    const asked = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'skip', excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), asked).run(() => {}, 'check', ['Lyrics'])
+    const lines = asked.mock.calls.find(c => c[0].path === song)![0].lines
+    expect(lines.map(l => [l.key, l.value, l.source])).toEqual([['fix:Lyrics', 'Karma police\nArrest this man', 'Music file']])
+    // Only line endings and spaces at line ends differ: nothing to offer.
+    vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police arrest this man'] })
+    asked.mockClear()
+    await new PlexSync(app as never, settings, () => Promise.resolve(), asked).run(() => {}, 'check', ['Lyrics'])
+    expect(asked.mock.calls.filter(c => c[0].path === song)).toEqual([])
+    vi.mocked(readFileTags).mockReturnValue(null)
   })
 
   it('offers a song\'s play count from Plex and from Last.fm to choose from when they differ', async () => {
@@ -1403,10 +1422,9 @@ describe('PlexSync', () => {
     vi.mocked(userPlayCounts).mockResolvedValue(null)
   })
 
-  it('offers to write a song note\'s tempo and lyrics to its music and lyrics files, unticked', async () => {
+  it('offers to write a song note\'s tempo to its music file, unticked, never its lyrics', async () => {
     const song = 'Media/Music/Radiohead - Karma Police.md'
-    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Slow'] })
-    vi.mocked(readLyrics).mockReturnValue('Old words')
+    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Slow'], USLT: ['Old words'] })
     const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', Tempo: 'Fast', Lyrics: 'New words\nand more' } })
     const settings = settingsWith()
     settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
@@ -1418,10 +1436,8 @@ describe('PlexSync', () => {
     const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
     expect(lines.filter(l => l.key.startsWith('file:'))).toEqual([
       { key: 'file:Tempo', label: 'Tempo in the music file', current: 'Slow', value: 'Fast', edit: 'text', unticked: true, source: 'This note', writesTo: 'Music file' },
-      { key: 'file:Lyrics', label: 'Lyrics in the lyrics file', current: 'Old words', value: 'New words\nand more', edit: 'text', unticked: true, source: 'This note', writesTo: 'Lyrics file' },
     ])
     expect(writeOwnTag).toHaveBeenCalledWith('/music/Karma Police.mp3', 'TEMPO', 'Very Fast', 'Slow')
-    expect(writeLyrics).toHaveBeenCalledWith('/music/Karma Police.mp3', 'New words\nand more', 'Old words')
     expect(result.sentToFiles).toEqual([song])
     // The note takes the edited value too.
     expect(frontmatter.get(song)!.Tempo).toBe('Very Fast')
@@ -1436,13 +1452,13 @@ describe('PlexSync', () => {
     decline.mockClear()
     await new PlexSync(app as never, settings, () => Promise.resolve(), decline).run(() => {}, 'check', ['Tempo'])
     expect(decline.mock.calls.flatMap(c => c[0].lines.map(l => l.key))).not.toContain('file:Tempo')
-    // A refusal is reported, not hidden.
-    vi.mocked(writeLyrics).mockReturnValue('the lyrics file has changed since it was read')
-    const again = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Lyrics'])
-    expect(again.failed).toEqual([{ title: 'Karma Police', error: 'Lyrics wasn\'t written to the lyrics file: the lyrics file has changed since it was read' }])
-    vi.mocked(writeLyrics).mockReturnValue(null)
+    // A refusal is reported, not hidden (the file's tempo changed, so it's offered again).
+    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:tempo': ['Medium'] })
+    vi.mocked(writeOwnTag).mockReturnValue('the file\'s TEMPO has changed since it was read')
+    const again = await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'check', ['Tempo'])
+    expect(again.failed).toEqual([{ title: 'Karma Police', error: 'Tempo wasn\'t written to the music file: the file\'s TEMPO has changed since it was read' }])
+    vi.mocked(writeOwnTag).mockReturnValue(null)
     vi.mocked(readFileTags).mockReturnValue(null)
-    vi.mocked(readLyrics).mockReturnValue(null)
   })
 
   it('matches a song note linked to its album, or named after a featured artist, by name', async () => {

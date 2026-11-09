@@ -150,7 +150,7 @@ Every library (each Plex library, plus Steam and Books) has its own section:
   - **About the item**: genres, summary, tagline, title, original title, release date (first aired for shows), year, duration (in minutes, as "1h 52m", or as "3:45"), content rating, studio/network/label, directors, writers, cast (top 5 or everyone), countries, Plex collections, Plex labels, critic and audience ratings, number of seasons and episodes, IMDb/TMDB/TVDB IDs.
   - **Yours**: your rating (as 0–5 stars, or as 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷), watched or played status, play count, date added to Plex, date last watched.
   - **Links and images**: link (Plex, Steam Store, IMDb, Open Library or HowLongToBeat page), poster (portrait cover for games), type tag, fixed text.
-  - **Music**: artist, album artist, album, track and disc number, styles, moods, a tag in the music file by name, lyrics from the text file beside it.
+  - **Music**: artist, album artist, album, track and disc number, styles, moods, a tag in the music file by name, the lyrics in the music file.
   - **Games**: total playtime, playtime in the last 2 weeks, developers, publishers, platforms, Metacritic score, wide image, HowLongToBeat main story time and page, your Steam collections.
   - **Books**: authors, number of pages, ISBN.
 
@@ -294,7 +294,7 @@ Music libraries make **one note per song**, named `{{artist}} - {{title}}` by de
   - Versions of the same recording are added together ("Karma Police" plus "Karma Police - Remastered"). Remixes, acoustic and live versions are kept apart ("Fantasy" and "Fantasy (Remix)" each have their own count).
   - **Leave Last.fm's column unticked** and it isn't offered for that song again, while Plex's count keeps updating. It's only offered again if Last.fm gains plays Plex doesn't know about.
 - **Tags in the music file** (desktop only): a property can show one of the file's own tags, such as Tempo. In syncs and checks, if your note's value differs from a tag the file already has, the pop-up offers (unticked) to write your value into the file. It only ever writes that one tag, in the same file, keeping the file's size, and only if the tag hasn't changed since it was read.
-- **Lyrics** (desktop only): a property can show the lyrics from the text file beside the song (same name, `.txt` or `.lrc`). Your edited lyrics can be written back to that file the same way. A lyrics file is never created.
+- **Lyrics** (desktop only): a property can show the lyrics stored in the song's own music file (its lyrics tag, as tag editors write them). A check compares them line by line, capitals and line breaks included (only line endings and spaces at line ends don't count), and offers the file's lyrics when they differ. Lyrics are never written anywhere: change them in the music file. Text files beside the songs aren't read.
 - **Links**: a song's link is its album's page in Plex plus the track, since Plex Web has no song pages.
 - **Moods**: a song's own moods are read from the song itself, as library listings leave them out.
 
@@ -510,7 +510,7 @@ Only these, and only as described:
   - music playlists, after you confirm;
   - collections, after you confirm, or weekly for automatic ones;
   - the Revisit playlist.
-- **Music files** (desktop only): one existing tag at a time, or the existing lyrics file, after you tick it in a pop-up.
+- **Music files** (desktop only): one existing tag of your own at a time, after you tick it in a pop-up. Never the lyrics.
 
 Nothing is ever written to Steam, Last.fm, ListenBrainz, Open Library or Google Books. Your Plex token never goes in a note.
 

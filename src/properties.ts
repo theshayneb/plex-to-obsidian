@@ -72,7 +72,7 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   styles: 'Music: styles',
   moods: 'Music: moods',
   fileTag: 'Music: a tag in the file, by name (desktop only)',
-  lyricsFile: 'Music: lyrics from the text file beside it (desktop only)',
+  lyricsFile: 'Music: lyrics from the music file (desktop only)',
   playtime: 'Games: total playtime (hours)',
   recentPlaytime: 'Games: playtime in the last 2 weeks (hours)',
   developers: 'Games: developers',
@@ -659,6 +659,12 @@ function blank(value: unknown): boolean {
 }
 
 /** Whether a note's value and the source's say the same thing (lists in any order, numbers as numbers, text loosely). */
+/** Whether two lyrics are the same, apart from line endings, spaces at line ends and blank lines at the end. */
+export function sameLyrics(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/\s+$/, '')).join('\n').replace(/\n+$/, '').replace(/^\n+/, '')
+  return norm(a) === norm(b)
+}
+
 export function sameValue(current: unknown, value: unknown): boolean {
   if (Array.isArray(value) || Array.isArray(current)) return sameList(listOf(current), listOf(value))
   if (typeof value === 'number') {
@@ -703,6 +709,9 @@ export function checkValue(source: FieldSource, current: unknown, value: unknown
     return missing.length ? { to: [...own, ...missing], ticked: true } : null
   }
   if (blank(current)) return { to: value, ticked: true }
+  // Lyrics are compared line by line, capitals and all (only line endings and spaces at line ends
+  // don't count), so an edit to one word or one line break shows.
+  if (source === 'lyricsFile') return sameLyrics(current, value) ? null : { to: value, ticked: false }
   if (sameValue(current, value)) return null
   if (nearlySame(source, current, value)) return null
   // A longer playtime in the note than Steam's stays.

@@ -1,5 +1,5 @@
 import { Platform } from 'obsidian'
-import { decodeText, encodeTextFile, id3Size, readId3, setOwnTag, tagValue, textForm, type FileTags } from './id3'
+import { id3Size, readId3, setOwnTag, tagValue, type FileTags } from './id3'
 
 interface NodeFs {
   existsSync(path: string): boolean
@@ -49,31 +49,12 @@ export function readFileTags(path: string): FileTags | null {
 }
 
 /**
- * The lyrics in the text file beside a music file, named the same ("Song.mp3" → "Song.txt", or
- * "Song.lrc"), exactly as written there (only Windows line endings become plain ones). Desktop
- * only: null on phones or when there's no such file.
+ * A song's lyrics, from its music file's own lyrics tag (ID3's unsynchronised lyrics, the first
+ * one when there are several), line endings made plain and blank lines at the end left off.
  */
-export function readLyrics(musicPath: string): string | null {
-  if (!Platform.isDesktopApp || !musicPath) return null
-  const load = (window as unknown as { require?: (id: string) => unknown }).require
-  const fs = load?.('fs') as NodeFs | undefined
-  if (!fs) return null
-  for (const path of lyricsPaths(musicPath)) {
-    try {
-      if (!fs.existsSync(path)) continue
-      const text = decodeText(fs.readFileSync(path)).replace(/\r\n?/g, '\n')
-      return text.trim() ? text.replace(/\n+$/, '') : null
-    } catch (err) {
-      console.warn('Media Manager: could not read the lyrics in', path, err)
-    }
-  }
-  return null
-}
-
-/** Where a music file's lyrics may be, in the order looked for. */
-function lyricsPaths(musicPath: string): string[] {
-  const base = musicPath.replace(/\.[^./\\]+$/, '')
-  return ['.txt', '.TXT', '.lrc', '.LRC'].map(ext => base + ext)
+export function lyricsOf(tags: FileTags | null): string | null {
+  const text = tags?.USLT?.[0]?.replace(/\r\n?/g, '\n').replace(/\s+$/, '')
+  return text ? text : null
 }
 
 type TagRead = string | number | string[] | undefined
@@ -115,30 +96,5 @@ export function writeOwnTag(path: string, name: string, value: string, expected:
     return err instanceof Error ? err.message : String(err)
   } finally {
     if (fd !== null) fs.closeSync(fd)
-  }
-}
-
-/**
- * Puts `text` in the lyrics file beside a music file (the one `readLyrics` reads), in the same
- * file, keeping its text encoding and line endings. `expected` is the text read before: when the
- * file holds something else now, nothing is written. Never makes a lyrics file. Returns why it
- * wasn't written, or null when it was.
- */
-export function writeLyrics(musicPath: string, text: string, expected: string | undefined): string | null {
-  const fs = nodeFs()
-  if (!fs || !musicPath) return 'lyrics files can only be changed on the computer Plex runs on'
-  const path = lyricsPaths(musicPath).find(p => fs.existsSync(p))
-  if (!path) return 'there\'s no lyrics file'
-  try {
-    const bytes = fs.readFileSync(path)
-    const now = decodeText(bytes).replace(/\r\n?/g, '\n').replace(/\n+$/, '')
-    if (now !== (expected ?? '')) return 'the lyrics file has changed since it was read'
-    const out = encodeTextFile(text, textForm(bytes))
-    if (!out) return 'the lyrics have characters the file\'s text encoding can\'t hold'
-    fs.writeFileSync(path, out)
-    return null
-  } catch (err) {
-    console.warn('Media Manager: could not write the lyrics in', path, err)
-    return err instanceof Error ? err.message : String(err)
   }
 }

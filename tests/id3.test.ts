@@ -14,6 +14,13 @@ function tag(version: 3 | 4, frames: [string, number[]][]): Uint8Array {
 }
 
 describe('MP3 tags', () => {
+  it('reads a song\'s lyrics tag, its lines kept (old Mac and Windows line endings made plain)', () => {
+    const v3 = readId3(tag(3, [['USLT', [0, ...latin('eng'), 0, ...latin('Karma police\rArrest this man\r\n\r\nHe talks in maths')]]]))
+    expect(v3.USLT).toEqual(['Karma police\nArrest this man\n\nHe talks in maths'])
+    const v4 = readId3(tag(4, [['USLT', [1, ...latin('eng'), ...utf16('Lyrics'), 0, 0, ...utf16('Déjà vu\nAgain')]]]))
+    expect(v4.USLT).toEqual(['Déjà vu\nAgain'])
+  })
+
   it('reads standard and your own tags (ID3v2.3, Latin-1 and UTF-16)', () => {
     const bytes = tag(3, [
       ['TIT2', [0, ...latin('Aurora')]],

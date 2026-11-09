@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.191] - 2026-11-10
+
+- Lyrics now come from each song's own music file (its lyrics tag), not the .txt file beside it, which isn't read any more.
+- A check notices every change to lyrics: before, a change to capitals or line breaks alone went unnoticed. Only line endings and spaces at the ends of lines don't count.
+- Lyrics are never written anywhere by the plugin now (before, edited lyrics could be written to the .txt file): change them in the music file.
+
 ## [0.0.190] - 2026-11-10
 
 - "Check notes against sources" stops asking about the same games and books over and over:

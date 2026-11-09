@@ -1,7 +1,7 @@
 // Reads the tags at the start of an MP3 file (ID3v2.2, 2.3 and 2.4). No Obsidian or Node imports,
 // so it can be unit tested; `music-files.ts` does the file reading.
 
-/** A file's tags: standard frames by ID ("TBPM"), your own by "TXXX:<name>" (lower case), comments as "COMM". */
+/** A file's tags: standard frames by ID ("TBPM"), your own by "TXXX:<name>" (lower case), comments as "COMM", lyrics as "USLT". */
 export type FileTags = Record<string, string[]>
 
 /** How many bytes the tag takes, header included, from its first 10 bytes; 0 when there's no ID3v2 tag. */
@@ -63,7 +63,7 @@ function textEnd(bytes: Uint8Array, from: number, encoding: number): number {
 }
 
 /** Version 2.2's three-letter frame IDs, for the frames read here. */
-const V22: Record<string, string> = { TBP: 'TBPM', TKE: 'TKEY', TCM: 'TCOM', TT1: 'TIT1', TT2: 'TIT2', TP1: 'TPE1', TAL: 'TALB', TCO: 'TCON', TXX: 'TXXX', COM: 'COMM' }
+const V22: Record<string, string> = { TBP: 'TBPM', TKE: 'TKEY', TCM: 'TCOM', TT1: 'TIT1', TT2: 'TIT2', TP1: 'TPE1', TAL: 'TALB', TCO: 'TCON', TXX: 'TXXX', COM: 'COMM', ULT: 'USLT' }
 
 /** The tags in an ID3v2 tag (the bytes `id3Size` says it takes), or none if it can't be read. */
 export function readId3(tag: Uint8Array): FileTags {
@@ -101,9 +101,11 @@ export function readId3(tag: Uint8Array): FileTags {
       const end = textEnd(data, 1, encoding)
       key = `TXXX:${decode(data.subarray(1, end), encoding).join(' ').toLowerCase()}`
       values = decode(data.subarray(end + (encoding === 1 || encoding === 2 ? 2 : 1)), encoding)
-    } else if (id === 'COMM') {
+    } else if (id === 'COMM' || id === 'USLT') {
+      // Language (3 bytes), a description, then the text; lyrics keep their lines (any line endings made plain).
       const end = textEnd(data, 4, encoding)
       values = decode(data.subarray(end + (encoding === 1 || encoding === 2 ? 2 : 1)), encoding)
+      if (id === 'USLT') values = values.map(v => v.replace(/\r\n?/g, '\n'))
     } else if (id.startsWith('T')) {
       values = decode(data.subarray(1), encoding)
     } else {

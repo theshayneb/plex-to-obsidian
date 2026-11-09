@@ -47,7 +47,7 @@ import { HltbClient } from './hltb'
 import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
-import { readFileTags, readLyrics, writeLyrics, writeOwnTag } from './music-files'
+import { lyricsOf, readFileTags, writeOwnTag } from './music-files'
 import { userPlayCounts } from './lastfm'
 import { songKey, versionKey } from './lastfm-data'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
@@ -184,21 +184,19 @@ interface CountChoice {
   ticked: 'plex' | 'lastfm' | null
 }
 
-/** A note's value to write to its music file's own tag, or to its lyrics file (see `planFileWrites`). */
+/** A note's value to write to its music file's own tag (see `planFileWrites`). Lyrics are never written. */
 interface FileWrite {
   name: string
   /** The music file. */
   path: string
-  /** The tag's name, or null for the lyrics file. */
-  tag: string | null
+  /** The tag's name. */
+  tag: string
   /** What's in the file now. */
   from: string
   /** The note's value. */
   to: string
 }
 
-/** Text the way a lyrics file's is compared: plain line endings, no blank lines at the end. */
-const lyricsText = (text: string): string => text.replace(/\r\n?/g, '\n').replace(/\s+$/, '')
 
 interface FillPlan {
   item: PlexItem
@@ -366,9 +364,6 @@ export class PlexSync {
         const values = item.fileTags?.[`TXXX:${tag.toLowerCase()}`]
         const to = String(value).trim()
         if (values?.length === 1 && to && to !== values[0]) write = { name, path, tag, from: values[0], to }
-      } else if (mapping.source === 'lyricsFile' && item.lyrics) {
-        const to = lyricsText(String(value))
-        if (to && to !== lyricsText(item.lyrics)) write = { name, path, tag: null, from: item.lyrics, to }
       }
       if (write && !this.isKept(`${item.ratingKey}|file:${name}`, write.to, write.from)) writes.push(write)
     }
@@ -381,11 +376,11 @@ export class PlexSync {
     let sent = false
     for (const write of writes) {
       const typed = edits[`file:${write.name}`]
-      const value = typeof typed === 'string' ? (write.tag ? typed.trim() : lyricsText(typed)) : write.to
+      const value = typeof typed === 'string' ? typed.trim() : write.to
       if (!value) continue
-      const refused = write.tag ? writeOwnTag(write.path, write.tag, value, write.from) : writeLyrics(write.path, value, item.lyrics)
+      const refused = writeOwnTag(write.path, write.tag, value, write.from)
       if (refused) {
-        result.failed.push({ title: item.title, error: `${write.name} wasn't written to the ${write.tag ? 'music' : 'lyrics'} file: ${refused}` })
+        result.failed.push({ title: item.title, error: `${write.name} wasn't written to the music file: ${refused}` })
         continue
       }
       sent = true
@@ -423,7 +418,7 @@ export class PlexSync {
     const sourceOf = (name: string): string => {
       const m = lib.properties.find(p => p.name.trim() === name)
       if (m?.source === 'fileTag') return 'Music file'
-      if (m?.source === 'lyricsFile') return 'Lyrics file'
+      if (m?.source === 'lyricsFile') return 'Music file'
       if (m?.source === 'text') return 'Your fixed value (library settings)'
       if (m?.source === 'steamCollections') return 'Steam collections'
       if (m && (HLTB_SOURCES.includes(m.source) || (lib.target === 'game' && LENGTH_SOURCES.includes(m.source)))) return 'HowLongToBeat'
@@ -436,7 +431,7 @@ export class PlexSync {
     const where = (line: ApprovalLine): Pick<ApprovalLine, 'source' | 'writesTo'> => {
       const { key } = line
       if (key === 'plexRating') return { source: 'This note', writesTo: 'Plex' }
-      if (key.startsWith('file:')) return { source: 'This note', writesTo: line.label.endsWith('lyrics file') ? 'Lyrics file' : 'Music file' }
+      if (key.startsWith('file:')) return { source: 'This note', writesTo: 'Music file' }
       if (key.startsWith('rescale:')) return { source: 'This note, in the star scale', writesTo: 'This note' }
       if (key === 'rename') return { source: 'The library\'s file name format', writesTo: 'This note\'s file name' }
       if (key === 'file') return { source: 'The library\'s file name format' }
@@ -631,14 +626,15 @@ export class PlexSync {
       // A music file's own tags (tempo and the like) are read from the file Plex has for each track,
       // only when a property uses them (and never in background updates).
       const fileTags = music && readTags && usesSource(lib.properties, 'fileTag')
-      // So are the lyrics, from the text file beside each music file.
+      // So are the lyrics, from the music file's own lyrics tag.
       const lyricsFiles = music && readTags && usesSource(lib.properties, 'lyricsFile')
       for (const item of await this.plex!.libraryItems(key, music)) {
         const wanted = music ? item.type === 'track' : item.type === 'movie' || item.type === 'show'
         if (!wanted) continue
         const file = item.Media?.[0]?.Part?.[0]?.file ?? ''
-        const tags = fileTags ? readFileTags(file) : null
-        const lyrics = lyricsFiles ? readLyrics(file) : null
+        const read = fileTags || lyricsFiles ? readFileTags(file) : null
+        const tags = fileTags ? read : null
+        const lyrics = lyricsFiles ? lyricsOf(read) : null
         entries.push({ item: tags || lyrics ? { ...item, ...tags ? { fileTags: tags } : {}, ...lyrics ? { lyrics } : {} } : item, lib })
       }
     }
@@ -878,7 +874,7 @@ export class PlexSync {
             })
           }
           for (const write of fileWrites) {
-            lines.push({ key: `file:${write.name}`, label: write.tag ? `${write.name} in the music file` : `${write.name} in the lyrics file`, current: write.from, value: write.to, edit: 'text', unticked: true })
+            lines.push({ key: `file:${write.name}`, label: `${write.name} in the music file`, current: write.from, value: write.to, edit: 'text', unticked: true })
           }
           // Lines about what you said never to change in this note are left out unasked (see `ask`).
           const lockedHere = this.settings.lockedProperties[path] ?? []

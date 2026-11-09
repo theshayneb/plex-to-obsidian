@@ -294,6 +294,7 @@ Music libraries make **one note per song**, named `{{artist}} - {{title}}` by de
   - Versions of the same recording are added together ("Karma Police" plus "Karma Police - Remastered"). Remixes, acoustic and live versions are kept apart ("Fantasy" and "Fantasy (Remix)" each have their own count).
   - **Leave Last.fm's column unticked** and it isn't offered for that song again, while Plex's count keeps updating. It's only offered again if Last.fm gains plays Plex doesn't know about.
 - **Tags in the music file** (desktop only): a property can show one of the file's own tags, such as Tempo. In syncs and checks, if your note's value differs from a tag the file already has, the pop-up offers (unticked) to write your value into the file. It only ever writes that one tag, in the same file, keeping the file's size, and only if the tag hasn't changed since it was read.
+- **Song tags from Music Manager** (desktop only): give the Music library a `tags` row whose source is **Music: a tag in the file, by name**, named `Obsidian Tags` (the tag Music Manager writes). New song notes get the file's tags beside their type tag. Every sync, and the daily check-in, adds tags that are in the mp3 but not the note (ticked), and offers, unticked, to add tags that are in the note but not the mp3 to the file (one value each, as Music Manager writes them; the tag is added to a file that has none yet, if the file has room). Type tags such as `music` and `song` are never compared, and nothing is ever taken away from either side.
 - **Lyrics** (desktop only): a property can hold the lyrics stored in the song's own music file (its lyrics tag, as tag editors write them). New song notes get them, and every sync puts the file's lyrics in the note when the note's are empty or different, line by line, capitals and line breaks included (only line endings and spaces at line ends don't count). A music file without lyrics never empties a note's. Lyrics go one way, from the music file to the note: change them in the music file. Text files beside the songs aren't read.
 - **Links**: a song's link is its album's page in Plex plus the track, since Plex Web has no song pages.
 - **Moods**: a song's own moods are read from the song itself, as library listings leave them out.
@@ -510,7 +511,7 @@ Only these, and only as described:
   - music playlists, after you confirm;
   - collections, after you confirm, or weekly for automatic ones;
   - the Revisit playlist.
-- **Music files** (desktop only): one existing tag of your own at a time, after you tick it in a pop-up. Never the lyrics.
+- **Music files** (desktop only): one tag of your own at a time (your song tags may be added as a new tag), after you tick it in a pop-up. Never the lyrics.
 
 Nothing is ever written to Steam, Last.fm, ListenBrainz, Open Library or Google Books. Your Plex token never goes in a note.
 

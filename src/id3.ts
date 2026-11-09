@@ -139,9 +139,10 @@ function encodeText(text: string, encoding: number, littleEndian: boolean): Uint
  * `value` instead, in the frame's own text encoding, and nothing else changed: the frames after it
  * move up or down, taking from or giving to the empty space at the end, so the tag stays exactly
  * the same size (and so does the file). Only an ID3v2.3 or 2.4 tag with exactly one such frame,
- * neither compressed, encrypted nor unsynchronised, and with room enough, can be changed.
+ * neither compressed, encrypted nor unsynchronised, and with room enough, can be changed. Several
+ * values (a list of tags) are written null-separated; with `create`, a missing frame is added.
  */
-export function setOwnTag(tag: Uint8Array, name: string, value: string): TagEdit {
+export function setOwnTag(tag: Uint8Array, name: string, value: string | string[], create = false): TagEdit {
   const size = id3Size(tag)
   if (!size || tag.length < size) return { error: 'the tag couldn\'t be read' }
   const version = tag[3]
@@ -173,9 +174,15 @@ export function setOwnTag(tag: Uint8Array, name: string, value: string): TagEdit
     }
     at = end
   }
-  if (!found) return { error: `there's no ${name} tag in the file` }
   const framesEnd = at
+  if (!found && !create) return { error: `there's no ${name} tag in the file` }
   for (let i = framesEnd; i < bodyEnd; i++) if (tag[i] !== 0) return { error: 'the tag has something unknown after its frames' }
+  // A new frame goes after the others, in UTF-16 (as Music Manager writes its own).
+  const isNew = !found
+  if (!found) {
+    const desc = encodeText(name.trim().replace(/^TXXX[/:]/i, ''), 1, true)!
+    found = { start: framesEnd, end: framesEnd, data: Uint8Array.from([1, ...desc, 0, 0]) }
+  }
   const { data } = found
   const encoding = data[0]
   if (encoding > 3) return { error: 'the tag\'s text encoding is unknown' }
@@ -186,20 +193,24 @@ export function setOwnTag(tag: Uint8Array, name: string, value: string): TagEdit
   // UTF-16 keeps the byte order the value had (or the description, when the value had none).
   const bomOf = (bytes: Uint8Array) => bytes[0] === 0xff && bytes[1] === 0xfe ? 'le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'be' : null
   const little = (bomOf(old) ?? bomOf(data.subarray(1)) ?? 'le') === 'le'
-  const text = encodeText(value, encoding, little)
-  if (!text) return { error: `"${value}" can't be written in the tag's text encoding` }
+  // Several values (a list of tags) are separated by a null, each in the frame's encoding.
+  const parts = (Array.isArray(value) ? value : [value]).map(v => encodeText(v, encoding, little))
+  if (parts.some(p => !p)) return { error: `"${String(value)}" can't be written in the tag's text encoding` }
+  const separator = wide ? [0, 0] : [0]
+  const text = Uint8Array.from(parts.flatMap((p, i) => [...i ? separator : [], ...p!]))
   const frameData = new Uint8Array(descEnd + text.length + (terminated ? (wide ? 2 : 1) : 0))
   frameData.set(data.subarray(0, descEnd))
   frameData.set(text, descEnd)
   const newSize = frameData.length
-  const header = tag.slice(found.start, found.start + 10)
+  const header = isNew ? Uint8Array.from([0x54, 0x58, 0x58, 0x58, 0, 0, 0, 0, 0, 0]) : tag.slice(found.start, found.start + 10)
   if (version === 4) {
     if (newSize >= 1 << 28) return { error: 'the value is too long' }
     header.set([(newSize >> 21) & 0x7f, (newSize >> 14) & 0x7f, (newSize >> 7) & 0x7f, newSize & 0x7f], 4)
   } else {
     header.set([(newSize >>> 24) & 0xff, (newSize >> 16) & 0xff, (newSize >> 8) & 0xff, newSize & 0xff], 4)
   }
-  const grow = newSize - data.length
+  // A new frame takes all its bytes (header too) from the padding; a changed one only the difference.
+  const grow = isNew ? 10 + newSize : newSize - data.length
   if (grow > bodyEnd - framesEnd) return { error: 'there\'s no room left in the tag' }
   const out = new Uint8Array(tag.length)
   out.set(tag)

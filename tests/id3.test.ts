@@ -7,9 +7,9 @@ const syncsafe = (n: number) => [(n >> 21) & 0x7f, (n >> 14) & 0x7f, (n >> 7) & 
 const big = (n: number) => [(n >>> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff]
 
 /** An ID3 tag of these frames (id, content bytes), version 3 or 4, with some padding. */
-function tag(version: 3 | 4, frames: [string, number[]][]): Uint8Array {
+function tag(version: 3 | 4, frames: [string, number[]][], padding = 16): Uint8Array {
   const body = frames.flatMap(([id, data]) => [...latin(id), ...(version === 4 ? syncsafe(data.length) : big(data.length)), 0, 0, ...data])
-  const padded = [...body, ...new Array(16).fill(0)]
+  const padded = [...body, ...new Array(padding).fill(0)]
   return Uint8Array.from([...latin('ID3'), version, 0, 0, ...syncsafe(padded.length), ...padded])
 }
 
@@ -85,6 +85,21 @@ describe('changing your own tag', () => {
     const after = edited(setOwnTag(before, 'TEMPO', 'Very Slow')).tag
     expect(readId3(after)['TXXX:tempo']).toEqual(['Very Slow'])
     expect(readId3(after).TIT2).toEqual(['Aurora'])
+  })
+
+  it('writes a list of tags, one value each, and adds the tag when the file has none', () => {
+    const before = tag(3, frames([1, ...utf16('Obsidian Tags'), 0, 0, ...utf16('comfort')]), 64)
+    const listed = edited(setOwnTag(before, 'Obsidian Tags', ['comfort', 'holiday']))
+    expect(readId3(listed.tag)['TXXX:obsidian tags']).toEqual(['comfort', 'holiday'])
+    expect(listed.tag.length).toBe(before.length)
+    // A file without the tag: refused unless asked to add it, then added after the other frames.
+    const without = tag(3, [['TIT2', [0, ...latin('Aurora')]]], 80)
+    expect(setOwnTag(without, 'Obsidian Tags', ['feminism'])).toEqual({ error: 'there\'s no Obsidian Tags tag in the file' })
+    const added = edited(setOwnTag(without, 'Obsidian Tags', ['feminism', 'holiday'], true))
+    expect(readId3(added.tag)).toEqual({ TIT2: ['Aurora'], 'TXXX:obsidian tags': ['feminism', 'holiday'] })
+    expect(added.tag.length).toBe(without.length)
+    // Not enough room for it: refused.
+    expect(setOwnTag(tag(3, [['TIT2', [0, ...latin('Aurora')]]]), 'Obsidian Tags', ['a-very-long-tag-name-that-does-not-fit'], true)).toEqual({ error: 'there\'s no room left in the tag' })
   })
 
   it('refuses when there is no room, no such tag, or two of them', () => {

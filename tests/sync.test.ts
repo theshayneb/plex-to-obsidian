@@ -1324,6 +1324,36 @@ describe('PlexSync', () => {
     vi.mocked(readFileTags).mockReturnValue(null)
   })
 
+  it('adds a music file\'s tags to its song note and offers the note\'s other tags for the file', async () => {
+    const song = 'Media/Music/Radiohead - Karma Police.md'
+    vi.mocked(readFileTags).mockReturnValue({ 'TXXX:obsidian tags': ['comfort', 'feminism'] })
+    const { app, frontmatter } = makeApp({ [song]: { Link: 'http://plex:32400/library/metadata/100', tags: ['music', 'comfort', 'holiday'] } })
+    const settings = settingsWith()
+    settings.libraries = { 3: newLibrary('Music', 'artist', 'music') }
+    settings.libraries[3].properties.push({ name: 'tags', source: 'fileTag', text: 'Obsidian Tags' })
+    responses.set('/library/sections/3/all', { MediaContainer: { Metadata: [{ ...tracks[0], Media: [{ Part: [{ file: '/music/Karma Police.mp3' }] }] }] } })
+    const approve = vi.fn((r: ApprovalRequest): Promise<Decision> => Promise.resolve({ choice: 'apply', excluded: [] }))
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {})
+    const lines = approve.mock.calls.find(c => c[0].path === song)![0].lines
+    expect(lines.map(l => [l.key, l.value, Boolean(l.unticked)])).toEqual([
+      ['update:tags', 'music,comfort,holiday,feminism', false],
+      ['file:tags', 'comfort, feminism, holiday', true],
+    ])
+    // Both ticked: the note gets feminism, the file holiday (one value each), music never.
+    expect(frontmatter.get(song)!.tags).toEqual(['music', 'comfort', 'holiday', 'feminism'])
+    expect(writeOwnTag).toHaveBeenCalledWith('/music/Karma Police.mp3', 'Obsidian Tags', ['comfort', 'feminism', 'holiday'], ['comfort', 'feminism'], false)
+    // A background update reads no music files; the check-in does.
+    vi.mocked(readFileTags).mockClear()
+    await new PlexSync(app as never, settings, () => Promise.resolve(), approve).run(() => {}, 'playCounts')
+    expect(readFileTags).not.toHaveBeenCalled()
+    const checkIn = new PlexSync(app as never, settings, () => Promise.resolve(), approve)
+    checkIn.readMusicFiles = true
+    await checkIn.run(() => {}, 'playCounts')
+    expect(readFileTags).toHaveBeenCalled()
+    vi.mocked(writeOwnTag).mockClear()
+    vi.mocked(readFileTags).mockReturnValue(null)
+  })
+
   it('puts the music file\'s lyrics in a new song note', async () => {
     vi.mocked(readFileTags).mockReturnValue({ USLT: ['Karma police\nArrest this man'] })
     const { app, frontmatter } = makeApp({})

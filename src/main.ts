@@ -403,7 +403,10 @@ export default class PlexMediaNotesPlugin extends Plugin {
     try {
       // With asking off nothing is asked, so it's done at every update.
       if (updating && (how !== 'quiet' || !askBeforeChanges) && plexReady(this.settings)) {
-        const result = await this.newSync().run(() => {}, 'playCounts')
+        const sync = this.newSync()
+        // The check-in also reads songs' music files (lyrics and tags), so their changes come up then too.
+        sync.readMusicFiles = how === 'check-in'
+        const result = await sync.run(() => {}, 'playCounts')
         if (result.playCounts.length) console.log('Media Manager: kept up to date (play counts, ratings, status)', result.playCounts)
         if (result.failed.length) console.error('Media Manager: failed items', result.failed)
       }

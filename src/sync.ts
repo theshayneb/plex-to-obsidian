@@ -44,10 +44,11 @@ import { addReaction, finishedKey, reactedSince, type Finished, type Reaction, t
 import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
-import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameLyrics, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource } from './properties'
+import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameLyrics, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource, type PropertyMapping } from './properties'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { lyricsOf, readFileTags, writeOwnTag } from './music-files'
+import { fileTagList, isSongTagsRow, songTagDiff, unionTags } from './song-tags'
 import { userPlayCounts } from './lastfm'
 import { songKey, versionKey } from './lastfm-data'
 import { steamGridCovers, type CoverChoice } from './steamgriddb'
@@ -195,6 +196,8 @@ interface FileWrite {
   from: string
   /** The note's value. */
   to: string
+  /** A song's tags: the file's tags with the note's added, written as one value each (`to` shows them). */
+  tags?: { values: string[], expected: string[], create: boolean }
 }
 
 
@@ -229,6 +232,11 @@ interface Entry {
 
 export class PlexSync {
   private readonly albums = new Map<string, Promise<PlexItem | null>>()
+  /**
+   * The daily check-in's update also reads songs' music files (lyrics and tags, desktop only), so
+   * their changes come up then too; other background updates never do.
+   */
+  readMusicFiles = false
   private plex: PlexClient | null = null
   private machineId = ''
   private steam: SteamClient | null = null
@@ -357,9 +365,19 @@ export class PlexSync {
       const name = mapping.name.trim()
       if (!name || (chosen && !chosen.has(name))) continue
       const value: unknown = frontmatter[name]
-      if (typeof value !== 'string' && typeof value !== 'number') continue
+      if (typeof value !== 'string' && typeof value !== 'number' && !(Array.isArray(value) && isSongTagsRow(mapping))) continue
       let write: FileWrite | null = null
-      if (mapping.source === 'fileTag' && mapping.text?.trim()) {
+      if (isSongTagsRow(mapping) && item.fileTags) {
+        // The note's tags the music file lacks (type tags aside), offered to be added to the file.
+        const tag = mapping.text!.trim().replace(/^TXXX[/:]/i, '')
+        const inFile = this.fileSongTags(item, mapping)
+        const { toFile } = songTagDiff(frontmatter[name], inFile, this.typeTags())
+        const raw = item.fileTags[`TXXX:${tag.toLowerCase()}`] ?? []
+        if (toFile.length) {
+          const values = [...inFile, ...toFile]
+          write = { name, path, tag, from: inFile.join(', '), to: values.join(', '), tags: { values, expected: raw, create: !raw.length } }
+        }
+      } else if (mapping.source === 'fileTag' && mapping.text?.trim()) {
         const tag = mapping.text.trim().replace(/^TXXX[/:]/i, '')
         const values = item.fileTags?.[`TXXX:${tag.toLowerCase()}`]
         const to = String(value).trim()
@@ -376,6 +394,15 @@ export class PlexSync {
     let sent = false
     for (const write of writes) {
       const typed = edits[`file:${write.name}`]
+      if (write.tags) {
+        // A song's tags: as edited (separated by commas or spaces), else the file's and the note's.
+        const values = typeof typed === 'string' ? fileTagList(typed.split(/[\s,;]+/)) : write.tags.values
+        if (!values.length) continue
+        const refusedTags = writeOwnTag(write.path, write.tag, values, write.tags.expected, write.tags.create)
+        if (refusedTags) result.failed.push({ title: item.title, error: `${write.name} wasn't written to the music file: ${refusedTags}` })
+        else sent = true
+        continue
+      }
       const value = typeof typed === 'string' ? typed.trim() : write.to
       if (!value) continue
       const refused = writeOwnTag(write.path, write.tag, value, write.from)
@@ -660,7 +687,7 @@ export class PlexSync {
   async run(progress: ProgressFn, mode: SyncMode = 'full', checking: string[] | Record<string, string[]> = [], only?: Set<string>, libraries?: Set<string>): Promise<SyncResult> {
     // A check or a sync can be limited to some libraries (the background update never is).
     this.onlyLibraries = mode !== 'playCounts' && libraries ? libraries : null
-    const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts')
+    const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts' || this.readMusicFiles)
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], sentToFiles: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     this.running = result
 
@@ -801,7 +828,7 @@ export class PlexSync {
           if (rating && (rating.note ?? 0) === rating.plex) this.seeRating(item.ratingKey, rating.plex)
           const links = asking ? this.planLinks(file, item, lib) : null
           // A music file's own tag or lyrics file that differs from the note: offered to be written from the note.
-          const fileWrites = genreCheck || asking ? this.planFileWrites(file, item, lib, genreCheck ? chosenOf(lib) : null) : []
+          const fileWrites = genreCheck || asking || (this.readMusicFiles && this.settings.askBeforeChanges && Boolean(this.approve)) ? this.planFileWrites(file, item, lib, genreCheck ? chosenOf(lib) : null) : []
           let checks: Checks | null = null
           try {
             checks = genreCheck ? await this.planFullCheck(file, item, lib, kind, chosenOf(lib)) : asking ? this.planChecks(file, item, lib) : null
@@ -912,7 +939,7 @@ export class PlexSync {
               this.keep(`${item.ratingKey}|file:${write.name}`, write.to, write.from)
             }
             // Sending the note's value to the file keeps the note's value: the file's isn't brought in too.
-            const sentNames = new Set(sendingToFiles.map(write => write.name))
+            const sentNames = new Set(sendingToFiles.filter(write => !write.tags).map(write => write.name))
             const fixNames = (checks?.names ?? []).filter(name => !excluded.has(`fix:${name}`) && !sentNames.has(name))
             // A value left unticked is yours to keep: don't offer to fix it again while it stays the same.
             for (const name of (checks?.names ?? []).filter(n => excluded.has(`fix:${n}`))) {
@@ -1308,6 +1335,18 @@ export class PlexSync {
     const ratingOf = (l: LibrarySetting | undefined) => l?.properties.find(m => m.source === 'userRatingEmoji' && m.name.trim())?.name.trim()
     const rating = ratingOf(lib) ?? Object.values(this.settings.libraries).map(ratingOf).find(Boolean) ?? 'Rating'
     return { reactions: this.settings.reactionsProperty || 'Reactions', feelings: this.settings.feelingsProperty || 'Feelings', themes: this.settings.themesProperty || 'Themes', rating }
+  }
+
+  /** Tags that say what a note is (movie, tv_show, music, song…): never compared with a music file's. */
+  private typeTags(): Set<string> {
+    return new Set([...Object.values(DEFAULT_TAGS), 'song', ...Object.values(this.settings.libraries).map(l => l.values.tag)]
+      .filter(Boolean).map(t => t.replace(/^#/, '').toLowerCase()))
+  }
+
+  /** A song's tags in its music file's own tag of tags (Music Manager's "Obsidian Tags"). */
+  private fileSongTags(item: PlexItem, m: PropertyMapping): string[] {
+    const name = (m.text ?? '').trim().replace(/^TXXX[/:]/i, '').toLowerCase()
+    return fileTagList(item.fileTags?.[`TXXX:${name}`])
   }
 
   /** Whether a note is a TV show's (tagged as the TV library's notes are, tv_show by default). */
@@ -2062,13 +2101,21 @@ export class PlexSync {
    * when Plex has no value.
    */
   private planUpdates(file: TFile, item: PlexItem, lib: ActiveLibrary, sources: FieldSource[], skip: Set<string> = new Set()): { names: string[], from: Record<string, unknown>, to: Record<string, unknown> } | null {
-    const mappings = lib.properties.filter(m => sources.includes(m.source) && m.name.trim() && !skip.has(m.name.trim()))
+    // A song's tags from its music file count too, whenever the file was read (never in the background).
+    const songTags = (m: PropertyMapping) => isSongTagsRow(m) && Boolean(item.fileTags)
+    const mappings = lib.properties.filter(m => (sources.includes(m.source) || songTags(m)) && m.name.trim() && !skip.has(m.name.trim()))
     if (!mappings.length) return null
     const from = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}
     const to: Record<string, unknown> = {}
     const ctx = { kind: lib.target, link: '', image: null, values: lib.values }
     for (const m of mappings) {
       const name = m.name.trim()
+      if (songTags(m)) {
+        // Tags in the music file that the note lacks are added; none are ever taken away.
+        const { toNote } = songTagDiff(from[name], this.fileSongTags(item, m), this.typeTags())
+        if (toNote.length) to[name] = unionTags(to[name] ?? from[name], toNote)
+        continue
+      }
       const value = sourceValue(m.source, item, ctx, m.text)
       if (value === undefined || from[name] === value || (Array.isArray(value) && sameValue(from[name], value))) continue
       // Lyrics only count as changed when a word, a capital or a line break is different.
@@ -2209,12 +2256,22 @@ export class PlexSync {
         else yours.add(name)
         continue
       }
+      if (isSongTagsRow(m)) {
+        // The music file's tags the note lacks are added, ticked; the note's own are never taken away.
+        if (!item.fileTags) continue
+        const { toNote } = songTagDiff(current, this.fileSongTags(item, m), this.typeTags())
+        if (!toNote.length || kept(toNote.join(', '))) continue
+        to[name] = unionTags(to[name] ?? current, toNote)
+        ticked.add(name)
+        continue
+      }
       // A source with no value (HowLongToBeat not answering, a book record without a page count)
       // says nothing about the note's, so it's never offered as empty: that went back and forth.
       const sourced = sourceValue(m.source, item, ctx, m.text)
       const offer = checkValue(m.source, current, sourced, this.settings.allowedGenres, kind, lib.leaveOutGenres)
       if (!offer || kept(offer.to)) continue
-      to[name] = offer.to
+      // Two rows for one list property (the type tag and the music file's tags) add up.
+      to[name] = Array.isArray(to[name]) && Array.isArray(offer.to) ? unionTags(to[name], offer.to) : offer.to
       // A rating of yours is replaced with Plex's only if you tick it (or send yours to Plex instead).
       if (RATING_SOURCES.includes(m.source) && !isBlank(current)) yours.add(name)
       if (offer.ticked || (m.source === 'plexLink' && (isSearchLink(current) || oldSongLink))) ticked.add(name)

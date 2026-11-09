@@ -59,15 +59,16 @@ export function lyricsOf(tags: FileTags | null): string | null {
 
 type TagRead = string | number | string[] | undefined
 const tagText = (value: TagRead): string => (Array.isArray(value) ? value.join('; ') : String(value ?? '')).trim()
-const same = (a: TagRead, b: string): boolean => tagText(a) === b.trim()
+const same = (a: TagRead, b: string | string[]): boolean => tagText(a) === tagText(b)
 
 /**
  * Puts `value` in your own tag `name` (an existing TXXX tag) of a music file on this computer,
  * changing only the bytes of the tag that differ, in the same file (never a copy). `expected` is
- * the value read before: when the file holds something else now, nothing is written. Returns
- * why it wasn't written, or null when it was.
+ * the value read before: when the file holds something else now, nothing is written. A list is
+ * written as several values; with `create`, a tag the file lacks is added (when there's room).
+ * Returns why it wasn't written, or null when it was.
  */
-export function writeOwnTag(path: string, name: string, value: string, expected: string): string | null {
+export function writeOwnTag(path: string, name: string, value: string | string[], expected: string | string[], create = false): string | null {
   const fs = nodeFs()
   if (!fs || !path) return 'music files can only be changed on the computer Plex runs on'
   let fd: number | null = null
@@ -81,7 +82,7 @@ export function writeOwnTag(path: string, name: string, value: string, expected:
     if (fs.readSync(fd, tag, 0, size, 0) < size) return 'the tag couldn\'t be read'
     const now = tagValue(readId3(tag), name)
     if (!same(now, expected)) return `the file's ${name} has changed since it was read (it's now "${tagText(now)}")`
-    const edit = setOwnTag(tag, name, value)
+    const edit = setOwnTag(tag, name, value, create)
     if ('error' in edit) return edit.error
     if (edit.to > edit.from) {
       fs.writeSync(fd, edit.tag, edit.from, edit.to - edit.from, edit.from)

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.193] - 2026-11-10
+
+- Song tags from Music Manager: with a `tags` row in the Music library whose source is "Music: a tag in the file, by name" and the name `Obsidian Tags`:
+  - New song notes get the mp3's tags beside their type tag (the two `tags` rows now add up instead of the second replacing the first).
+  - Every sync adds tags that are in the mp3 but not in Obsidian.
+  - Tags in Obsidian but not in the mp3 are offered, unticked, to be added to the mp3, as Music Manager writes them. Songs that don't have the tag yet get it, when the file has room.
+  - Type tags (music, song) are never compared, and nothing is ever taken away.
+- The daily check-in now also reads songs' music files, so lyrics and song tag changes come up there too.
+
 ## [0.0.192] - 2026-11-10
 
 - Every sync now copies each song's lyrics from its music file into its note when the note's Lyrics are empty or different, and new song notes get their lyrics when they're made. Only real differences count (a word, a capital, a line break); a music file without lyrics never empties a note's.

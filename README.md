@@ -171,7 +171,7 @@ What the plugin has remembered from your answers in pop-ups, each listed so you 
 
 ## What a sync does
 
-**Sync with Plex and Steam…** opens a pop-up listing every library, each with a switch and, under it, **Also compare these properties**. Switch on the libraries to sync. Tick properties under a library to also compare its existing notes with their sources in the same run (see [Comparing notes with their sources](#checking-notes-against-sources)); nothing ticked is a quick sync. Each library's properties are listed in the same A–Z order. Everything you choose is remembered. Books are listed last and start switched off: they're only compared (no sync reads them). Comparing is slower, and the pop-up says so (and flags HowLongToBeat and Open Library lookups as slow).
+**Sync with Plex and Steam…** opens a pop-up listing every library, each with a switch and, under it, **Also compare these properties**. Switch on the libraries to sync. Tick properties under a library to also compare its existing notes with their sources in the same run (see [Comparing notes with their sources](#checking-notes-against-sources)); nothing ticked is a quick sync. Each library's properties are listed A–Z. Movies, TV shows and documentaries share one list, so each property is in the same place in all of them (greyed where a library doesn't have it). Everything you choose is remembered. Books are listed last and start switched off: they're only compared (no sync reads them). Comparing is slower, and the pop-up says so (and flags HowLongToBeat and Open Library lookups as slow).
 
 A sync reads the libraries you chose from Plex (and Steam), then:
 

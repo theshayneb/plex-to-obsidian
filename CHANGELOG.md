@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.197] - 2026-11-10
+
+- In the Sync pop-up, Movies, TV shows and documentaries now share one list of properties, so each property sits in the same place in every one of them; one a library doesn't have is shown greyed in its place.
+
 ## [0.0.196] - 2026-11-10
 
 - The Sync pop-up lists every library's properties in the same A–Z order ("File name" is no longer pinned first).

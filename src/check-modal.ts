@@ -89,6 +89,13 @@ export class SyncModal extends Modal {
       warning.toggleClass('pmn-hidden', !on.length)
       warning.setText(`Comparing ${count} propert${count === 1 ? 'y' : 'ies'} in ${on.length} librar${on.length === 1 ? 'y' : 'ies'}: every note in them is looked up one by one, so this sync takes longer. Each note gets one pop-up with its sync changes and its differences together.`)
     }
+    // Movies, TV shows and documentaries share one list (each property in the same place in all of
+    // them, greyed where a library lacks it); music, games and books have their own.
+    const VIDEO = ['movie', 'tv', 'documentary']
+    const videoSlots = [...new Map(libraries.filter(([, l]) => VIDEO.includes(l.target))
+      .flatMap(([k]) => libraryCheckables(settings, k)).map(p => [p.name, p])).values()]
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    const slotsFor = (key: string) => VIDEO.includes(settings.libraries[key].target) ? videoSlots : libraryCheckables(settings, key)
     for (const [key, lib] of libraries) {
       const properties = libraryCheckables(settings, key)
       const picked = new Set((settings.syncCompare[key] ?? []).filter(name => properties.some(p => p.name === name)))
@@ -140,7 +147,14 @@ export class SyncModal extends Modal {
       all.createEl('a', { text: 'Tick all', href: '#' }).addEventListener('click', evt => { evt.preventDefault(); setAll(true) })
       all.createEl('a', { text: 'Untick all', href: '#' }).addEventListener('click', evt => { evt.preventDefault(); setAll(false) })
       const grid = details.createDiv('pmn-sync-props')
-      for (const { name: property, source } of properties) {
+      for (const { name: property, source } of slotsFor(key)) {
+        // A property this library doesn't have keeps its place, greyed, so every video library lines up.
+        if (!properties.some(p => p.name === property)) {
+          const missing = grid.createEl('label', { cls: ['pmn-sync-prop', 'is-missing'], attr: { 'aria-label': `${lib.title} has no ${property} property` } })
+          missing.createEl('input', { type: 'checkbox' }).disabled = true
+          missing.createSpan({ text: property })
+          continue
+        }
         const label = grid.createEl('label', { cls: 'pmn-sync-prop', attr: { 'aria-label': source ? FIELD_SOURCES[source] : 'Renamed to the library\'s file name format' } })
         const box = label.createEl('input', { type: 'checkbox' })
         box.checked = picked.has(property)

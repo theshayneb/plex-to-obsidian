@@ -386,7 +386,7 @@ Your books and games count on the dashboard by the days your daily notes' Relate
 
 **React to this note…** and **React to what you just finished…** open "How was it?":
 - **rating**: in your star scale;
-- **feelings and themes** to tap (plus a box for a theme of your own);
+- **feelings** for this time (none picked to begin with; ones you've felt about it before are underlined) and **themes** to tap (plus a box for a theme of your own);
 - **your own tags**;
 - **a few words**: optional; how it felt this time.
 

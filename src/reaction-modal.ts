@@ -80,7 +80,8 @@ export class ReactionModal extends Modal {
     })
     buttons.forEach((b, i) => b.toggleClass('is-active', RATINGS[i] === this.pmnRating))
 
-    this.pmnChips('Feelings', c.feelings, c.has.feelings, this.pmnPicked.feelings)
+    // Feelings are about this time (this episode, this rewatch): none picked to begin with, any can be.
+    this.pmnChips('Feelings', c.feelings, c.has.feelings, this.pmnPicked.feelings, false, true)
     this.pmnOwnTheme = this.pmnChips('Themes', c.themes, c.has.themes, this.pmnPicked.themes, true)
     this.pmnChips('Tags', c.tags, c.has.tags, this.pmnPicked.tags)
 
@@ -123,17 +124,23 @@ export class ReactionModal extends Modal {
    * A row of words to tap; those the note already has are marked and can't be untapped. With
    * `own`, a box after them adds a word of your own (Enter), just for this note; it's returned.
    */
-  private pmnChips(name: string, words: string[], has: string[], picked: Set<string>, own = false): HTMLInputElement | null {
+  private pmnChips(name: string, words: string[], has: string[], picked: Set<string>, own = false, thisTime = false): HTMLInputElement | null {
     const lower = new Set(has.map(w => w.toLowerCase()))
     const all = [...words, ...has.filter(w => !words.some(x => x.toLowerCase() === w.toLowerCase()))]
     if (!all.length && !own) return null
-    const row = this.pmnSection(name).createDiv('pmn-reaction-chips')
+    const section = this.pmnSection(name)
+    if (thisTime) section.createDiv({ cls: 'setting-item-description', text: 'How it felt this time. Underlined ones you\'ve felt about it before.' })
+    const row = section.createDiv('pmn-reaction-chips')
     const chips = new Map<string, HTMLButtonElement>()
     const addChip = (word: string, before: HTMLElement | null = null): HTMLButtonElement => {
       const chip = createEl('button', { cls: 'pmn-reaction-chip', text: word })
       row.insertBefore(chip, before)
       chips.set(word.toLowerCase(), chip)
-      if (lower.has(word.toLowerCase())) {
+      // Felt before: marked, but picked (or not) for this time like any other.
+      if (thisTime && lower.has(word.toLowerCase())) {
+        chip.addClass('was-felt')
+        chip.setAttr('aria-label', 'You\'ve felt this about it before')
+      } else if (lower.has(word.toLowerCase())) {
         chip.addClass('is-kept')
         chip.setAttr('aria-label', 'Already in the note')
         return chip

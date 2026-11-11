@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.198] - 2026-11-11
+
+- Feelings in the "How was it?" pop-up are for this time only: none are picked to begin with, and every one can be ticked or unticked. Feelings you've had about it before are underlined. Before, those showed as picked and couldn't be changed, yet weren't added to the reaction.
+
 ## [0.0.197] - 2026-11-10
 
 - In the Sync pop-up, Movies, TV shows and documentaries now share one list of properties, so each property sits in the same place in every one of them; one a library doesn't have is shown greyed in its place.

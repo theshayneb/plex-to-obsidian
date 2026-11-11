@@ -1514,3 +1514,9 @@
 .pmn-report-bad {
   color: var(--text-error);
 }
+
+/* A feeling you've had about it before: underlined, but not picked for this time until you tap it. */
+.pmn-reaction-chip.was-felt {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}

@@ -94,6 +94,8 @@ export interface Finished {
   status?: string
   /** A game's playtime, in minutes, when known. */
   playtime?: number
+  /** A show's episodes watched that day ("S02E03 – Title, …"), when asked about each day's episodes. */
+  episodes?: string
 }
 
 /** When a game was first seen in a Steam collection that finishes it, and with which status. */

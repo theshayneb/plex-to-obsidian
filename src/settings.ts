@@ -450,6 +450,13 @@ export class PlexNotesSettingTab extends PluginSettingTab {
         settings.reactionInbox = value
         await this.save()
       }))
+    new Setting(containerEl)
+      .setName('Ask about every episode')
+      .setDesc('"Just finished" also lists each day you watched a show, with that day\'s episodes, whether or not the show is finished, so you can say how those episodes felt. Off, a show is only listed once every episode is watched.')
+      .addToggle(toggle => toggle.setValue(settings.reactToEpisodes).onChange(async value => {
+        settings.reactToEpisodes = value
+        await this.save()
+      }))
     const words = (name: string, desc: string, get: () => string[], set: (words: string[]) => void) => new Setting(containerEl)
       .setName(name)
       .setDesc(desc)

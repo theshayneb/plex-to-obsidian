@@ -41,7 +41,7 @@ import {
 import { lookUpBook } from './discover'
 import { watchEvents, type WatchEvent } from './insights-data'
 import { addReaction, finishedKey, finishSeen, reactedSince, type Finished, type Reaction, type ReactionProperties } from './reactions'
-import { episodeEntry, episodesByDay, episodesOn, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
+import { episodeEntry, episodesByDay, episodesOn, type WatchedEpisode, gamesPlayed, inWindow, isListedShow, insertEntries, linkTarget, moviesByDay, relatedKey, watchedEpisodes, watchedMovies, withRelated, type HistoryEntry, type WatchedMovie } from './daily-episodes'
 import { PlexClient } from './plex'
 import { HltbClient } from './hltb'
 import { buildFrontmatter, DEFAULT_TAGS, playCount, CHECKED_SOURCES, HLTB_SOURCES, LENGTH_SOURCES, sameLengthOtherForm, linkPropertyNames, checkValue, listOf, PLAY_SOURCES, MIRRORED_SOURCES, noteStars, ratingDirection, ratingLabel, RATING_SOURCES, starEmoji, type RatingScale, sameLyrics, sameValue, sourceValue, userStars, vagueDate, playtimeShrinks, STATUS_SOURCES, statusMovesForward, collectionStatus, gameStarted, UNCHECKED_SOURCES, usesSource, type FieldSource, type PropertyMapping } from './properties'
@@ -1249,8 +1249,25 @@ export class PlexSync {
       out.push({ key: m.key, title: note.basename, kind: 'movie', viewedAt: m.viewedAt, path: note.path })
     }
     const lastSeen = new Map<string, number>()
-    for (const e of watchedEpisodes(history)) {
-      if (e.showKey && !ignoredShow(e.showKey, e.show) && !this.bedtime(e.show, e.viewedAt)) lastSeen.set(e.showKey, Math.max(lastSeen.get(e.showKey) ?? 0, e.viewedAt))
+    const episodes = watchedEpisodes(history).filter(e => e.showKey && !ignoredShow(e.showKey, e.show) && !this.bedtime(e.show, e.viewedAt))
+    for (const e of episodes) lastSeen.set(e.showKey, Math.max(lastSeen.get(e.showKey) ?? 0, e.viewedAt))
+    if (this.settings.reactToEpisodes) {
+      // Each day you watched a show, with that day's episodes, finished or not. Only a reaction dated
+      // that very day (or "Not this one") answers it, so each day is asked about on its own.
+      const dayOf = (seconds: number) => moment.unix(seconds).format('YYYY-MM-DD')
+      const byDay = new Map<string, WatchedEpisode[]>()
+      for (const e of episodes) {
+        const id = `${e.showKey}|${dayOf(e.viewedAt)}`
+        byDay.set(id, [...byDay.get(id) ?? [], e])
+      }
+      for (const [id, watched] of byDay) {
+        const key = id.split('|')[0]
+        const note = notes.get(key)
+        const at = Math.max(...watched.map(e => e.viewedAt))
+        if (!note || this.finishedDone(key, at, note, true)) continue
+        out.push({ key, title: note.basename, kind: 'show', viewedAt: at, path: note.path, episodes: episodesOn(watched, new Set([key]), note.basename, dayOf(at), dayOf) })
+      }
+      lastSeen.clear()
     }
     for (const [key, at] of lastSeen) {
       const note = notes.get(key)
@@ -1329,13 +1346,16 @@ export class PlexSync {
    * Whether a finishing needs no reaction any more: answered or set aside here, or its note
    * already has a reaction from that day or later (however it got there).
    */
-  finishedDone(key: string, viewedAt: number, note: TFile): boolean {
+  finishedDone(key: string, viewedAt: number, note: TFile, thatDay = false): boolean {
     const day = moment.unix(viewedAt).format('YYYY-MM-DD')
     if (finishedKey(key, day) in this.settings.reactionsDone) return true
     const fm = this.app.metadataCache.getFileCache(note)?.frontmatter ?? {}
     const name = (this.settings.reactionsProperty || 'Reactions').toLowerCase()
     const prop = Object.keys(fm).find(k => k.toLowerCase() === name)
-    return !!prop && reactedSince(fm[prop], day)
+    if (!prop) return false
+    // A day's episodes: only a reaction from that very day answers them.
+    if (thatDay) return listOf(fm[prop]).some(line => line.trim().startsWith(day))
+    return reactedSince(fm[prop], day)
   }
 
   /** Remembers a finishing as answered or set aside, so it isn't offered again (forgetting those over a month old). */

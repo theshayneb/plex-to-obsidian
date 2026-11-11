@@ -1781,6 +1781,22 @@ describe('PlexSync', () => {
     expect(settings.gamePlaytimes).toEqual({ 'steam-620': 180 })
   })
 
+  it('lists each day you watched a show, with its episodes, when asked about every episode', async () => {
+    const midday = (daysAgo: number) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(12, 0, 0, 0); return Math.floor(d.getTime() / 1000) }
+    const day = (daysAgo: number) => { const d = new Date(midday(daysAgo) * 1000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    const { app } = makeApp({ 'Media/TV Shows/Fargo (2014).md': { Link: 'http://plex:32400/library/metadata/77', Reactions: [`${day(1)} · happy`] } })
+    const settings = settingsWith({})
+    settings.libraries = { 2: newLibrary('TV Shows', 'show', 'tv') }
+    responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
+      { type: 'episode', title: 'Pilot', grandparentTitle: 'Fargo', grandparentKey: '/library/metadata/77', parentIndex: 1, index: 1, viewedAt: midday(2), accountID: 1 },
+      { type: 'episode', title: 'Two', grandparentTitle: 'Fargo', grandparentKey: '/library/metadata/77', parentIndex: 1, index: 2, viewedAt: midday(2) + 60, accountID: 1 },
+      { type: 'episode', title: 'Three', grandparentTitle: 'Fargo', grandparentKey: '/library/metadata/77', parentIndex: 1, index: 3, viewedAt: midday(1), accountID: 1 },
+    ] } })
+    const sync = new PlexSync(app as never, settings, () => Promise.resolve())
+    // Not finished, but listed: the day before yesterday's episodes; yesterday's already has a reaction.
+    expect((await sync.finishedItems()).map(i => [i.title, i.kind, i.episodes])).toEqual([['Fargo (2014)', 'show', 'S01E01 – Pilot, S01E02 – Two']])
+  })
+
   it('lists movies and fully watched shows you finished, to react to, and adds a reaction to the note', async () => {
     const at = Math.floor(Date.now() / 1000) - 3600
     const { app, frontmatter } = makeApp({
@@ -1790,6 +1806,7 @@ describe('PlexSync', () => {
     })
     const settings = settingsWith({})
     settings.libraries = { 1: newLibrary('Movies', 'movie', 'movie'), 2: newLibrary('TV Shows', 'show', 'tv') }
+    settings.reactToEpisodes = false
     responses.set('/status/sessions/history/all', { MediaContainer: { Metadata: [
       { type: 'movie', title: 'Arrival', ratingKey: '1', viewedAt: at, accountID: 1 },
       { type: 'episode', title: 'The End', grandparentTitle: 'Lost', grandparentKey: '/library/metadata/88', parentIndex: 6, index: 17, viewedAt: at + 60, accountID: 1 },

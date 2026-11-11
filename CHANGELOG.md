@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.199] - 2026-11-11
+
+- New "Ask about every episode" (Settings → Reactions, on): "Just finished" lists each day you watched a show, with that day's episodes, finished or not, so you can say how those episodes felt. A day stays listed until its note has a reaction dated that day, or you choose "Not this one".
+
 ## [0.0.198] - 2026-11-11
 
 - Feelings in the "How was it?" pop-up are for this time only: none are picked to begin with, and every one can be ticked or unticked. Feelings you've had about it before are underlined. Before, those showed as picked and couldn't be changed, yet weren't added to the reaction.

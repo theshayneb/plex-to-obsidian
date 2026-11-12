@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nearlySame } from '../src/properties'
+import { fileGenres, nearlySame } from '../src/properties'
 import { pickMatch } from '../src/hltb-data'
 
 describe('nearlySame', () => {
@@ -25,5 +25,12 @@ describe('pickMatch', () => {
     expect(pickMatch([c, b, a], 'Doom')?.game_id).toBe(10)
     expect(pickMatch([b, a], 'Doom', 2016)?.game_id).toBe(20)
     expect(pickMatch([a, b], 'Doom', 2017)?.game_id).toBe(20)
+  })
+})
+
+describe('fileGenres', () => {
+  it('reads a music file\'s genres, split and old-style numbers left out', () => {
+    expect(fileGenres(['Indie Pop; Rock', 'Rock/Folk', '(17)', '13'])).toEqual(['Indie Pop', 'Rock', 'Folk'])
+    expect(fileGenres(undefined)).toEqual([])
   })
 })

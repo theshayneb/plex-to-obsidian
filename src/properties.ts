@@ -90,6 +90,18 @@ export const FIELD_SOURCES: Record<FieldSource, string> = {
   text: 'Fixed text',
 }
 
+/**
+ * The genres in a music file's genre tag (ID3 TCON): several values, or one with ";" or "/"
+ * between them; old-style numbers ("(17)") left out. Each once, as written.
+ */
+export function fileGenres(values: string[] | undefined): string[] {
+  const out: string[] = []
+  for (const g of (values ?? []).flatMap(v => v.split(/[;/]/)).map(v => v.replace(/^\(\d+\)/, '').trim()).filter(v => v && !/^\d+$/.test(v))) {
+    if (!out.some(x => x.toLowerCase() === g.toLowerCase())) out.push(g)
+  }
+  return out
+}
+
 export const DEFAULT_PROPERTIES: PropertyMapping[] = [
   { name: 'Genre', source: 'genres' },
   { name: 'Summary', source: 'summary', fill: true },
@@ -530,7 +542,9 @@ export function sourceValue(source: FieldSource, item: PlexItem, ctx: NoteContex
     case 'genres': {
       // A game's store tags ("Mystery") count as genres too, but only those in "Genres to keep".
       const tagged = ctx.genres?.length ? item.steamTags ?? [] : []
-      const kept = leaveOut(keepGenres([...orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres), ctx.leaveOut)
+      // A song's genres are its music file's own (as you set them), else Plex's for it or its album.
+      const fromFile = item.type === 'track' ? fileGenres(item.fileTags?.TCON) : []
+      const kept = leaveOut(keepGenres([...fromFile.length ? fromFile : orAlbum(item, genresOf, noTags) ?? [], ...tagged], ctx.genres), ctx.leaveOut)
       const genres = ctx.kind === 'book' && ctx.genres?.length ? fictionOnlyAlone(kept) : kept
       // A documentary's note already says it's a documentary; don't repeat it as a genre.
       return ctx.kind === 'documentary' ? genres.filter(g => !isDocumentaryGenre(g)) : genres

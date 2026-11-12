@@ -654,7 +654,8 @@ export class PlexSync {
       const music = lib.target === 'music'
       // A music file's own tags (tempo and the like) are read from the file Plex has for each track,
       // only when a property uses them (and never in background updates).
-      const fileTags = music && readTags && usesSource(lib.properties, 'fileTag')
+      // (A song's genres come from its file too, when it has them.)
+      const fileTags = music && readTags && (usesSource(lib.properties, 'fileTag') || usesSource(lib.properties, 'genres'))
       // So are the lyrics, from the music file's own lyrics tag.
       const lyricsFiles = music && readTags && usesSource(lib.properties, 'lyricsFile')
       for (const item of await this.plex!.libraryItems(key, music)) {

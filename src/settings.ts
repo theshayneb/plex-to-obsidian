@@ -21,7 +21,7 @@ import { PlexClient } from './plex'
 import { SteamClient } from './steam'
 import { readSteamCollections } from './steam-local'
 import { PropertyNameSuggest } from './property-suggest'
-import { defaultProperties, defaultValues, FIELD_SOURCES, linkPropertyNames, collectionStatusText, parseCollectionStatus, type FieldSource } from './properties'
+import { defaultProperties, defaultValues, linkPropertyNames, sourcesFor, collectionStatusText, parseCollectionStatus, type FieldSource } from './properties'
 import { groupByKind, keptEntries, kindOfLibrary, kindOfPath, OTHER_KIND, type KeptEntry } from './remembered'
 
 const noteName = (path: string): string => path.split('/').pop()!.replace(/\.md$/, '')
@@ -300,7 +300,7 @@ export class PlexNotesSettingTab extends PluginSettingTab {
     new Setting(el).setName('Properties').setHeading()
     el.createEl('p', {
       cls: 'setting-item-description',
-      text: 'What new notes contain, in this order: each property\'s name (start typing to pick one already in your vault) and where its value comes from. Ones the source has no value for are left empty. Switch on a property\'s toggle to also fill it in on existing notes where it\'s missing or empty.',
+      text: 'What new notes contain, in this order. On each row: the property\'s name in your notes (start typing to pick one already in your vault), then where its value comes from (the source is in brackets). Ones the source has no value for are left empty. Switch on a row\'s toggle to also fill it in on existing notes where it\'s missing or empty.',
     })
 
     lib.properties.forEach((mapping, index) => {
@@ -316,7 +316,8 @@ export class PlexNotesSettingTab extends PluginSettingTab {
           new PropertyNameSuggest(this.app, text.inputEl)
         })
         .addDropdown(dropdown => {
-          for (const [value, label] of Object.entries(FIELD_SOURCES)) dropdown.addOption(value, label)
+          // Only what this kind of library can use, A–Z (a row's own choice is always kept).
+          for (const [value, label] of sourcesFor(lib.target, mapping.source)) dropdown.addOption(value, label)
           dropdown
             .setValue(mapping.source)
             .onChange(async value => {

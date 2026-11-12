@@ -1559,8 +1559,8 @@ export class PlexSync {
     const lib = music.find(l => file.path.startsWith(`${normalizePath(l.folder)}/`)) ?? music[0]
     if (!lib) return ['There\'s no music library in the settings.']
     const row = lib.properties.find(m => m.name.trim().toLowerCase() === 'tags' && m.source === 'fileTag')
-    if (!row) out.push(`✗ ${lib.title} has no "tags" row whose source is "Music: a tag in the file, by name", so no tags are read from music files. Add one, named Obsidian Tags.`)
-    else if (!row.text?.trim()) out.push(`✗ ${lib.title}'s tags row has the source "Music: a tag in the file, by name" but no tag name in the box beside it. Type Obsidian Tags there.`)
+    if (!row) out.push(`✗ ${lib.title} has no "tags" row whose source is "Song: a tag in the music file, by name", so no tags are read from music files. Add one, named Obsidian Tags.`)
+    else if (!row.text?.trim()) out.push(`✗ ${lib.title}'s tags row has the source "Song: a tag in the music file, by name" but no tag name in the box beside it. Type Obsidian Tags there.`)
     else out.push(`✓ ${lib.title}'s tags row reads the file's tag "${row.text.trim()}".`)
     if (!plexReady(this.settings)) return [...out, '✗ Plex isn\'t set up.']
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}

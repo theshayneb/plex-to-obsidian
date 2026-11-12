@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.201] - 2026-11-12
+
+- The property dropdown in each library's settings is clearer:
+  - Each option says where its value comes from, in brackets.
+  - The options are in A–Z order.
+  - Each library only shows the options that work for it: songs' options start "Song:", games' "Game:" and books' "Book:".
+  - The options you said you don't need are hidden. A row already using one keeps it.
+- A song's Genre now comes from the genre in its music file (as set in Music Manager), else from Plex's.
+
 ## [0.0.200] - 2026-11-12
 
 - New song notes get the library's type tag (song) along with the music file's tags, even when your `tags` row reads the music file rather than adding the type tag.

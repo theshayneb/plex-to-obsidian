@@ -150,7 +150,7 @@ Every library (each Plex library, plus Steam and Books) has its own section:
   - **About the item**: genres, summary, tagline, title, original title, release date (first aired for shows), year, duration (in minutes, as "1h 52m", or as "3:45"), content rating, studio/network/label, directors, writers, cast (top 5 or everyone), countries, Plex collections, Plex labels, critic and audience ratings, number of seasons and episodes, IMDb/TMDB/TVDB IDs.
   - **Yours**: your rating (as 0–5 stars, or as 💣 ⭐⭐ ⭐⭐⭐ ⭐⭐⭐⭐ 🩷), watched or played status, play count, date added to Plex, date last watched.
   - **Links and images**: link (Plex, Steam Store, IMDb, Open Library or HowLongToBeat page), poster (portrait cover for games), type tag, fixed text.
-  - **Music**: artist, album artist, album, track and disc number, styles, moods, a tag in the music file by name, the lyrics in the music file.
+  - **Music**: artist, album artist, album, track and disc number, a tag in the music file by name, the lyrics in the music file. A song's genres come from its music file's genre, else Plex's.
   - **Games**: total playtime, playtime in the last 2 weeks, developers, publishers, platforms, Metacritic score, wide image, HowLongToBeat main story time and page, your Steam collections.
   - **Books**: authors, number of pages, ISBN.
 

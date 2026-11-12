@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fileGenres, nearlySame } from '../src/properties'
+import { fileGenres, nearlySame, sourcesFor } from '../src/properties'
 import { pickMatch } from '../src/hltb-data'
 
 describe('nearlySame', () => {
@@ -32,5 +32,17 @@ describe('fileGenres', () => {
   it('reads a music file\'s genres, split and old-style numbers left out', () => {
     expect(fileGenres(['Indie Pop; Rock', 'Rock/Folk', '(17)', '13'])).toEqual(['Indie Pop', 'Rock', 'Folk'])
     expect(fileGenres(undefined)).toEqual([])
+  })
+})
+
+describe('sourcesFor', () => {
+  it('offers a library only its own kind\'s sources and the shared ones, A–Z, hidden ones only when in use', () => {
+    const music = sourcesFor('music').map(([s]) => s)
+    expect(music).toContain('lyricsFile')
+    expect(music).not.toContain('playtime')
+    expect(music).not.toContain('directors')
+    expect(sourcesFor('movie', 'directors').map(([s]) => s)).toContain('directors')
+    const labels = sourcesFor('game').map(([, l]) => l)
+    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })))
   })
 })

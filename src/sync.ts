@@ -237,6 +237,8 @@ export class PlexSync {
    * their changes come up then too; other background updates never do.
    */
   readMusicFiles = false
+  /** Music files a sync couldn't read (their lyrics and tags left as they are), said at the end. */
+  unreadFiles: string[] = []
   private plex: PlexClient | null = null
   private machineId = ''
   private steam: SteamClient | null = null
@@ -660,6 +662,8 @@ export class PlexSync {
         if (!wanted) continue
         const file = item.Media?.[0]?.Part?.[0]?.file ?? ''
         const read = fileTags || lyricsFiles ? readFileTags(file) : null
+        // A file that can't be read here (say, a OneDrive file kept online only) is counted, to say so.
+        if ((fileTags || lyricsFiles) && file && !read) this.unreadFiles.push(file)
         const tags = fileTags ? read : null
         const lyrics = lyricsFiles ? lyricsOf(read) : null
         entries.push({ item: tags || lyrics ? { ...item, ...tags ? { fileTags: tags } : {}, ...lyrics ? { lyrics } : {} } : item, lib })
@@ -690,6 +694,7 @@ export class PlexSync {
     const { active, indexes, entries } = await this.prepare(progress, mode === 'full', mode !== 'playCounts' || this.readMusicFiles)
     const result: SyncResult = { created: [], renamed: [], filled: [], playCounts: [], skipped: 0, failed: [], declined: 0, stopped: this.stopping, ignored: 0, newlyIgnored: [], merged: [], links: [], corrected: [], sentRatings: [], sentToFiles: [], keptLinks: 0, unmatched: [], checked: [], unmatchedWhy: {} }
     this.running = result
+    if (this.unreadFiles.length) console.warn('Media Manager: music files that couldn\'t be read', this.unreadFiles)
 
     result.ignored = entries.filter(({ item }) => this.isIgnored(item)).length
 
@@ -1587,6 +1592,25 @@ export class PlexSync {
       }
     }
     if ((this.settings.lockedProperties[file.path] ?? []).some(l => l.toLowerCase() === 'tags')) out.push('✗ You locked "tags" for this note ("never change"), so it\'s never offered. Undo under Settings → Remembered choices → Never changed.')
+    // What a new note for this song would get from a sync, property by property.
+    this.plex ??= plex
+    const full = await this.fullItem({ ...item, fileTags: tags, ...lyricsOf(tags) ? { lyrics: lyricsOf(tags)! } : {} }, lib)
+    const ctx = { kind: 'music' as MediaKind, link: this.linkFor(full), image: null, values: lib.values, genres: this.settings.allowedGenres, leaveOut: lib.leaveOutGenres }
+    const fresh = buildFrontmatter(full, lib.properties, ctx)
+    out.push('A new note for this song would get:')
+    for (const [name, value] of Object.entries(fresh)) {
+      const shown = describeValue(value)
+      out.push(`${shown === null ? '✗' : '·'} ${name}: ${shown === null ? 'nothing' : shown.length > 80 ? `${shown.slice(0, 80)}…` : shown}`)
+    }
+    // Why a genre or the type tag might be missing.
+    const genreRow = lib.properties.find(m => m.source === 'genres' && m.name.trim())
+    if (genreRow && isBlank(fresh[genreRow.name.trim()])) {
+      const plexGenres = [...(full.Genre ?? []), ...(full.album?.Genre ?? [])].map(g => g.tag)
+      out.push(plexGenres.length
+        ? `✗ Plex has the genres ${plexGenres.join(', ')}, but none is kept: "Genres to keep" (Settings → New notes) or ${lib.title}'s "Genres to leave out" leaves them all out.`
+        : '✗ Plex has no genre for this song or its album.')
+    }
+    if (!lib.properties.some(m => m.source === 'typeTag' && m.name.trim()) && !row?.text?.trim()) out.push(`✗ ${lib.title} has no row for its type tag (${lib.values.tag || 'none set'}): add a "tags" row whose source is the type tag.`)
     return out
   }
 

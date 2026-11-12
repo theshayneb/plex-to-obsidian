@@ -27,4 +27,10 @@ describe('song tags', () => {
     const fm = buildFrontmatter(item as never, [{ name: 'tags', source: 'typeTag' }, { name: 'tags', source: 'fileTag', text: 'Obsidian Tags' }], { kind: 'music', link: '', image: null, values: { watched: '', started: '', unwatched: '', tag: 'music' } } as never)
     expect(fm.tags).toEqual(['music', 'feminism', 'holiday'])
   })
+
+  it('gives a new song note its type tag even when only the file's tags have a row', () => {
+    const item = { ratingKey: '1', type: 'track', title: 'Girls', fileTags: { 'TXXX:obsidian tags': ['feminism'] } }
+    const fm = buildFrontmatter(item as never, [{ name: 'tags', source: 'fileTag', text: 'Obsidian Tags' }], { kind: 'music', link: '', image: null, values: { watched: '', started: '', unwatched: '', tag: 'song' } } as never)
+    expect(fm.tags).toEqual(['song', 'feminism'])
+  })
 })

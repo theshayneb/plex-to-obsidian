@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.200] - 2026-11-12
+
+- New song notes get the library's type tag (song) along with the music file's tags, even when your `tags` row reads the music file rather than adding the type tag.
+- After a sync, the notice says how many songs' music files couldn't be read (for example OneDrive files kept online only), so their lyrics and tags weren't brought in. The list is in the developer console.
+- "What does this song's music file say?" now also shows what a new note for the song would get, property by property, and why a genre or the type tag would be missing.
+
 ## [0.0.199] - 2026-11-11
 
 - New "Ask about every episode" (Settings → Reactions, on): "Just finished" lists each day you watched a show, with that day's episodes, finished or not, so you can say how those episodes felt. A day stays listed until its note has a reaction dated that day, or you choose "Not this one".

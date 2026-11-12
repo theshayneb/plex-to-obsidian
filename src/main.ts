@@ -914,8 +914,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
     this.plexSyncRunning = true
     const notice = new ProgressNotice('Starting…')
     try {
-      const result = await this.newSync()
-        .run(message => notice.set(message), 'full', compare, undefined, libraries)
+      const sync = this.newSync()
+      const result = await sync.run(message => notice.set(message), 'full', compare, undefined, libraries)
       const days = result.stopped ? [] : await this.dailyEpisodes(message => notice.set(message))
       notice.hide()
 
@@ -959,6 +959,8 @@ export default class PlexMediaNotesPlugin extends Plugin {
         console.error('Media Manager: failed items', result.failed)
       }
       if (result.unmatched.length) parts.push(`${result.unmatched.length} note${result.unmatched.length === 1 ? '' : 's'} ${result.unmatched.length === 1 ? 'matches' : 'match'} nothing`)
+      // Songs whose files couldn't be read (a OneDrive file kept online only, say) keep their lyrics and tags as they were.
+      if (sync.unreadFiles.length) parts.push(`${sync.unreadFiles.length} song${sync.unreadFiles.length === 1 ? '\'s' : 's\''} music file${sync.unreadFiles.length === 1 ? '' : 's'} couldn't be read, so their lyrics and tags weren't brought in (OneDrive files kept online only? Make them "Always keep on this device"; the list is in the developer console)`)
       new Notice(parts.join(', '), 8000)
       if (result.unmatched.length) new UnmatchedModal(this.app, 'Notes that match nothing', null, result.unmatched, path => this.ignoreUnmatched(path), result.unmatchedWhy).open()
       // Then what's waiting for your daily notes, then collections that would change, one pop-up after another.

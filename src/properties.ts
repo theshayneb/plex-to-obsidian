@@ -612,7 +612,8 @@ export function buildFrontmatter(item: PlexItem, mappings: PropertyMapping[], ct
     if (!key) continue
     // A song's tags from its music file are a list of tags, like the type tag beside them.
     const songTags = isSongTagsRow({ name, source, text })
-    const value = songTags ? fileTagList(sourceValue(source, item, ctx, text)) : sourceValue(source, item, ctx, text)
+    // A song's tags from its file come with the library's type tag (song), even without a row of its own for it.
+    const value = songTags ? unionTags(ctx.values.tag ? [ctx.values.tag] : [], fileTagList(sourceValue(source, item, ctx, text))) : sourceValue(source, item, ctx, text)
     const empty = value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
     // Two rows for one property (the type tag and the file's tags, both "tags") add up as one list.
     if (Array.isArray(fm[key]) && (Array.isArray(value) || empty || songTags)) {

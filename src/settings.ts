@@ -329,15 +329,20 @@ export class PlexNotesSettingTab extends PluginSettingTab {
               if (textChanged) this.refresh()
             })
         })
+      // Every row laid out the same: name, source, a slot for the tag name or fixed text, then the rest.
+      row.settingEl.addClass('pmn-prop-row')
       if (mapping.source === 'text' || mapping.source === 'fileTag') {
-        row.addText(text => text
-          .setPlaceholder(mapping.source === 'fileTag' ? 'Tag, e.g. songs-db_tempo' : 'Value')
-          .setValue(mapping.text ?? '')
-          .onChange(async value => {
-            mapping.text = value
-            await this.save()
-          }))
-      }
+        row.addText(text => {
+          text
+            .setPlaceholder(mapping.source === 'fileTag' ? 'Tag, e.g. TXXX/TEMPO' : 'Value')
+            .setValue(mapping.text ?? '')
+            .onChange(async value => {
+              mapping.text = value
+              await this.save()
+            })
+          text.inputEl.addClass('pmn-prop-extra')
+        })
+      } else row.controlEl.createDiv('pmn-prop-extra')
       row.addToggle(toggle => {
         toggle
           .setTooltip('Fill in on existing notes when empty')

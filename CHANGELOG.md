@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.202] - 2026-11-13
+
+- A library's property rows in the settings all have the same layout: the property name in a box of the same width on every row, the source filling the middle, a slot for the tag name or fixed text (empty on rows that don't need one), then the switch and buttons lined up on the right.
+
 ## [0.0.201] - 2026-11-12
 
 - The property dropdown in each library's settings is clearer:

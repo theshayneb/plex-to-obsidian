@@ -1520,3 +1520,54 @@
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
+
+/* A library's property rows, all laid out alike: name, source, tag or text slot, toggle, buttons. */
+.pmn-prop-row {
+  padding: var(--size-4-1) 0;
+  border-top: none;
+}
+
+.pmn-prop-row .setting-item-info {
+  display: none;
+}
+
+.pmn-prop-row .setting-item-control {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: var(--size-4-2);
+  width: 100%;
+}
+
+.pmn-prop-row .setting-item-control > input[type="text"]:first-child {
+  flex: 0 0 160px;
+  width: 160px;
+}
+
+.pmn-prop-row .setting-item-control > select.dropdown {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pmn-prop-row .pmn-prop-extra {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+@media (max-width: 600px) {
+  .pmn-prop-row .setting-item-control {
+    flex-wrap: wrap;
+  }
+
+  .pmn-prop-row .setting-item-control > input[type="text"]:first-child,
+  .pmn-prop-row .setting-item-control > select.dropdown {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .pmn-prop-row div.pmn-prop-extra {
+    display: none;
+  }
+}
